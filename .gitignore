@@ -41,3 +41,4 @@ config.log
 #/SCONS
 .sconsign.dblite
 *.dblite
+CMakeFiles/
