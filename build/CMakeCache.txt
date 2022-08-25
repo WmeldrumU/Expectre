@@ -243,7 +243,7 @@ Expectre_IS_TOP_LEVEL:STATIC=ON
 Expectre_SOURCE_DIR:STATIC=C:/Expectre
 
 //link flags for MinGW
-MINGW32_LIBRARY:STRING=mingw32;-mwindows
+MINGW32_LIBRARY:STRING=mingw32;
 
 //Path to a library.
 SDL2MAIN_LIBRARY:FILEPATH=C:/Expectre/lib/SDL/lib/libSDL2main.a
@@ -252,7 +252,7 @@ SDL2MAIN_LIBRARY:FILEPATH=C:/Expectre/lib/SDL/lib/libSDL2main.a
 SDL2_INCLUDE_DIR:PATH=C:/Expectre/lib/SDL/include/SDL2
 
 //Where the SDL Library can be found
-SDL2_LIBRARY:STRING=mingw32;-mwindows;C:/Expectre/lib/SDL/lib/libSDL2main.a;C:/Expectre/lib/SDL/lib/libSDL2.dll.a
+SDL2_LIBRARY:STRING=mingw32;C:/Expectre/lib/SDL/lib/libSDL2main.a;C:/Expectre/lib/SDL/lib/libSDL2.dll.a
 
 
 ########################
@@ -420,7 +420,7 @@ CMAKE_STRIP-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding SDL2
-FIND_PACKAGE_MESSAGE_DETAILS_SDL2:INTERNAL=[mingw32;-mwindows;C:/Expectre/lib/SDL/lib/libSDL2main.a;C:/Expectre/lib/SDL/lib/libSDL2.dll.a][C:/Expectre/lib/SDL/include/SDL2][v()]
+FIND_PACKAGE_MESSAGE_DETAILS_SDL2:INTERNAL=[mingw32;C:/Expectre/lib/SDL/lib/libSDL2main.a;C:/Expectre/lib/SDL/lib/libSDL2.dll.a][C:/Expectre/lib/SDL/include/SDL2][v()]
 //Details about finding Threads
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //Path to a library.

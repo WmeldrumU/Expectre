@@ -5,7 +5,6 @@
 
 #include "spdlog/spdlog.h"
 #include "SDL2/SDL.h"
-#undef main
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -39,7 +38,7 @@ int main(int argc, char *argv[])
 	screenSurface = SDL_GetWindowSurface(window);
 	SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
 	SDL_UpdateWindowSurface(window);
-	SDL_Delay(2000);
+	SDL_Delay(3000);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 	return 0;
