@@ -1,8 +1,11 @@
 ﻿// Excpectre.cpp : Defines the entry point for the application.
 //
 #include <iostream>
+//#include <chrono.h>
+
 #include "spdlog/spdlog.h"
 #include "SDL2/SDL.h"
+#undef main
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -11,9 +14,10 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
+	//chrono::milliseconds engineClock(1000);
 
 	cout << "Hello Expectre" << endl;
-
+	
 	spdlog::info("Welcome to spdlog!");
 	SDL_Window *window = NULL;
 	SDL_Surface *screenSurface = NULL;
@@ -40,22 +44,22 @@ int main(int argc, char *argv[])
 	SDL_Quit();
 	return 0;
 
-	try
-	{
-		// setup
-		while (true)
-		{
-			// processInput
-			// update()
-			// render()
-		}
-	}
-	catch (exception &e)
-	{
-		cout << "EXCEPTION: \n"
-			 << e.what() << endl;
-		return 1;
-	}
+	// try
+	// {
+	// 	// setup
+	// 	while (true)
+	// 	{
+	// 		// processInput
+	// 		// update()
+	// 		// render()
+	// 	}
+	// }
+	// catch (exception &e)
+	// {
+	// 	cout << "EXCEPTION: \n"
+	// 		 << e.what() << endl;
+	// 	return 1;
+	// }
 
 	return 0;
 }
