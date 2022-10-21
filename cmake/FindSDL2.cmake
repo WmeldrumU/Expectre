@@ -83,6 +83,11 @@ find_path(SDL2_INCLUDE_DIR SDL.h
                 # path suffixes to search inside ENV{SDL2DIR}
                 include/SDL2 include
 )
+
+#set to parent directory so we can use keep includes consistent
+#i.e. #include "SDL2/*.h" rather than just "*.h"
+cmake_path(GET SDL2_INCLUDE_DIR PARENT_PATH SDL2_INCLUDE_DIR)
+
 message(STATUS "SDL2_INCLUDE: ${SDL2_INCLUDE_DIR}")
 # message(STATUS "SDL2 INCLUDE: ${SDL2_INCLUDE_DIR}")
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
