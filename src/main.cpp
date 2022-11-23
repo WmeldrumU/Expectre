@@ -26,8 +26,8 @@ int main(int argc, char *argv[])
 		cout << "Hello Expectre" << endl;
 
 		spdlog::info("Welcome to spdlog!");
-		SDL_Window *window = NULL;
-		SDL_Surface *screenSurface = NULL;
+		SDL_Window *window = nullptr;
+		SDL_Surface *screenSurface = nullptr;
 		if (SDL_Init(SDL_INIT_VIDEO) < 0)
 		{
 			fprintf(stderr, "could not initialize sdl2: %s\n", SDL_GetError());
@@ -38,28 +38,61 @@ int main(int argc, char *argv[])
 			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 			SCREEN_WIDTH, SCREEN_HEIGHT,
 			SDL_WINDOW_SHOWN);
-		if (window == NULL)
+		if (window == nullptr)
 		{
 			fprintf(stderr, "could not create window: %s\n", SDL_GetError());
 			return 1;
 		}
-		screenSurface = SDL_GetWindowSurface(window);
-		SDL_Rect rect1;
-		rect1.h = 200;
-		rect1.w = 200;
-		rect1.x = 50;
-		rect1.y = 100;
 
-		SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
-		SDL_FillRect(screenSurface, &rect1, SDL_MapRGB(screenSurface->format, 0x00, 0x00, 0x00));
-		SDL_UpdateWindowSurface(window);
-
-		while (true)
+		SDL_Renderer *ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+		if (ren == nullptr)
 		{
-			// processInput
-			// update()
-			// render()
+			SDL_DestroyWindow(window);
+			std::cout << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+			SDL_Quit();
+			return 1;
 		}
+
+		std::string imagePath = "assets\\hello.bmp";
+		SDL_Surface *bmp = SDL_LoadBMP(imagePath.c_str());
+		if (bmp == nullptr)
+		{
+			SDL_DestroyRenderer(ren);
+			SDL_DestroyWindow(window);
+			std::cout << "SDL_LoadBMP Error: " << SDL_GetError() << std::endl;
+			SDL_Quit();
+			return 1;
+		}
+
+		SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, bmp);
+		SDL_FreeSurface(bmp);
+		if (tex == nullptr)
+		{
+			SDL_DestroyRenderer(ren);
+			SDL_DestroyWindow(window);
+			std::cout << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << std::endl;
+			SDL_Quit();
+			return 1;
+		}
+
+		for (int i = 0; i < 3; i++)
+		{
+			SDL_RenderClear(ren);
+
+			SDL_RenderCopy(ren, tex, nullptr, nullptr);
+
+			SDL_RenderPresent(ren);
+
+			SDL_Delay(1000);
+		}
+		// while (true)
+		// {
+		// 	// processInput
+		// 	// update()
+		// 	// render()
+		// }
+		SDL_DestroyTexture(tex);
+		SDL_DestroyRenderer(ren);
 		SDL_DestroyWindow(window);
 		SDL_Quit();
 	}
