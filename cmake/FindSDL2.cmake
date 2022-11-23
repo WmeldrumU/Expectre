@@ -71,9 +71,20 @@
 # "SDL.h", not <SDL/SDL.h>.  This is done for portability reasons
 # because not all systems place things in SDL/ (see FreeBSD).
 
+# message(STATUS "SDL2 INCLUDE: ${SDL2_INCLUDE_DIR}")
+
+
 if(NOT SDL2_DIR)
   set(SDL2_DIR "" CACHE PATH "SDL2 directory")
 endif()
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(VC_LIB_PATH_SUFFIX lib/x64)
+  set(SDL2_DIR ${SDL2_DIR}/x86_64-w64-mingw32)
+else()
+  set(VC_LIB_PATH_SUFFIX lib/x86)
+endif()
+
 message(STATUS "SDL2 DIR: ${SDL2_DIR}")
 find_path(SDL2_INCLUDE_DIR SDL.h
   HINTS
@@ -81,20 +92,17 @@ find_path(SDL2_INCLUDE_DIR SDL.h
     ${SDL2_DIR}
   PATH_SUFFIXES SDL2
                 # path suffixes to search inside ENV{SDL2DIR}
-                include/SDL2 include
+                include/SDL2 include 
 )
+
+
 
 #set to parent directory so we can use keep includes consistent
 #i.e. #include "SDL2/*.h" rather than just "*.h"
 cmake_path(GET SDL2_INCLUDE_DIR PARENT_PATH SDL2_INCLUDE_DIR)
 
-message(STATUS "SDL2_INCLUDE: ${SDL2_INCLUDE_DIR}")
-# message(STATUS "SDL2 INCLUDE: ${SDL2_INCLUDE_DIR}")
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-  set(VC_LIB_PATH_SUFFIX lib/x64)
-else()
-  set(VC_LIB_PATH_SUFFIX lib/x86)
-endif()
+message(STATUS "SDL2_INCLUDE_DIR: ${SDL2_INCLUDE_DIR}")
+
 
 find_library(SDL2_LIBRARY_TEMP
   NAMES SDL2
