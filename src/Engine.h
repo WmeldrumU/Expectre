@@ -10,8 +10,8 @@ namespace expectre {
         void run();
         void cleanup();
         void draw();
-        bool isInitialized() { return m_isIntialized; }
-        uint32_t frameNumber { return m_frameNumber; }
+        bool isInitialized();
+        uint32_t frameNumber();
     private:
         bool m_isIntialized{false};
         uint32_t m_frameNumber{0};
