@@ -5,7 +5,6 @@
 
 #include "rendererVk.h"
 #include "shared.h"
-#include "spdlog/spdlog.h"
 
 
 struct {
