@@ -1,7 +1,7 @@
 ﻿// Excpectre.cpp : Defines the entry point for the application.
 //
 #include <iostream>
-
+#include <SDL2/SDL.h>
 #include "rendererVk.h"
 
 int main(int argc, char *argv[])
