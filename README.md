@@ -48,4 +48,18 @@ cd ./build/
 cmake ../ -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug"
 cmake --build . --config Debug
 
+UBUNTU
+export CC=clang CXX=clang++
+
+[settings]
+arch=x86_64
+build_type=Debug
+compiler=clang
+compiler.cppstd=gnu14
+compiler.libcxx=libstdc++
+compiler.version=10
+os=Linux
+[conf]
+tools.system.package_manager:mode=install
+tools.system.package_manager:sudo = True
 
