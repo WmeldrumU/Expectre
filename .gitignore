@@ -33,7 +33,8 @@
 
 CMakeFiles/
 build/
-.vscode
+.vscode/
+.vs/
 
 # Dont ignores
 !lib/**

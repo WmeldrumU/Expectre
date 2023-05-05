@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 # set the project name
 project(Expectre CXX)
 # use c++ 20, this version is required
