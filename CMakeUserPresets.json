@@ -4,6 +4,6 @@
         "conan": {}
     },
     "include": [
-        "C:\\Expectre\\build\\CMakePresets.json"
+        "C:\\Expectre\\build\\generators\\CMakePresets.json"
     ]
 }

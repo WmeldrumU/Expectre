@@ -1,27 +1,5 @@
 # Expectre
 
-conan install . --build=missing -if build -pr foo   
-cmake -B build -G "Visual Studio 16 2019" -T ClangCL
-cmake --build build --config Release
-
-PS C:\Expectre> conan profile show foo  
-Configuration for profile foo:
-
-[settings]
-os=Windows
-os_build=Windows
-arch=x86_64
-arch_build=x86_64
-compiler=Visual Studio
-compiler.toolset=ClangCL
-compiler.version=16
-build_type=Release
-[options]
-[conf]
-[build_requires]
-[env]
-
-
 
 
 
@@ -51,15 +29,12 @@ cmake --build . --config Debug
 UBUNTU
 export CC=clang CXX=clang++
 
-[settings]
-arch=x86_64
-build_type=Debug
-compiler=clang
-compiler.cppstd=gnu14
-compiler.libcxx=libstdc++
-compiler.version=10
-os=Linux
-[conf]
-tools.system.package_manager:mode=install
-tools.system.package_manager:sudo = True
 
+See https://blog.conan.io/2022/10/13/Different-flavors-Clang-compiler-Windows.html for info on profiles/compiler
+
+Make sure vulkan + optional glm headers are installed, as well as the vulkan environemtn variables (these should be set by the installer on windows)
+conan2 install . -pr clang-cl --build=missing        
+
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="build/generators/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug" --debug-find                         
+
+cmake --build .\build\ --config debug     

@@ -2,29 +2,29 @@
 //
 #include <iostream>
 #include "SDL2/SDL.h"
+#include "Engine.h"
 #include "rendererVk.h"
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
 	try
 	{
 		std::cout << "STARTING UP...." << std::endl;
+		Expectre::Renderer_Vk renderer{};
+		Expectre::Engine engine{&renderer};
 		// setup window
-		expectre::Renderer_Vk renderer{};
 
 		// create renderer, pass to "engine"
 		// start engine -- engine.run()
 
+		// create input
 
-
-		//create input
-
-		//engine.cleanup()
+		engine.cleanup();
 	}
 	catch (std::exception &e)
 	{
 		std::cout << "EXCEPTION: \n"
-			 << e.what() << std::endl;
+				  << e.what() << std::endl;
 		return 1;
 	}
 

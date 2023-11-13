@@ -6,7 +6,7 @@
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
 
-namespace expectre {
+namespace Expectre {
     class Renderer_Vk {
 
     public:
@@ -14,6 +14,7 @@ namespace expectre {
         ~Renderer_Vk();
 
         bool m_enable_validation_layers{true};
+        void cleanup();
 
     private:
         void create_instance();
