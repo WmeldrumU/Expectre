@@ -7,8 +7,10 @@
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
 
-namespace Expectre {
-    class Renderer_Vk {
+namespace Expectre
+{
+    class Renderer_Vk
+    {
 
     public:
         Renderer_Vk();
@@ -20,26 +22,32 @@ namespace Expectre {
     private:
         void create_instance();
 
-        void enable_layers();
-        
+        void enumerate_layers();
+
         void create_surface();
 
         void select_physical_device();
 
         void create_logical_device_and_queues();
 
-        SDL_Window* m_window{};
+        void create_buffers_and_images();
+
+        SDL_Window *m_window{};
         VkInstance m_instance{};
         VkSurfaceKHR m_surface{};
-        std::vector<const char*> m_layers;
+        std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;
         std::vector<VkExtensionProperties> m_supported_extensions;
-        VkDevice m_device;
+        VkDevice m_device = VK_NULL_HANDLE;
+        VkBuffer m_buffer = VK_NULL_HANDLE;
+        VkImage m_image = VK_NULL_HANDLE;
         uint32_t graphics_queue_family_index{UINT32_MAX};
         uint32_t present_queue_family_index{UINT32_MAX};
+        float m_priority = 1.0f;
         VkQueue graphics_queue;
         VkQueue present_queue;
+        bool m_layers_supported = false;
     };
 }
 #endif // RENDERER_VK_H
