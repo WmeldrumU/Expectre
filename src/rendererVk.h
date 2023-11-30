@@ -32,9 +32,13 @@ namespace Expectre
 
         void create_buffers_and_images();
 
+        void create_views();
+
         SDL_Window *m_window{};
         VkInstance m_instance{};
         VkSurfaceKHR m_surface{};
+        VkBufferView m_buffer_view{};
+        VkImageView m_image_view{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;

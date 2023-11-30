@@ -51,9 +51,11 @@ namespace Expectre
 
         select_physical_device();
 
-        create_logical_device_and_queues(); 
+        create_logical_device_and_queues();
 
         create_buffers_and_images();
+
+        create_views();
 
         // createSemaphores();
 
@@ -281,7 +283,9 @@ namespace Expectre
         buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         buffer_info.size = 1024 * 1024 * 512; // 512MB
         buffer_info.pNext = nullptr;
-        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                            VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
         buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         if (vkCreateBuffer(m_device, &buffer_info, nullptr, &m_buffer) != VK_SUCCESS)
@@ -312,5 +316,26 @@ namespace Expectre
         {
             spdlog::throw_spdlog_ex("Could not create image.");
         }
+    }
+
+    void Renderer_Vk::create_views()
+    {
+
+        // VkBufferViewCreateInfo buffer_view_info{};
+        // buffer_view_info.buffer = m_buffer;
+        // buffer_view_info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+        // buffer_view_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+        // buffer_view_info.offset = ;
+        // buffer_view_info.range = ;
+
+        // TODO: needs swapchaini info first
+        VkImageViewCreateInfo image_view_info{};
+        image_view_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+        image_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        image_view_info.subresourceRange.baseMipLevel = 0;
+        image_view_info.subresourceRange.levelCount = 1;
+        image_view_info.subresourceRange.baseArrayLayer = 0;
+        image_view_info.subresourceRange.layerCount = 1;
+        //image_view_info.components.r
     }
 }
