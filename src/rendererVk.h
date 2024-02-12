@@ -47,15 +47,15 @@ namespace Expectre
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;
-        std::vector<VkExtensionProperties> m_supported_extensions;
+        std::vector<const char *> m_supported_extensions = {VK_KHR_SURFACE_EXTENSION_NAME};
         VkDevice m_device = VK_NULL_HANDLE;
         VkBuffer m_buffer = VK_NULL_HANDLE;
         VkImage m_image = VK_NULL_HANDLE;
         uint32_t graphics_queue_family_index{UINT32_MAX};
         uint32_t present_queue_family_index{UINT32_MAX};
         float m_priority = 1.0f;
-        VkQueue graphics_queue;
-        VkQueue present_queue;
+        VkQueue m_graphics_queue;
+        VkQueue m_present_queue;
         bool m_layers_supported = false;
     };
 }
