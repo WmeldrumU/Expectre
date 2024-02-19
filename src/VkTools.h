@@ -4,6 +4,8 @@
  */
 
 #include <string>
+#include <fstream>
+#include <vector>
 
 #define VK_CHECK_RESULT(f)                                                                                                                       \
     {                                                                                                                                            \
@@ -73,10 +75,38 @@ namespace tools
                     return true;
                 }
             }
-            // Shift bits down 
+            // Shift bits down
             type_bits >>= 1;
         }
         // No matching memory types
         return false;
+    }
+
+    VkShaderModule createShaderModule(const VkDevice &device, const std::string &filename)
+    {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open())
+        {
+            throw std::runtime_error("Failed to open file: " + filename);
+        }
+
+        size_t fileSize = (size_t)file.tellg();
+        std::vector<char> buffer(fileSize);
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+        file.close();
+
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = buffer.size();
+        createInfo.pCode = reinterpret_cast<const uint32_t *>(buffer.data());
+
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create shader module!");
+        }
+
+        return shaderModule;
     }
 }
