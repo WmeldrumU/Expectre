@@ -76,6 +76,23 @@ namespace Expectre
 
         prepare_pipeline();
 
+        // prepare_present_cmd_pool_and_buffers();
+
+        create_descriptor_pool_and_sets();
+
+        // create command buffers/pool
+
+        // create descriptor pool + sets
+
+        // create framebuffers
+        create_framebuffers();
+
+        demo_draw_build_cmd();
+
+        //
+
+        // push a command to gpu?
+
         // create_buffers_and_images();
 
         // create_views();
@@ -106,6 +123,11 @@ namespace Expectre
 
     Renderer_Vk::~Renderer_Vk()
     {
+        for (auto i = 0; i < m_swapchain_images.size(); i++)
+        {
+            vkDestroyFramebuffer(m_device, m_framebuffers[i], nullptr);
+        }
+        vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
         vkDestroyPipeline(m_device, m_pipeline, nullptr);
         vkDestroyPipelineCache(m_device, m_pipeline_cache, nullptr);
         vkDestroyRenderPass(m_device, m_render_pass, nullptr);
@@ -837,7 +859,7 @@ namespace Expectre
         err = vkAllocateMemory(m_device, &m_depth.mem_alloc, nullptr, &m_depth.mem);
 
         VK_CHECK_RESULT(err);
-        
+
         // bind memory
         err = vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0);
         // assert(!err);
@@ -1033,16 +1055,14 @@ namespace Expectre
                 .offset = 0,
             }};
 
-            VkPipelineVertexInputStateCreateInfo vertex_input_state_info{
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                .pNext = nullptr,
-                .vertexBindingDescriptionCount = 1,
-                .pVertexBindingDescriptions = &vertex_input_binding,
-                .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_input_attribute.size()),
-                .pVertexAttributeDescriptions = vertex_input_attribute.data(),
-            };
-
-
+        VkPipelineVertexInputStateCreateInfo vertex_input_state_info{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .vertexBindingDescriptionCount = 1,
+            .pVertexBindingDescriptions = &vertex_input_binding,
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_input_attribute.size()),
+            .pVertexAttributeDescriptions = vertex_input_attribute.data(),
+        };
 
         std::array<VkPipelineShaderStageCreateInfo, 2> shader_stages = {
             // vertex shader
@@ -1079,11 +1099,163 @@ namespace Expectre
                                                   m_pipeline_cache, 1,
                                                   &pipeline_info,
                                                   nullptr,
-                                                  &m_pipeline)
-                                                  );
+                                                  &m_pipeline));
 
         // Shader modules are no longer needed once pipeline is created
         vkDestroyShaderModule(m_device, shader_stages[0].module, nullptr);
         vkDestroyShaderModule(m_device, shader_stages[1].module, nullptr);
     }
+
+    void Renderer_Vk::create_descriptor_pool_and_sets()
+    {
+        std::array<VkDescriptorPoolSize, 1> pool_sizes = {
+            VkDescriptorPoolSize{
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = static_cast<uint32_t>(m_swapchain_images.size()),
+            },
+            // {
+            //     .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            //     .descriptorCount = static_cast<uint32_t>(m_swapchain_images.size())
+            // }
+        };
+        VkDescriptorPoolCreateInfo descriptor_pool_info{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .maxSets = static_cast<uint32_t>(m_swapchain_images.size()),
+            .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
+            .pPoolSizes = pool_sizes.data(),
+        };
+        VkResult err;
+        err = vkCreateDescriptorPool(m_device, &descriptor_pool_info, nullptr, &m_descriptor_pool);
+        VK_CHECK_RESULT(err);
+        assert(!err);
+
+        m_descriptor_sets.resize(m_swapchain_images.size());
+
+        // Prepare descriptor set
+        for (uint32_t i = 0; i < m_swapchain_images.size(); i++)
+        {
+            VkDescriptorSetAllocateInfo alloc_info{
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .descriptorPool = m_descriptor_pool,
+                .descriptorSetCount = 1,
+                .pSetLayouts = &m_descriptor_set_layout,
+            };
+            // Use one UBO per frame
+            err = vkAllocateDescriptorSets(m_device, &alloc_info, &m_descriptor_sets[i]);
+            VK_CHECK_RESULT(err);
+            assert(!err);
+            VkDescriptorBufferInfo buffer_info{
+                .buffer = m_swapchain_uniform_buffers[i],
+                .range = sizeof(glm::vec3),
+            };
+
+            // Binding 0: Uniform buffer
+            VkWriteDescriptorSet write_descriptor_set{
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = m_descriptor_sets[i],
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pBufferInfo = &buffer_info,
+                .dstBinding = 0,
+            };
+            vkUpdateDescriptorSets(m_device, 1, &write_descriptor_set, 0, nullptr);
+        }
+    }
+
+    void Renderer_Vk::create_framebuffers()
+    {
+        VkResult err;
+        m_framebuffers.resize(m_swapchain_images.size());
+        for (auto i = 0; i < m_framebuffers.size(); i++)
+        {
+            std::array<VkImageView, 2> attachments;
+
+            attachments[0] = m_swapchain_buffers[i].view;
+            attachments[1] = m_depth.view;
+
+            // All framebuffers use same renderpass setup
+            VkFramebufferCreateInfo framebuffer_info{
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .renderPass = m_render_pass,
+                .attachmentCount = static_cast<uint32_t>(attachments.size()),
+                .width = 1280,
+                .height = 720,
+                .layers = 1,
+            };
+            // Create framebuffer
+            err = vkCreateFramebuffer(m_device, &framebuffer_info, nullptr, &m_framebuffers[i]);
+            VK_CHECK_RESULT(err);
+        }
+    }
+
+    void Renderer_Vk::demo_draw_build_cmd()
+    {
+        for (auto i = 0; i < m_swapchain_images.size(); i++)
+        {
+            const VkCommandBufferBeginInfo cmd_buf_info = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                .pNext = nullptr,
+                .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+                .pInheritanceInfo = nullptr,
+            };
+            const std::array<VkClearValue, 2> clear_values = {
+                VkClearValue{.color.float32 = {0.2f, 0.2f, 0.2f, 0.2f}},
+                {.depthStencil = {1.0f, 0}},
+            };
+            const VkRenderPassBeginInfo renderpass_begin_info{
+                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .pNext = nullptr,
+                .renderPass = m_render_pass,
+                .framebuffer = m_framebuffers[i],
+                .renderArea.offset.x = 0,
+                .renderArea.offset.y = 0,
+                .renderArea.extent.width = 1280,
+                .renderArea.extent.width = 720,
+                .clearValueCount = static_cast<uint32_t>(clear_values.size()),
+                .pClearValues = clear_values.data(),
+            };
+            VkResult err;
+            err = vkBeginCommandBuffer(m_cmd_buffer, &cmd_buf_info);
+            assert(!err);
+            VK_CHECK_RESULT(err);
+            // TODO: consider naming command draw buffer
+
+            // TODO: consider push drawbegin label
+
+            vkCmdBindPipeline(m_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+            vkCmdBindDescriptorSets(m_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout,
+                                    0, m_descriptor_sets.size(), m_descriptor_sets.data(), 0, nullptr);
+            // Update dynamic viewport state
+            VkViewport viewport{};
+            float viewport_dimension;
+            viewport_dimension = 720.0f;
+            viewport.y = (1280 - 720) / 2.0f;
+            viewport.height = viewport_dimension;
+            viewport.width = viewport_dimension;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(m_cmd_buffer, 0, 1, &viewport);
+            // Update dynamic scissor state
+            VkRect2D scissor{
+                .extent.width = 1280.0f,
+                .extent.height = 720.0f,
+                .offset.x = 0,
+                .offset.y = 0};
+            vkCmdSetScissor(m_cmd_buffer, 0, 1, &scissor);
+            
+            VkDeviceSize offsets[1]{ 0 };
+            // vkCmdBindVertexBuffers(m_cmd_buffer, 0, 1, m_swapchain_uniform_buffers, offsets);
+            // // consider pushing "actualdraw" label
+            // vkCmdBindIndexBuffer(m_cmd_buffer, m_buffer, 0, VK_INDEX_TYPE_UINT32);
+            // TODO: switch to usng indices
+            vkCmdDraw(m_cmd_buffer, 3, 1, 0, 0);
+
+            vkCmdEndRenderPass(m_cmd_buffer)
+
+            err = vkEndCommandBuffer(m_cmd_buffer(m_cmd_buffer));
+            assert(!err);
+        }
+    }
+
 }
