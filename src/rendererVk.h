@@ -4,6 +4,7 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <stdexcept>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
@@ -33,6 +34,8 @@ namespace Expectre
 
         bool m_enable_validation_layers{true};
         void cleanup();
+        bool isReady();
+        void draw_frame();
 
     private:
         void create_instance();
@@ -55,19 +58,25 @@ namespace Expectre
 
         void create_vertex_buffer();
 
+        void create_command_pool();
+
         void create_layouts();
 
         void prepare_depth();
 
-        void prepare_render_pass();
-        
-        void prepare_pipeline();
+        void create_renderpass();
+
+        void create_pipeline();
 
         void prepare_present_cmd_pool_and_buffers();
 
         void create_descriptor_pool_and_sets();
 
         void create_framebuffers();
+
+        void create_sync_objects();
+
+        void record_command_buffer();
 
         void demo_draw_build_cmd();
 
@@ -96,7 +105,7 @@ namespace Expectre
         VkPipeline m_pipeline{};
         VkDescriptorPool m_descriptor_pool{};
         std::vector<VkDescriptorSet> m_descriptor_sets{};
-        VkPipelineCache m_pipeline_cache{};
+        VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_descriptor_set_layout{};
         std::vector<VkFramebuffer> m_framebuffers{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
@@ -108,6 +117,9 @@ namespace Expectre
         std::vector<SwapChainBuffer> m_swapchain_buffers{};
         std::vector<VkBuffer> m_swapchain_uniform_buffers{};
         std::vector<VkDeviceMemory> m_uniform_memories{};
+        std::vector<VkSemaphore> available_image_semaphors{};
+        std::vector<VkSemaphore> finished_render_semaphors{};
+        std::vector<VkFence> in_flight_fences{};
         VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
         VkDevice m_device = VK_NULL_HANDLE;
         VkBuffer m_buffer = VK_NULL_HANDLE;
@@ -115,6 +127,7 @@ namespace Expectre
         VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
         VkCommandPool m_present_cmd_pool = VK_NULL_HANDLE;
         VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
+        bool m_ready = false;
 
         struct
         {
@@ -129,6 +142,7 @@ namespace Expectre
         VkSurfaceFormatKHR m_surface_format{};
         uint32_t m_graphics_queue_family_index{UINT32_MAX};
         uint32_t m_present_queue_family_index{UINT32_MAX};
+        uint32_t m_current_frame{0};
         float m_priority = 1.0f;
         VkQueue m_graphics_queue;
         VkQueue m_present_queue;
