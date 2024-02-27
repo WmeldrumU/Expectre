@@ -71,7 +71,7 @@ namespace tools
                 // Type is available, now check if it meets our requirements
                 if ((memory_types[i].propertyFlags & requirements) == requirements)
                 {
-                    *mem_index = 1;
+                    *mem_index = i;
                     return true;
                 }
             }
