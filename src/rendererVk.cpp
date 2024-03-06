@@ -81,47 +81,11 @@ namespace Expectre
         create_sync_objects();
 
         m_ready = true;
-
-        // prepare_present_cmd_pool_and_buffers();
-
-        // create_descriptor_pool_and_sets();
-
-        // create command buffers/pool
-
-        // create descriptor pool + sets
-
-        // create framebuffers
-
-        // push a command to gpu?
-
-        // create_buffers_and_images();
-
-        // createSemaphores();
-
-        // createCommandPool();
-
-        // allocator.init();
-
-        // stagingManager.Init();
-
-        // CreateSwapChain();
-
-        // CreateRenderTargets();
-
-        // createRenderPass();
-
-        // createPipelineCache();
-
-        // createFrameBuffers();
-
-        // renderProgManager.Init();
-
-        // vertexCache.Init(... );
-        // cleanup();
     }
 
     Renderer_Vk::~Renderer_Vk()
     {
+        vkDeviceWaitIdle(m_device);
 
         // Destroy
         for (auto i = 0; i < m_framebuffers.size(); i++)
@@ -153,7 +117,7 @@ namespace Expectre
         vkFreeMemory(m_device, m_vertices.memory, nullptr);
 
         // might not need this
-        vkDestroyBuffer(m_device, m_buffer, nullptr);
+        //vkDestroyBuffer(m_device, m_buffer, nullptr);
 
         for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
         {
@@ -173,7 +137,6 @@ namespace Expectre
 
         // vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
         vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-        vkDeviceWaitIdle(m_device);
         // vkDestroyImageView(m_device, m_image_view, nullptr);
         vkDestroyImage(m_device, m_image, nullptr);
         vkDestroyDevice(m_device, nullptr);
