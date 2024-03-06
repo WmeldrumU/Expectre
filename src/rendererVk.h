@@ -67,7 +67,7 @@ namespace Expectre
 
         void get_surface_format();
 
-        void create_swap_chain();
+        void create_swapchain();
 
         void create_command_buffers();
 
@@ -132,9 +132,9 @@ namespace Expectre
         std::vector<SwapChainBuffer> m_swapchain_buffers{};
         // std::vector<VkBuffer> m_swapchain_uniform_buffers{};
         // std::vector<VkDeviceMemory> m_uniform_memories{};
-        std::vector<VkSemaphore> available_image_semaphors{};
-        std::vector<VkSemaphore> finished_render_semaphors{};
-        std::vector<VkFence> in_flight_fences{};
+        std::vector<VkSemaphore> m_available_image_semaphores{};
+        std::vector<VkSemaphore> m_finished_render_semaphores{};
+        std::vector<VkFence> m_in_flight_fences{};
 
         std::array<UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
         VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
@@ -143,7 +143,8 @@ namespace Expectre
         VkImage m_image = VK_NULL_HANDLE;
         VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
         VkCommandPool m_present_cmd_pool = VK_NULL_HANDLE;
-        VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
+        //VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
+        std::vector<VkCommandBuffer> m_cmd_buffers;
         bool m_ready = false;
 
         struct
@@ -162,22 +163,22 @@ namespace Expectre
             VkDeviceMemory memory{VK_NULL_HANDLE};
             VkBuffer buffer;
             uint32_t count{0};
-        } indices;
+        } m_indices;
 
         // Vertex buffer and attributes
         struct
         {
             VkDeviceMemory memory{VK_NULL_HANDLE}; // Handle to the device memory for this buffer
             VkBuffer buffer;                       // Handle to the Vulkan buffer object that the memory is bound to
-        } vertices;
+        } m_vertices;
 
         VkSurfaceFormatKHR m_surface_format{};
         uint32_t m_graphics_queue_family_index{UINT32_MAX};
         uint32_t m_present_queue_family_index{UINT32_MAX};
         uint32_t m_current_frame{0};
         float m_priority = 1.0f;
-        VkQueue m_graphics_queue;
-        VkQueue m_present_queue;
+        VkQueue m_graphics_queue = VK_NULL_HANDLE;
+        VkQueue m_present_queue = VK_NULL_HANDLE;
         bool m_layers_supported = false;
     };
 }
