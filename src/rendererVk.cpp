@@ -1,4 +1,5 @@
-
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
@@ -7,11 +8,15 @@
 #include <assert.h>
 #include <vulkan/vulkan.h>
 #include <array>
+#include <chrono>
 
 #include "rendererVk.h"
 #include "shared.h"
 #include "spdlog/spdlog.h"
 #include "VkTools.h"
+
+#define RESOLUTION_X 1280
+#define RESOLUTION_Y 720
 
 struct Vertex
 {
@@ -19,12 +24,12 @@ struct Vertex
     glm::vec3 color;
 };
 
-// struct
-// {
-//     glm::mat4 modelMatrix;
-//     glm::mat4 projectionMatrix;
-//     glm::mat4 viewMatrix;
-// } uboVS;
+struct UBO
+{
+     glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+};
 
 namespace Expectre
 {
@@ -45,7 +50,7 @@ namespace Expectre
         m_window = SDL_CreateWindow("Expectre",
                                     SDL_WINDOWPOS_CENTERED,
                                     SDL_WINDOWPOS_CENTERED,
-                                    1280, 720,
+                                    RESOLUTION_X, RESOLUTION_Y,
                                     SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN);
 
         if (!m_window)
@@ -78,11 +83,21 @@ namespace Expectre
 
         create_renderpass();
 
+        create_uniform_buffers();
+
+        create_descriptor_set_layout();
+
+        create_descriptor_pool_and_sets();
+
+        create_pipeline();
+
         create_framebuffers();
 
         create_vertex_buffer();
 
-        create_pipeline();
+        //       create_uniform_buffers();
+
+        //      create_descriptor_pool_and_sets();
 
         create_sync_objects();
 
@@ -134,7 +149,7 @@ namespace Expectre
         vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
         vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
         vkDestroyPipelineCache(m_device, m_pipeline_cache, nullptr);
-        // vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
 
         // Destroy depth buffer
         vkDestroyImageView(m_device, m_depth.view, nullptr);
@@ -414,7 +429,7 @@ namespace Expectre
     {
         VkBufferCreateInfo buffer_info{};
         buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        buffer_info.size = 1280 * 720 * 512; // 512MB
+        buffer_info.size = RESOLUTION_X * RESOLUTION_Y * 512; // 512MB
         buffer_info.pNext = nullptr;
         buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                             VK_BUFFER_USAGE_TRANSFER_DST_BIT |
@@ -436,7 +451,7 @@ namespace Expectre
         image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         image_info.imageType = VK_IMAGE_TYPE_2D;
         image_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-        image_info.extent = {1280, 720, 1};
+        image_info.extent = {RESOLUTION_X, RESOLUTION_Y, 1};
         image_info.mipLevels = 10;
         image_info.arrayLayers = 1;
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -552,8 +567,8 @@ namespace Expectre
             .imageColorSpace = m_surface_format.colorSpace,
 
             .imageExtent = {
-                .width = 1280,
-                .height = 720,
+                .width = RESOLUTION_X,
+                .height = RESOLUTION_Y,
             },
             .imageArrayLayers = 1,
             .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -562,7 +577,7 @@ namespace Expectre
             .pQueueFamilyIndices = nullptr,
             .preTransform = capabilities.currentTransform,
             .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-            .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+            .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
 
             .clipped = true,
             .oldSwapchain = VK_NULL_HANDLE,
@@ -808,7 +823,7 @@ namespace Expectre
             .flags = 0,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = depth_format,
-            .extent = {1280, 720, 1},
+            .extent = {RESOLUTION_X, RESOLUTION_Y, 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -1015,7 +1030,7 @@ namespace Expectre
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
         VkPipelineMultisampleStateCreateInfo multi_sample_info{};
@@ -1057,13 +1072,6 @@ namespace Expectre
         depth_stencil_state_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
         depth_stencil_state_info.stencilTestEnable = VK_FALSE;
         depth_stencil_state_info.front = depth_stencil_state_info.back;
-
-        VkPipelineLayoutCreateInfo pipeline_layout_info{};
-        pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipeline_layout_info.setLayoutCount = 0;
-        pipeline_layout_info.pushConstantRangeCount = 0;
-
-        VK_CHECK_RESULT(vkCreatePipelineLayout(m_device, &pipeline_layout_info, nullptr, &m_pipeline_layout));
 
         VkGraphicsPipelineCreateInfo pipeline_info{};
         pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1116,55 +1124,52 @@ namespace Expectre
 
     void Renderer_Vk::create_descriptor_pool_and_sets()
     {
-        std::array<VkDescriptorPoolSize, 1> pool_sizes{};
 
-        pool_sizes[0].descriptorCount = static_cast<uint32_t>(m_swapchain_images.size());
-        pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // pool
+        VkDescriptorPoolSize pool_size{};
+        pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pool_size.descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
 
-        pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pool_sizes[1].descriptorCount = static_cast<uint32_t>(m_swapchain_images.size());
+        VkDescriptorPoolCreateInfo pool_info{};
+        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool_info.pNext = nullptr;
+        pool_info.poolSizeCount = 1;
+        pool_info.pPoolSizes = &pool_size;
+        pool_info.maxSets = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
 
-        VkDescriptorPoolCreateInfo descriptor_pool_info{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .maxSets = static_cast<uint32_t>(m_swapchain_images.size()),
-            .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
-            .pPoolSizes = pool_sizes.data(),
-        };
-        VkResult err;
-        err = vkCreateDescriptorPool(m_device, &descriptor_pool_info, nullptr, &m_descriptor_pool);
-        VK_CHECK_RESULT(err);
-        assert(!err);
+        VK_CHECK_RESULT(vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_descriptor_pool));
 
-        m_descriptor_sets.resize(m_swapchain_images.size());
+        // sets
+        // std::vector<VkDescriptorSetLayout> layouts(MAX_CONCURRENT_FRAMES, m_descriptor_set_layout);
 
-        // Prepare descriptor set
-        for (uint32_t i = 0; i < MAX_CONCURRENT_FRAMES; i++)
+        for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
         {
-            VkDescriptorSetAllocateInfo alloc_info{
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                .descriptorPool = m_descriptor_pool,
-                .descriptorSetCount = 1,
-                .pSetLayouts = &m_descriptor_set_layout,
-            };
-            // Use one UBO per frame
-            err = vkAllocateDescriptorSets(m_device, &alloc_info, &m_descriptor_sets[i]);
-            VK_CHECK_RESULT(err);
-            assert(!err);
+            VkDescriptorSetAllocateInfo alloc_info{};
+            alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            alloc_info.descriptorPool = m_descriptor_pool;
+            alloc_info.descriptorSetCount = 1;
+            alloc_info.pSetLayouts = &m_descriptor_set_layout;
+
+            // m_descriptor_sets.resize(MAX_CONCURRENT_FRAMES);
+            VK_CHECK_RESULT(vkAllocateDescriptorSets(m_device,
+                                                     &alloc_info,
+                                                     &m_uniform_buffers[i].descriptorSet));
+
             VkDescriptorBufferInfo buffer_info{};
             buffer_info.buffer = m_uniform_buffers[i].buffer;
-            buffer_info.range = sizeof(glm::vec3);
+            buffer_info.offset = 0;
+            buffer_info.range = sizeof(UBO);
 
-            // Binding 0: Uniform buffer
-            VkWriteDescriptorSet write_descriptor_set{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = m_descriptor_sets[i],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .pBufferInfo = &buffer_info,
-            };
-            vkUpdateDescriptorSets(m_device, 1, &write_descriptor_set, 0, nullptr);
+            VkWriteDescriptorSet descriptor_write{};
+            descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptor_write.dstSet = m_uniform_buffers[i].descriptorSet;
+            descriptor_write.descriptorCount = 1;
+            descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptor_write.pBufferInfo = &buffer_info;
+            descriptor_write.dstBinding = 0;
+            descriptor_write.dstArrayElement = 0;
+
+            vkUpdateDescriptorSets(m_device, 1, &descriptor_write, 0, nullptr);
         }
     }
 
@@ -1185,8 +1190,8 @@ namespace Expectre
             framebuffer_info.renderPass = m_render_pass;
             framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebuffer_info.pAttachments = attachments.data();
-            framebuffer_info.width = 1280;
-            framebuffer_info.height = 720;
+            framebuffer_info.width = RESOLUTION_X;
+            framebuffer_info.height = RESOLUTION_Y;
             framebuffer_info.layers = 1;
 
             // Create framebuffer
@@ -1256,8 +1261,8 @@ namespace Expectre
         renderpass_info.framebuffer = m_framebuffers[m_current_frame];
         renderpass_info.renderArea.offset.x = 0;
         renderpass_info.renderArea.offset.y = 0;
-        renderpass_info.renderArea.extent.width = 1280;
-        renderpass_info.renderArea.extent.height = 720;
+        renderpass_info.renderArea.extent.width = RESOLUTION_X;
+        renderpass_info.renderArea.extent.height = RESOLUTION_Y;
         renderpass_info.clearValueCount = 2;
         renderpass_info.pClearValues = clear_col.data();
 
@@ -1268,8 +1273,8 @@ namespace Expectre
         VkViewport viewport{
             .x = 0.0f,
             .y = 0.0f,
-            .width = 1280.0f,
-            .height = 720.0f,
+            .width = (float)RESOLUTION_X,
+            .height = (float)RESOLUTION_Y,
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
@@ -1278,8 +1283,8 @@ namespace Expectre
         VkRect2D scissor{};
         scissor.offset.x = 0;
         scissor.offset.y = 0;
-        scissor.extent.width = 1280;
-        scissor.extent.height = 720;
+        scissor.extent.width = RESOLUTION_X;
+        scissor.extent.height = RESOLUTION_Y;
 
         vkCmdSetScissor(current_cmd_buffer, 0, 1, &scissor);
 
@@ -1287,6 +1292,11 @@ namespace Expectre
         vkCmdBindVertexBuffers(current_cmd_buffer, 0, 1, &m_vertices.buffer, offsets);
 
         vkCmdBindIndexBuffer(current_cmd_buffer, m_indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+        vkCmdBindDescriptorSets(current_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                m_pipeline_layout, 0, 1,
+                                &m_uniform_buffers[m_current_frame].descriptorSet,
+                                0, nullptr);
 
         vkCmdDrawIndexed(current_cmd_buffer, static_cast<uint32_t>(m_indices.count), 1, 0, 0, 0);
 
@@ -1305,9 +1315,8 @@ namespace Expectre
                                   m_available_image_semaphores[m_current_frame],
                                   VK_NULL_HANDLE, &image_index);
         VK_CHECK_RESULT(result);
-
+        update_uniform_buffer();
         vkResetFences(m_device, 1, &m_in_flight_fences[m_current_frame]);
-
         vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
         record_command_buffer();
 
@@ -1345,6 +1354,105 @@ namespace Expectre
         result = vkQueuePresentKHR(m_present_queue, &present_info);
         VK_CHECK_RESULT(result);
         m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
+    }
+
+    void Renderer_Vk::create_descriptor_set_layout()
+    {
+        VkDescriptorSetLayoutBinding ubo_layout_binding{};
+        ubo_layout_binding.binding = 0;
+        ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        ubo_layout_binding.descriptorCount = 1;
+        ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        ubo_layout_binding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutCreateInfo layout_info{};
+        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layout_info.bindingCount = 1;
+        layout_info.pBindings = &ubo_layout_binding;
+
+        VK_CHECK_RESULT(vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &m_descriptor_set_layout));
+
+        VkPipelineLayoutCreateInfo pipeline_layout_info{};
+        pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipeline_layout_info.pNext = nullptr;
+        pipeline_layout_info.setLayoutCount = 1;
+        // pipeline_layout_info.pushConstantRangeCount = 0;
+        pipeline_layout_info.pSetLayouts = &m_descriptor_set_layout;
+
+        VK_CHECK_RESULT(vkCreatePipelineLayout(m_device, &pipeline_layout_info, nullptr, &m_pipeline_layout));
+    }
+
+    void Renderer_Vk::create_uniform_buffers()
+    {
+        VkMemoryRequirements mem_reqs;
+        VkBufferCreateInfo buffer_info{};
+        VkMemoryAllocateInfo alloc_info{};
+        alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        alloc_info.pNext = nullptr;
+        alloc_info.allocationSize = 0;
+        alloc_info.memoryTypeIndex = 0;
+
+        buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buffer_info.size = sizeof(UBO);
+        buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+
+        for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
+        {
+            VK_CHECK_RESULT(vkCreateBuffer(m_device, &buffer_info, nullptr, &m_uniform_buffers[i].buffer));
+            // Get memory requirements of uniform buffer
+            vkGetBufferMemoryRequirements(m_device, m_uniform_buffers[i].buffer, &mem_reqs);
+            alloc_info.allocationSize = mem_reqs.size;
+
+            uint32_t mem_index;
+            // Get memory index of host visibe + coherent
+            bool found = tools::find_matching_memory(
+                mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &mem_index);
+            assert(found);
+            alloc_info.memoryTypeIndex = mem_index;
+            // Allocate memory for uniformbuffer
+            VK_CHECK_RESULT(vkAllocateMemory(m_device, &alloc_info, nullptr, &m_uniform_buffers[i].memory));
+            // Bind memory to buffer
+            VK_CHECK_RESULT(vkBindBufferMemory(m_device, m_uniform_buffers[i].buffer, m_uniform_buffers[i].memory, 0));
+            // We map the buffer once so we can update it without having to map it again
+            VK_CHECK_RESULT(vkMapMemory(m_device,
+                                        m_uniform_buffers[i].memory, 0,
+                                        sizeof(UBO), 0,
+                                        (void **)&m_uniform_buffers[i].mapped));
+        }
+    }
+
+    void Renderer_Vk::update_uniform_buffer()
+    {
+        static auto start_time = std::chrono::high_resolution_clock::now();
+
+        auto current_time = std::chrono::high_resolution_clock::now();
+        float time =
+            std::chrono::duration<float, std::chrono::seconds::period>(
+                current_time -
+                start_time)
+                .count();
+
+        UBO ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f),
+                                time * glm::radians(90.0f),
+                                glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = lookAt(glm::vec3(0.0f, 0.0f, -10.0f),
+                          glm::vec3(0.5f, 0.5f, 0.0f),
+                          glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.projection = glm::perspective(glm::radians(45.0f),
+                                          RESOLUTION_X / (float)RESOLUTION_Y, 0.1f, 100.0f);
+    //    ubo.model = ubo.projection * ubo.view * ubo.model;
+        ubo.view = glm::mat4(1.0f);
+        //ubo[0] = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        //ubo.view = glm::transpose(ubo.view);
+        ubo.projection = glm::mat4(1.0f);
+        // Correct for Vulkan coordinates
+        ubo.projection[1][1] *= -1.0;
+        //ubo.model[1][1] *= -1.0;
+
+        memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(UBO));
     }
 
     bool Renderer_Vk::isReady() { return m_ready; };

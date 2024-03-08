@@ -21,14 +21,6 @@ namespace Expectre
         VkImageView view;
     } SwapChainBuffer;
 
-    struct VsUniform
-    {
-        // Must start with MVP
-        float mvp[4][4];
-        float position[12 * 3][4];
-        float attr[12 * 3][4];
-    };
-
     typedef struct UniformBuffer
     {
         VkDeviceMemory memory;
@@ -105,6 +97,12 @@ namespace Expectre
 
         void create_semaphors_and_fences();
 
+        void create_descriptor_set_layout();
+
+        void create_uniform_buffers();
+
+        void update_uniform_buffer();
+
         uint32_t choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements,
                                         VkMemoryPropertyFlags requiredFlags,
                                         VkMemoryPropertyFlags prefferedFlags);
@@ -119,9 +117,9 @@ namespace Expectre
         VkPipelineLayout m_pipeline_layout{};
         VkPipeline m_pipeline{};
         VkDescriptorPool m_descriptor_pool{};
-        std::vector<VkDescriptorSet> m_descriptor_sets{};
+        //std::vector<VkDescriptorSet> m_descriptor_sets{};
         VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
-        VkDescriptorSetLayout m_descriptor_set_layout{};
+        VkDescriptorSetLayout m_descriptor_set_layout{VK_NULL_HANDLE};
         std::vector<VkFramebuffer> m_framebuffers{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
@@ -143,7 +141,7 @@ namespace Expectre
         VkImage m_image = VK_NULL_HANDLE;
         VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
         VkCommandPool m_present_cmd_pool = VK_NULL_HANDLE;
-        //VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
+        // VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> m_cmd_buffers;
         bool m_ready = false;
 
