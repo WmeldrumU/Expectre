@@ -109,4 +109,17 @@ namespace tools
 
         return shaderModule;
     }
+
+    void printMatrix(const glm::mat4 &matrix)
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            for (int j = 0; j < 4; ++j)
+            {
+                std::cout << matrix[j][i] << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
 }

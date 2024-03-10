@@ -14,6 +14,7 @@ namespace Expectre {
         void cleanup();
         void draw();
         bool isInitialized();
+        void limit_frame_rate(uint32_t);
         uint32_t frameNumber();
     private:
         bool m_isIntialized{false};

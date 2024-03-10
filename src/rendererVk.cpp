@@ -26,7 +26,7 @@ struct Vertex
 
 struct UBO
 {
-     glm::mat4 model;
+    glm::mat4 model;
     glm::mat4 view;
     glm::mat4 projection;
 };
@@ -816,72 +816,125 @@ namespace Expectre
 
     void Renderer_Vk::prepare_depth()
     {
-        const VkFormat depth_format = VK_FORMAT_D16_UNORM;
-        VkImageCreateInfo image_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = depth_format,
-            .extent = {RESOLUTION_X, RESOLUTION_Y, 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        };
 
-        VkImageViewCreateInfo view_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .image = VK_NULL_HANDLE,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = depth_format,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
+        m_depth.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
+        // Create an optimal image used as the depth stencil attachment
+        // const depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT
+        VkImageCreateInfo image_info{};
+        image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        image_info.imageType = VK_IMAGE_TYPE_2D;
+        image_info.format = m_depth.format;
+        // Use example's height and width
+        image_info.extent = {RESOLUTION_X, RESOLUTION_Y, 1};
+        image_info.mipLevels = 1;
+        image_info.arrayLayers = 1;
+        image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+        image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VK_CHECK_RESULT(vkCreateImage(m_device, &image_info, nullptr, &m_depth.image));
+
+        // Allocate memory for the image (device local) and bind it to our image
+        VkMemoryAllocateInfo mem_alloc{};
+        mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         VkMemoryRequirements mem_reqs;
-        VkResult err;
-        bool found;
-
-        m_depth.format = depth_format;
-
-        // create image
-        err = vkCreateImage(m_device, &image_info, nullptr, &m_depth.image);
-        assert(!err);
-        VK_CHECK_RESULT(err);
-
-        // Get depth image memory requirments
         vkGetImageMemoryRequirements(m_device, m_depth.image, &mem_reqs);
-        uint32_t depth_mem_index;
-        m_depth.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        m_depth.mem_alloc.pNext = nullptr;
-        m_depth.mem_alloc.allocationSize = mem_reqs.size;
-        m_depth.mem_alloc.memoryTypeIndex = 0;
-        found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-                                            m_phys_memory_properties.memoryTypes,
-                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &depth_mem_index);
+        mem_alloc.allocationSize = mem_reqs.size;
+        bool found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
+                                                 m_phys_memory_properties.memoryTypes,
+                                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_alloc.memoryTypeIndex);
         assert(found);
+        VK_CHECK_RESULT(vkAllocateMemory(m_device, &mem_alloc, nullptr, &m_depth.mem));
+        VK_CHECK_RESULT(vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0));
 
-        // allocate memory
-        err = vkAllocateMemory(m_device, &m_depth.mem_alloc, nullptr, &m_depth.mem);
+        // Create a view for the depth stencil image
+        // Images aren't directly accessed in Vulkan, but rather through views described by a subresource range
+        // This allows for multiple views of one image with differing ranges (e.g. for different layers)
+        VkImageViewCreateInfo depth_view_info{};
+        depth_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        depth_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        depth_view_info.format = m_depth.format;
+        depth_view_info.subresourceRange = {};
+        depth_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        // Stencil aspect should only be set on depth + stencil formats (VK_FORMAT_D16_UNORM_S8_UINT..VK_FORMAT_D32_SFLOAT_S8_UINT)
+        if (m_depth.format >= VK_FORMAT_D16_UNORM_S8_UINT)
+        {
+            depth_view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+        depth_view_info.subresourceRange.baseMipLevel = 0;
+        depth_view_info.subresourceRange.levelCount = 1;
+        depth_view_info.subresourceRange.baseArrayLayer = 0;
+        depth_view_info.subresourceRange.layerCount = 1;
+        depth_view_info.image = m_depth.image;
+        VK_CHECK_RESULT(vkCreateImageView(m_device, &depth_view_info, nullptr, &m_depth.view));
 
-        VK_CHECK_RESULT(err);
+        // const VkFormat depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+        // VkImageCreateInfo image_info = {
+        //     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        //     .pNext = nullptr,
+        //     .flags = 0,
+        //     .imageType = VK_IMAGE_TYPE_2D,
+        //     .format = depth_format,
+        //     .extent = {RESOLUTION_X, RESOLUTION_Y, 1},
+        //     .mipLevels = 1,
+        //     .arrayLayers = 1,
+        //     .samples = VK_SAMPLE_COUNT_1_BIT,
+        //     .tiling = VK_IMAGE_TILING_OPTIMAL,
+        //     .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        // };
 
-        // bind memory
-        err = vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0);
+        // VkImageViewCreateInfo view_info = {
+        //     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        //     .pNext = nullptr,
+        //     .flags = 0,
+        //     .image = VK_NULL_HANDLE,
+        //     .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        //     .format = depth_format,
+        //     .subresourceRange = {
+        //         .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+        //         .baseMipLevel = 0,
+        //         .levelCount = 1,
+        //         .baseArrayLayer = 0,
+        //         .layerCount = 1,
+        //     },
+        // };
+
+        // VkMemoryRequirements mem_reqs;
+        // VkResult err;
+        // bool found;
+
+        // m_depth.format = depth_format;
+
+        // // create image
+        // err = vkCreateImage(m_device, &image_info, nullptr, &m_depth.image);
         // assert(!err);
-        VK_CHECK_RESULT(err);
-        // create image view
-        view_info.image = m_depth.image;
-        err = vkCreateImageView(m_device, &view_info, nullptr, &m_depth.view);
+        // VK_CHECK_RESULT(err);
+
+        // // Get depth image memory requirments
+        // vkGetImageMemoryRequirements(m_device, m_depth.image, &mem_reqs);
+        // uint32_t depth_mem_index;
+        // m_depth.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        // m_depth.mem_alloc.pNext = nullptr;
+        // m_depth.mem_alloc.allocationSize = mem_reqs.size;
+        // m_depth.mem_alloc.memoryTypeIndex = 0;
+        // found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
+        //                                     m_phys_memory_properties.memoryTypes,
+        //                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &depth_mem_index);
+        // assert(found);
+
+        // // allocate memory
+        // err = vkAllocateMemory(m_device, &m_depth.mem_alloc, nullptr, &m_depth.mem);
+
+        // VK_CHECK_RESULT(err);
+
+        // // bind memory
+        // err = vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0);
+        // // assert(!err);
+        // VK_CHECK_RESULT(err);
+        // // create image view
+        // view_info.image = m_depth.image;
+        // err = vkCreateImageView(m_device, &view_info, nullptr, &m_depth.view);
 
         // TODO:consider naming DepthView
     }
@@ -1029,7 +1082,7 @@ namespace Expectre
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -1065,13 +1118,9 @@ namespace Expectre
         depth_stencil_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depth_stencil_state_info.depthTestEnable = VK_TRUE;
         depth_stencil_state_info.depthWriteEnable = VK_TRUE;
-        depth_stencil_state_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        depth_stencil_state_info.depthCompareOp = VK_COMPARE_OP_LESS;
         depth_stencil_state_info.depthBoundsTestEnable = VK_FALSE;
-        depth_stencil_state_info.back.failOp = VK_STENCIL_OP_KEEP;
-        depth_stencil_state_info.back.passOp = VK_STENCIL_OP_KEEP;
-        depth_stencil_state_info.back.compareOp = VK_COMPARE_OP_ALWAYS;
         depth_stencil_state_info.stencilTestEnable = VK_FALSE;
-        depth_stencil_state_info.front = depth_stencil_state_info.back;
 
         VkGraphicsPipelineCreateInfo pipeline_info{};
         pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1253,7 +1302,7 @@ namespace Expectre
 
         std::array<VkClearValue, 2> clear_col;
         clear_col[0] = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        clear_col[1] = {{{0.5f, 0.2f, 0.2f, 1.0f}}};
+        clear_col[1].depthStencil = {1.0f, 0};
         VkRenderPassBeginInfo renderpass_info = {};
         renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderpass_info.pNext = nullptr;
@@ -1425,34 +1474,19 @@ namespace Expectre
 
     void Renderer_Vk::update_uniform_buffer()
     {
-        static auto start_time = std::chrono::high_resolution_clock::now();
+        static auto startTime = std::chrono::high_resolution_clock::now();
 
-        auto current_time = std::chrono::high_resolution_clock::now();
-        float time =
-            std::chrono::duration<float, std::chrono::seconds::period>(
-                current_time -
-                start_time)
-                .count();
-
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 5.0f);
         UBO ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f),
-                                time * glm::radians(90.0f),
-                                glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = lookAt(glm::vec3(0.0f, 0.0f, -10.0f),
-                          glm::vec3(0.5f, 0.5f, 0.0f),
-                          glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.projection = glm::perspective(glm::radians(45.0f),
-                                          RESOLUTION_X / (float)RESOLUTION_Y, 0.1f, 100.0f);
-    //    ubo.model = ubo.projection * ubo.view * ubo.model;
-        ubo.view = glm::mat4(1.0f);
-        //ubo[0] = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-        //ubo.view = glm::transpose(ubo.view);
-        ubo.projection = glm::mat4(1.0f);
-        // Correct for Vulkan coordinates
-        ubo.projection[1][1] *= -1.0;
-        //ubo.model[1][1] *= -1.0;
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(camera_pos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(RESOLUTION_X) / RESOLUTION_Y, 0.1f, 1000.0f);
 
-        memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(UBO));
+        ubo.projection[1][1] *= -1;
+
+        memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(ubo));
     }
 
     bool Renderer_Vk::isReady() { return m_ready; };
