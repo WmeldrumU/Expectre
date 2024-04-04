@@ -6,6 +6,7 @@
 #include <string>
 #include <stdexcept>
 #include <array>
+#include <assimp/Importer.hpp>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
@@ -209,6 +210,8 @@ namespace Expectre
         VkQueue m_graphics_queue = VK_NULL_HANDLE;
         VkQueue m_present_queue = VK_NULL_HANDLE;
         bool m_layers_supported = false;
+        std::unique_ptr<Assimp::Importer> m_importer = std::make_unique<Assimp::Importer>();
+        
     };
 }
 #endif // RENDERER_VK_H

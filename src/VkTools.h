@@ -6,7 +6,13 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <optional>
 
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
+#include "model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                       \
     {                                                                                                                                            \
         VkResult res = (f);                                                                                                                      \
@@ -64,9 +70,10 @@ namespace tools
     bool find_matching_memory(uint32_t type_bits, VkMemoryType *memory_types,
                               VkFlags requirements, uint32_t *mem_index)
     {
-        for (auto i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+
+        for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
         {
-            if ((type_bits & 1) == 1)
+            if (type_bits & 1)
             {
                 // Type is available, now check if it meets our requirements
                 if ((memory_types[i].propertyFlags & requirements) == requirements)
@@ -122,4 +129,75 @@ namespace tools
         }
         std::cout << std::endl;
     }
+
+    Expectre::Model import_model(const std::string &file_path)
+    {
+        Assimp::Importer importer;
+        const aiScene *scene = importer.ReadFile(file_path,
+                                                 aiProcess_Triangulate | aiProcess_JoinIdenticalVertices) ;
+
+        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+        {
+            std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+            return {};
+        }
+
+        std::vector<Expectre::Vertex> vertices;
+        std::vector<uint32_t> indices;
+
+        // Iterate through each mesh
+        for (unsigned int i = 0; i < scene->mNumMeshes; i++)
+        {
+            aiMesh *mesh = scene->mMeshes[i];
+
+            // Iterate through each vertex of the mesh
+            for (unsigned int j = 0; j < mesh->mNumVertices; j++)
+            {
+                Expectre::Vertex vertex;
+
+                // Positions
+                vertex.pos.x = mesh->mVertices[j].x;
+                vertex.pos.y = mesh->mVertices[j].y;
+                vertex.pos.z = mesh->mVertices[j].z;
+
+                // Normals
+                if (mesh->HasNormals())
+                {
+                    vertex.normal.x = mesh->mNormals[j].x;
+                    vertex.normal.y = mesh->mNormals[j].y;
+                    vertex.normal.z = mesh->mNormals[j].z;
+                }
+
+                // Texture Coordinates
+                if (mesh->mTextureCoords[0])
+                { // Check if the mesh contains texture coordinates
+                    vertex.tex_coord.x = mesh->mTextureCoords[0][j].x;
+                    vertex.tex_coord.y = mesh->mTextureCoords[0][j].y;
+                }
+                else
+                {
+                    vertex.tex_coord = glm::vec2(0.0f, 0.0f);
+                }
+
+                vertices.push_back(vertex);
+            }
+
+            // Iterate through faces
+            for (auto j = 0; j < mesh->mNumFaces; j++)
+            {
+                aiFace &face = mesh->mFaces[j];
+                for (auto k = 0; k < face.mNumIndices; k++)
+                {
+                    indices.push_back(face.mIndices[k]);
+                }
+            }
+        }
+
+        Expectre::Model model{};
+        model.indices = indices;
+        model.vertices = vertices;
+
+        return model;
+    }
+
 }
