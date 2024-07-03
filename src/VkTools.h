@@ -12,7 +12,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include "model.h"
+#include "Model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                       \
     {                                                                                                                                            \
         VkResult res = (f);                                                                                                                      \

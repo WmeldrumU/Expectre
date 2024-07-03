@@ -33,6 +33,7 @@
 
 CMakeFiles/
 build/
+./build/
 .vscode/
 .vs/
 

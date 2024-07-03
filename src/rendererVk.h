@@ -7,9 +7,10 @@
 #include <stdexcept>
 #include <array>
 #include <assimp/Importer.hpp>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_vulkan.h>
 
-#include "SDL2/SDL.h"
-#include "SDL2/SDL_vulkan.h"
+#include "IRenderer.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 // Default fence timeout in nanoseconds
@@ -22,7 +23,7 @@ namespace Expectre
         VkImageView view;
     } SwapChainBuffer;
 
-    typedef struct UniformBuffer
+    typedef struct _UniformBuffer
     {
         VkDeviceMemory memory;
         VkBuffer buffer;
@@ -31,9 +32,9 @@ namespace Expectre
         VkDescriptorSet descriptorSet;
         // We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
         uint8_t *mapped{nullptr};
-    };
+    } UniformBuffer;
 
-    class Renderer_Vk
+    class Renderer_Vk : public IRenderer
     {
 
     public:

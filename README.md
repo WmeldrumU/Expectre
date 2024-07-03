@@ -26,7 +26,7 @@ tools.cmake.cmaketoolchain:generator=Visual Studio 17
 
 Build commands
 ```
-conan install . --build=missing -pr clang-cl
+conan2 install . --build=missing -pr clang-cl
 cmake -B build -DCMAKE_TOOLCHAIN_FILE="generators/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ```
