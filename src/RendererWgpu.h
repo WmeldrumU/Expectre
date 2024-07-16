@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <webgpu/webgpu.h>
+#include <webgpu/webgpu_cpp.h>
 // #include "../lib/sdl2webgpu/sdl2webgpu.h"
 
 #include "IRenderer.h"
@@ -19,6 +20,7 @@ namespace Expectre
   private:
     WGPUDevice requestDeviceSync(WGPUAdapter adapter, WGPUDeviceDescriptor const *descriptor);
     WGPUAdapter requestAdapterSync(WGPUInstance instance, WGPURequestAdapterOptions const *options);
+
     void checkAdapterLimits();
     
     WGPUInstance m_instance{};

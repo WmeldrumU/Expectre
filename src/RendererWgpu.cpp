@@ -65,8 +65,41 @@ namespace Expectre
     wgpuAdapterRelease(m_adapter);
     wgpuDeviceSetUncapturedErrorCallback(m_device, [](WGPUErrorType type, char const *message, void *userdata)
                                          { spdlog::error("Uncaptured error: {}", message); }, nullptr);
-    
-    spdlog::info("testing");
+
+    WGPUQueue queue = wgpuDeviceGetQueue(m_device);
+
+    auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void *userdata1, void *userdata2)
+    {
+      spdlog::debug("Queued work finished with status: {}", static_cast<uint32_t>(status));
+    };
+
+    // Queue work done
+    WGPUQueueWorkDoneCallbackInfo2 callback_info{};
+    callback_info.mode = WGPUCallbackMode::WGPUCallbackMode_AllowSpontaneous;
+    callback_info.callback = onQueueWorkDone;
+    callback_info.userdata1 = nullptr;
+    callback_info.userdata2 = nullptr;
+    callback_info.nextInChain = nullptr;
+    // wgpuQueueOnSubmittedWorkDone(queue, callback_info);
+    WGPUFuture future = wgpuQueueOnSubmittedWorkDone2(queue, callback_info);
+    // wgpuQueueOnSubmittedWorkDoneF(queue, callback_info);
+
+    std::vector<WGPUCommandBuffer> command_buffer(1);
+
+    // Command Encoder
+    WGPUCommandEncoderDescriptor command_enc_desc{};
+    command_enc_desc.label = "Command Encoder";
+    WGPUCommandEncoder command_enc = wgpuDeviceCreateCommandEncoder(m_device, &command_enc_desc);
+    wgpuCommandEncoderInsertDebugMarker(command_enc, "Command Encoder");
+
+    WGPUCommandBufferDescriptor command_buffer_desc{};
+    command_buffer_desc.label = "Command Buffer";
+    command_buffer.push_back(wgpuCommandEncoderFinish(command_enc, &command_buffer_desc));
+    wgpuCommandEncoderRelease(command_enc); // release encoder
+
+    spdlog::debug("Submittting command ");
+    wgpuQueueSubmit(queue, command_buffer.size(), command_buffer.data());
+    spdlog::debug("Command submitted");
   }
 
   WGPUAdapter RendererWgpu::requestAdapterSync(WGPUInstance instance, WGPURequestAdapterOptions const *options)
@@ -157,7 +190,7 @@ namespace Expectre
   {
     spdlog::debug("RendererWgpu::~RendererWgpu()");
     wgpuDeviceRelease(m_device);
-    //wgpuAdapterRelease(m_adapter);
+    // wgpuAdapterRelease(m_adapter);
     wgpuInstanceRelease(m_instance);
     SDL_DestroyWindow(m_window);
     SDL_Quit();
