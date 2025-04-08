@@ -1,12 +1,11 @@
 ﻿//
-#define NDEBUG
-
 #include <iostream>
+#ifdef USE_WEBGPU
 #include <webgpu/webgpu.h>
+#endif
 #include "SDL2/SDL.h"
 #include "Engine.h"
 #include "spdlog/spdlog.h"
-
 
 int main(int argc, char *argv[])
 {

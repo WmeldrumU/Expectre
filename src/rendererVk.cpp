@@ -4,8 +4,11 @@
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
 
 // Renderer macros
-#define RESOLUTION_X 1280
-#define RESOLUTION_Y 720
+#define RESOLUTION_X 620
+#define RESOLUTION_Y 480
+
+#include "RendererVk.h"
+
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -18,7 +21,6 @@
 #include <chrono>
 #include <stb_image.h>
 
-#include "RendererVk.h"
 #include "shared.h"
 #include "spdlog/spdlog.h"
 #include "VkTools.h"

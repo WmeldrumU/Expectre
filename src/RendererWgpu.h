@@ -1,3 +1,6 @@
+#ifdef USE_WEBGPU
+
+
 #include <SDL2/SDL.h>
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
@@ -29,3 +32,4 @@ namespace Expectre
     WGPUDevice m_device{};
   };
 }
+#endif

@@ -11,6 +11,7 @@ set(COMMON_LIBRARIES
     spdlog::spdlog
     stb::stb
     assimp::assimp
+    fmt::fmt
 )
 
 # use c++ 20, this version is required
@@ -22,7 +23,7 @@ find_package(spdlog REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
-
+find_package(fmt REQUIRED)
 
 # message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
 # message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
@@ -37,7 +38,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # include is needed when using Ninja/MinGW
 # target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
 
-#if(USE_WEBGPU)
+if(USE_WEBGPU)
     include(FetchContent)
     FetchContent_Declare(
         webgpu
@@ -51,14 +52,13 @@ add_executable(${PROJECT_NAME} ${SOURCES})
     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} Vulkan::Vulkan)
     # If WebGPU provides a CMake target, link it, otherwise adjust as necessary
     target_link_libraries(${PROJECT_NAME} PUBLIC webgpu)
-#else()
+else()
     # If not using WebGPU, find Vulkan
     find_package(Vulkan REQUIRED)
     message(STATUS "USING VULKAN")
     set(COMMON_LIBRARIES ${COMMON_LIBRARIES} Vulkan::Vulkan)
-#endif()
+endif()
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(${PROJECT_NAME} PUBLIC
     ${COMMON_LIBRARIES}
 )
-# target_link_libraries(${PROJECT_NAME} PRIVATE webgpu)
