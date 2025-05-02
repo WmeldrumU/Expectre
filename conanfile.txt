@@ -1,7 +1,7 @@
 [requires]
 sdl/2.28.3
 spdlog/1.11.0
-glm/cci.20230113
+glm/0.9.5.4
 stb/cci.20230920
 assimp/5.4.3
 
