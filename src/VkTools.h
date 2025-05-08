@@ -25,179 +25,300 @@
 namespace tools
 {
 
-    std::string errorString(VkResult errorCode)
-    {
-        switch (errorCode)
-        {
+	std::string errorString(VkResult errorCode)
+	{
+		switch (errorCode)
+		{
 #define STR(r)   \
     case VK_##r: \
         return #r
-            STR(NOT_READY);
-            STR(TIMEOUT);
-            STR(EVENT_SET);
-            STR(EVENT_RESET);
-            STR(INCOMPLETE);
-            STR(ERROR_OUT_OF_HOST_MEMORY);
-            STR(ERROR_OUT_OF_DEVICE_MEMORY);
-            STR(ERROR_INITIALIZATION_FAILED);
-            STR(ERROR_DEVICE_LOST);
-            STR(ERROR_MEMORY_MAP_FAILED);
-            STR(ERROR_LAYER_NOT_PRESENT);
-            STR(ERROR_EXTENSION_NOT_PRESENT);
-            STR(ERROR_FEATURE_NOT_PRESENT);
-            STR(ERROR_INCOMPATIBLE_DRIVER);
-            STR(ERROR_TOO_MANY_OBJECTS);
-            STR(ERROR_FORMAT_NOT_SUPPORTED);
-            STR(ERROR_SURFACE_LOST_KHR);
-            STR(ERROR_NATIVE_WINDOW_IN_USE_KHR);
-            STR(SUBOPTIMAL_KHR);
-            STR(ERROR_OUT_OF_DATE_KHR);
-            STR(ERROR_INCOMPATIBLE_DISPLAY_KHR);
-            STR(ERROR_VALIDATION_FAILED_EXT);
-            STR(ERROR_INVALID_SHADER_NV);
-            STR(ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+			STR(NOT_READY);
+			STR(TIMEOUT);
+			STR(EVENT_SET);
+			STR(EVENT_RESET);
+			STR(INCOMPLETE);
+			STR(ERROR_OUT_OF_HOST_MEMORY);
+			STR(ERROR_OUT_OF_DEVICE_MEMORY);
+			STR(ERROR_INITIALIZATION_FAILED);
+			STR(ERROR_DEVICE_LOST);
+			STR(ERROR_MEMORY_MAP_FAILED);
+			STR(ERROR_LAYER_NOT_PRESENT);
+			STR(ERROR_EXTENSION_NOT_PRESENT);
+			STR(ERROR_FEATURE_NOT_PRESENT);
+			STR(ERROR_INCOMPATIBLE_DRIVER);
+			STR(ERROR_TOO_MANY_OBJECTS);
+			STR(ERROR_FORMAT_NOT_SUPPORTED);
+			STR(ERROR_SURFACE_LOST_KHR);
+			STR(ERROR_NATIVE_WINDOW_IN_USE_KHR);
+			STR(SUBOPTIMAL_KHR);
+			STR(ERROR_OUT_OF_DATE_KHR);
+			STR(ERROR_INCOMPATIBLE_DISPLAY_KHR);
+			STR(ERROR_VALIDATION_FAILED_EXT);
+			STR(ERROR_INVALID_SHADER_NV);
+			STR(ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
 #undef STR
-        default:
-            return "UNKNOWN_ERROR";
-        }
-    }
+		default:
+			return "UNKNOWN_ERROR";
+		}
+	}
 
-    // This function is used to request a device memory type that supports all the property flags we request (e.g. device local, host visible)
-    // Upon success it will return the index of the memory type that fits our requested memory properties
-    // This is necessary as implementations can offer an arbitrary number of memory types with different
-    // memory properties.
-    // You can check https://vulkan.gpuinfo.org/ for details on different memory configurations
-    bool find_matching_memory(uint32_t type_bits, VkMemoryType *memory_types,
-                              VkFlags requirements, uint32_t *mem_index)
-    {
+	// This function is used to request a device memory type that supports all the property flags we request (e.g. device local, host visible)
+	// Upon success it will return the index of the memory type that fits our requested memory properties
+	// This is necessary as implementations can offer an arbitrary number of memory types with different
+	// memory properties.
+	// You can check https://vulkan.gpuinfo.org/ for details on different memory configurations
+	bool find_matching_memory(uint32_t type_bits, VkMemoryType* memory_types,
+		VkFlags requirements, uint32_t* mem_index)
+	{
 
-        for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
-        {
-            if (type_bits & 1)
-            {
-                // Type is available, now check if it meets our requirements
-                if ((memory_types[i].propertyFlags & requirements) == requirements)
-                {
-                    *mem_index = i;
-                    return true;
-                }
-            }
-            // Shift bits down
-            type_bits >>= 1;
-        }
-        // No matching memory types
-        return false;
-    }
+		for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+		{
+			if (type_bits & 1)
+			{
+				// Type is available, now check if it meets our requirements
+				if ((memory_types[i].propertyFlags & requirements) == requirements)
+				{
+					*mem_index = i;
+					return true;
+				}
+			}
+			// Shift bits down
+			type_bits >>= 1;
+		}
+		// No matching memory types
+		return false;
+	}
 
-    VkShaderModule createShaderModule(const VkDevice &device, const std::string &filename)
-    {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-        if (!file.is_open())
-        {
-            throw std::runtime_error("Failed to open file: " + filename);
-        }
+	VkShaderModule createShaderModule(const VkDevice& device, const std::string& filename)
+	{
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+		if (!file.is_open())
+		{
+			throw std::runtime_error("Failed to open file: " + filename);
+		}
 
-        size_t fileSize = (size_t)file.tellg();
-        std::vector<char> buffer(fileSize);
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-        file.close();
+		size_t fileSize = (size_t)file.tellg();
+		std::vector<char> buffer(fileSize);
+		file.seekg(0);
+		file.read(buffer.data(), fileSize);
+		file.close();
 
-        VkShaderModuleCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = buffer.size();
-        createInfo.pCode = reinterpret_cast<const uint32_t *>(buffer.data());
+		VkShaderModuleCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = buffer.size();
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(buffer.data());
 
-        VkShaderModule shaderModule;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create shader module!");
-        }
+		VkShaderModule shaderModule;
+		if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create shader module!");
+		}
 
-        return shaderModule;
-    }
+		return shaderModule;
+	}
 
-    void printMatrix(const glm::mat4 &matrix)
-    {
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                std::cout << matrix[j][i] << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
+	void printMatrix(const glm::mat4& matrix)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			for (int j = 0; j < 4; ++j)
+			{
+				std::cout << matrix[j][i] << " ";
+			}
+			std::cout << std::endl;
+		}
+		std::cout << std::endl;
+	}
 
-    Expectre::Model import_model(const std::string &file_path)
-    {
-        Assimp::Importer importer;
-        const aiScene *scene = importer.ReadFile(file_path,
-                                                 aiProcess_Triangulate | aiProcess_JoinIdenticalVertices) ;
+	Expectre::Model import_model(const std::string& file_path)
+	{
+		Assimp::Importer importer;
+		const aiScene* scene = importer.ReadFile(file_path,
+			aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
 
-        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-        {
-            std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
-            return {};
-        }
+		if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+		{
+			std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+			return {};
+		}
 
-        std::vector<Expectre::Vertex> vertices;
-        std::vector<uint32_t> indices;
+		std::vector<Expectre::Vertex> vertices;
+		std::vector<uint32_t> indices;
 
-        // Iterate through each mesh
-        for (unsigned int i = 0; i < scene->mNumMeshes; i++)
-        {
-            aiMesh *mesh = scene->mMeshes[i];
+		// Iterate through each mesh
+		for (unsigned int i = 0; i < scene->mNumMeshes; i++)
+		{
+			aiMesh* mesh = scene->mMeshes[i];
 
-            // Iterate through each vertex of the mesh
-            for (unsigned int j = 0; j < mesh->mNumVertices; j++)
-            {
-                Expectre::Vertex vertex;
+			// Iterate through each vertex of the mesh
+			for (unsigned int j = 0; j < mesh->mNumVertices; j++)
+			{
+				Expectre::Vertex vertex;
 
-                // Positions
-                vertex.pos.x = mesh->mVertices[j].x;
-                vertex.pos.y = mesh->mVertices[j].y;
-                vertex.pos.z = mesh->mVertices[j].z;
+				// Positions
+				vertex.pos.x = mesh->mVertices[j].x;
+				vertex.pos.y = mesh->mVertices[j].y;
+				vertex.pos.z = mesh->mVertices[j].z;
 
-                // Normals
-                if (mesh->HasNormals())
-                {
-                    vertex.normal.x = mesh->mNormals[j].x;
-                    vertex.normal.y = mesh->mNormals[j].y;
-                    vertex.normal.z = mesh->mNormals[j].z;
-                }
+				// Normals
+				if (mesh->HasNormals())
+				{
+					vertex.normal.x = mesh->mNormals[j].x;
+					vertex.normal.y = mesh->mNormals[j].y;
+					vertex.normal.z = mesh->mNormals[j].z;
+				}
 
-                // Texture Coordinates
-                if (mesh->mTextureCoords[0])
-                { // Check if the mesh contains texture coordinates
-                    vertex.tex_coord.x = mesh->mTextureCoords[0][j].x;
-                    vertex.tex_coord.y = mesh->mTextureCoords[0][j].y;
-                }
-                else
-                {
-                    vertex.tex_coord = glm::vec2(0.0f, 0.0f);
-                }
+				// Texture Coordinates
+				if (mesh->mTextureCoords[0])
+				{ // Check if the mesh contains texture coordinates
+					vertex.tex_coord.x = mesh->mTextureCoords[0][j].x;
+					vertex.tex_coord.y = mesh->mTextureCoords[0][j].y;
+				}
+				else
+				{
+					vertex.tex_coord = glm::vec2(0.0f, 0.0f);
+				}
 
-                vertices.push_back(vertex);
-            }
+				vertices.push_back(vertex);
+			}
 
-            // Iterate through faces
-            for (auto j = 0; j < mesh->mNumFaces; j++)
-            {
-                aiFace &face = mesh->mFaces[j];
-                for (auto k = 0; k < face.mNumIndices; k++)
-                {
-                    indices.push_back(face.mIndices[k]);
-                }
-            }
-        }
+			// Iterate through faces
+			for (auto j = 0; j < mesh->mNumFaces; j++)
+			{
+				aiFace& face = mesh->mFaces[j];
+				for (auto k = 0; k < face.mNumIndices; k++)
+				{
+					indices.push_back(face.mIndices[k]);
+				}
+			}
+		}
 
-        Expectre::Model model{};
-        model.indices = indices;
-        model.vertices = vertices;
+		Expectre::Model model{};
+		model.indices = indices;
+		model.vertices = vertices;
 
-        return model;
-    }
+		return model;
+	}
 
-}
+
+	VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window) {
+		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+			return capabilities.currentExtent;
+		}
+		else {
+			int width, height;
+			SDL_Vulkan_GetDrawableSize(window, &width, &height);
+			VkExtent2D actualExtent = {
+				static_cast<uint32_t>(width),
+				static_cast<uint32_t>(height)
+			};
+
+			actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+			actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+			return actualExtent;
+		}
+	}
+
+	VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+		for (const auto& availableFormat : availableFormats) {
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				return availableFormat;
+			}
+		}
+
+		return availableFormats[0];
+	}
+
+	struct SwapChainSupportDetails {
+		VkSurfaceCapabilitiesKHR capabilities;
+		std::vector<VkSurfaceFormatKHR> formats;
+		std::vector<VkPresentModeKHR> present_modes;
+	};
+
+	SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice phys_device, VkSurfaceKHR surface)
+	{
+		SwapChainSupportDetails details;
+
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, surface, &details.capabilities);
+
+		uint32_t formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, surface, &formatCount, nullptr);
+
+		if (formatCount != 0) {
+			details.formats.resize(formatCount);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, surface, &formatCount, details.formats.data());
+		}
+
+		uint32_t presentModeCount;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(phys_device, surface, &presentModeCount, nullptr);
+
+		if (presentModeCount != 0) {
+			details.present_modes.resize(presentModeCount);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(phys_device, surface, &presentModeCount, details.present_modes.data());
+		}
+
+		return details;
+	}
+
+	struct QueueFamilyIndices {
+		std::optional<uint32_t> graphicsFamily;
+		std::optional<uint32_t> presentFamily;
+
+		bool isComplete() {
+			return graphicsFamily.has_value() && presentFamily.has_value();
+		}
+	};
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+		QueueFamilyIndices indices;
+
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+		int i = 0;
+		for (const auto& queueFamily : queueFamilies) {
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				indices.graphicsFamily = i;
+			}
+
+			VkBool32 presentSupport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+			if (presentSupport) {
+				indices.presentFamily = i;
+			}
+
+			if (indices.isComplete()) {
+				break;
+			}
+
+			i++;
+		}
+
+		return indices;
+	}
+
+	VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+		VkImageViewCreateInfo view_info{};
+		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_info.image = image;
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_info.format = format;
+		view_info.subresourceRange.aspectMask = aspectFlags;
+		view_info.subresourceRange.baseMipLevel = 0;
+		view_info.subresourceRange.levelCount = 1;
+		view_info.subresourceRange.baseArrayLayer = 0;
+		view_info.subresourceRange.layerCount = 1;
+
+		VkImageView imageView;
+		if (vkCreateImageView(device, &view_info, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image view!");
+		}
+
+		return imageView;
+	}
+
+} // namespace tools
