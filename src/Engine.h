@@ -11,7 +11,6 @@ namespace Expectre
     {
     public:
         Engine();
-        ~Engine();
         void start();
         void run();
         void cleanup();

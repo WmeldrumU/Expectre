@@ -1,20 +1,24 @@
 #ifndef RENDERER_VK_H
 #define RENDERER_VK_H
+
 #include <vulkan/vulkan.h>
+
 #include <vector>
 #include <optional>
 #include <string>
 #include <stdexcept>
 #include <array>
 #include <assimp/Importer.hpp>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 #include <glm/glm.hpp>
+#include <stdio.h>
 
 #include "IRenderer.h"
 #include "observer.h"
 
 #define MAX_CONCURRENT_FRAMES 2
+
 // Default fence timeout in nanoseconds
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
@@ -24,11 +28,11 @@ namespace Expectre
 
 	typedef struct _UniformBuffer
 	{
-		VkDeviceMemory memory;
-		VkBuffer buffer;
+		VkDeviceMemory memory{};
+		VkBuffer buffer{};
 		// The descriptor set stores the resources bound to the binding points in a shader
 		// It connects the binding points of the different shaders with the buffers and images used for those bindings
-		VkDescriptorSet descriptorSet;
+		VkDescriptorSet descriptorSet{};
 		// We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
 		uint8_t* mapped{ nullptr };
 	} UniformBuffer;
@@ -42,15 +46,13 @@ namespace Expectre
 		~Renderer_Vk();
 
 		bool m_enable_validation_layers{ true };
-		void cleanup();
 		bool isReady();
 		void update(uint64_t delta_t);
 		void draw_frame();
 
 	private:
-		void create_instance();
 
-		void enumerate_layers();
+		void create_instance();
 
 		void create_surface();
 
@@ -69,15 +71,11 @@ namespace Expectre
 
 		void create_command_pool();
 
-		void create_layouts();
-
 		void create_depth();
 
 		void create_renderpass();
 
 		void create_pipeline();
-
-		void prepare_present_cmd_pool_and_buffers();
 
 		void create_descriptor_pool_and_sets();
 
@@ -87,16 +85,6 @@ namespace Expectre
 
 		void record_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index);
 
-		void demo_draw_build_cmd();
-
-		void create_buffers_and_images();
-
-		void create_views();
-
-		void select_surface_formats();
-
-		void create_semaphors_and_fences();
-
 		void create_descriptor_set_layout();
 
 		void create_uniform_buffers();
@@ -104,6 +92,8 @@ namespace Expectre
 		void update_uniform_buffer();
 
 		void create_texture_image();
+
+		void cleanup_swapchain();
 
 		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
 			VkMemoryPropertyFlags properties, VkBuffer& buffer,
@@ -140,8 +130,7 @@ namespace Expectre
 		VkInstance m_instance{};
 		VkSurfaceKHR m_surface{};
 
-		std::vector<VkPhysicalDevice> m_physical_devices;
-		VkPhysicalDevice m_chosen_phys_device;
+		VkPhysicalDevice m_chosen_phys_device{};
 		VkDevice m_device = VK_NULL_HANDLE;
 
 		VkQueue m_graphics_queue = VK_NULL_HANDLE;
@@ -156,54 +145,44 @@ namespace Expectre
 
 
 		VkRenderPass m_render_pass{};
-		VkImageView m_image_view{};
 		VkPipelineLayout m_pipeline_layout{};
 		VkPipeline m_pipeline{};
 		VkDescriptorPool m_descriptor_pool{};
 		// std::vector<VkDescriptorSet> m_descriptor_sets{};
 		VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_descriptor_set_layout{ VK_NULL_HANDLE };
-		std::vector<const char*> m_layers{ "VK_LAYER_KHRONOS_validation" };
-		std::vector<const char*> m_required_instance_extensions = { VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-		std::vector<const char*> m_required_device_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-		// std::vector<VkBuffer> m_swapchain_uniform_buffers{};
-		// std::vector<VkDeviceMemory> m_uniform_memories{};
+		std::vector<const char*> m_validation_layers{ "VK_LAYER_KHRONOS_validation" };
+
 		std::vector<VkSemaphore> m_available_image_semaphores{};
 		std::vector<VkSemaphore> m_finished_render_semaphores{};
 		std::vector<VkFence> m_in_flight_fences{};
 
 		std::array<UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
 		VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
-		VkBuffer m_buffer = VK_NULL_HANDLE;
 		VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
 		// VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
 		std::vector<VkCommandBuffer> m_cmd_buffers;
 		bool m_ready = false;
 
-		struct
-		{
-			VkFormat format;
-
-			VkImage image;
-			VkMemoryAllocateInfo mem_alloc;
-			VkDeviceMemory mem;
-			VkImageView view;
-		} m_depth;
+		VkImage m_depth_image{};
+		VkDeviceMemory m_depth_image_memory{};
+		VkImageView m_depth_image_view{};
+		VkFormat m_depth_format{};
 
 		// Index buffer
 		struct
 		{
 			VkDeviceMemory memory{ VK_NULL_HANDLE };
-			VkBuffer buffer;
+			VkBuffer buffer{};
 			uint32_t count{ 0 };
-		} m_indices;
+		} m_indices{};
 
 		// Vertex buffer and attributes
 		struct
 		{
 			VkDeviceMemory memory{ VK_NULL_HANDLE }; // Handle to the device memory for this buffer
-			VkBuffer buffer;                       // Handle to the Vulkan buffer object that the memory is bound to
-		} m_vertices;
+			VkBuffer buffer{};                       // Handle to the Vulkan buffer object that the memory is bound to
+		} m_vertices{};
 
 		VkImage m_texture_image{};
 		VkImageView m_texture_image_view{};
@@ -213,6 +192,8 @@ namespace Expectre
 		uint32_t m_graphics_queue_family_index{ UINT32_MAX };
 		uint32_t m_present_queue_family_index{ UINT32_MAX };
 		uint32_t m_current_frame{ 0 };
+		VkDebugUtilsMessengerEXT m_debug_messenger{};
+
 		float m_priority = 1.0f;
 		bool m_layers_supported = false;
 
@@ -227,7 +208,7 @@ namespace Expectre
 			glm::f32vec3 pos = { 0.0f, 1.0f, 2.0f };
 			glm::f32vec3 forward_dir = { 0.0f, 0.0f, -1.0f };
 
-		} m_camera;
+		} m_camera{};
 	};
 }
 #endif // RENDERER_VK_H

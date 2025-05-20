@@ -11,6 +11,9 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+//#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include "Model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                       \
@@ -207,7 +210,7 @@ namespace tools
 		}
 		else {
 			int width, height;
-			SDL_Vulkan_GetDrawableSize(window, &width, &height);
+			SDL_GetWindowSizeInPixels(window, &width, &height);
 			VkExtent2D actualExtent = {
 				static_cast<uint32_t>(width),
 				static_cast<uint32_t>(height)
@@ -319,6 +322,85 @@ namespace tools
 		}
 
 		return imageView;
+	}
+
+	static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_type, const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data) {
+
+		switch (message_severity) {
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			spdlog::info("VERBOSE: {}", p_callback_data->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			spdlog::info("INFO: {}", p_callback_data->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			spdlog::warn("WARNING: {}", p_callback_data->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			spdlog::error("ERROR: {}", p_callback_data->pMessage);
+			//return VK_FALSE;
+			break;
+		default:
+			spdlog::info("UNKNOWN: {}", p_callback_data->pMessage);
+			break;
+
+		}
+		return VK_FALSE;
+	}
+
+	void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& create_info) {
+		create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		create_info.pfnUserCallback = debug_callback;
+	}
+
+	std::vector<const char*> get_required_instance_extensions(bool enable_validation_layers) {
+		uint32_t num_extensions = 0;
+
+		auto raw_extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
+
+		std::vector<const char*> extensions(raw_extensions, raw_extensions + num_extensions);
+
+		if (enable_validation_layers)
+		{
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+		// print extensions
+		for (const char* ext : extensions)
+		{
+			std::printf("%s", ext);
+			std::cout << "\n"
+				<< std::endl;
+		}
+
+		return extensions;
+
+	}
+
+	VkFormat find_supported_format(VkPhysicalDevice phys_device, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+		for (VkFormat format : candidates) {
+			VkFormatProperties props;
+			vkGetPhysicalDeviceFormatProperties(phys_device, format, &props);
+
+			if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+				return format;
+			}
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+				return format;
+			}
+		}
+
+		throw std::runtime_error("failed to find supported format!");
+	}
+
+	VkFormat find_depth_format(VkPhysicalDevice phys_device) {
+		return find_supported_format(phys_device,
+			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+		);
 	}
 
 } // namespace tools
