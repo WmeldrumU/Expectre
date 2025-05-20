@@ -41,83 +41,60 @@ struct UBO
 
 namespace Expectre
 {
-    void check(VkResult r, const char* msg)
-    {
-        if (r != VK_SUCCESS) throw std::runtime_error(msg);
-    }
-
-
-    uint32_t findGraphicsPresentQueue(VkPhysicalDevice gpu,
-        VkSurfaceKHR surface)
-    {
-        uint32_t count = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
-        std::vector<VkQueueFamilyProperties> props(count);
-        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, props.data());
-
-        for (uint32_t i = 0; i < count; ++i) {
-            VkBool32 present = VK_FALSE;
-            vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &present);
-            if (present && (props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
-                return i;                  // first family that does both
-        }
-        throw std::runtime_error("no queue family with graphics+present");
-    }
-
 
     Renderer_Vk::Renderer_Vk()
     {
 
-        //if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
-        //{
-        //	SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
-        //	throw std::runtime_error("failed to initialize SDL!");
-        //}
+        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+        {
+            SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
+            throw std::runtime_error("failed to initialize SDL!");
+        }
 
 
-        //m_window = SDL_CreateWindow("Expectre",
-        //	RESOLUTION_X, RESOLUTION_Y,
-        //	SDL_WINDOW_VULKAN);
+        m_window = SDL_CreateWindow("Expectre",
+            RESOLUTION_X, RESOLUTION_Y,
+            SDL_WINDOW_VULKAN);
 
-        //if (!m_window)
-        //{
-        //	SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
-        //	throw std::runtime_error("Unable to initialize application window!");
-        //}
+        if (!m_window)
+        {
+            SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
+            throw std::runtime_error("Unable to initialize application window!");
+        }
 
-        //VK_CHECK_RESULT(volkInitialize());
-        //m_enable_validation_layers = true;
+        VK_CHECK_RESULT(volkInitialize());
+        m_enable_validation_layers = true;
 
 
-        //// Core Vulkan setup
-        //create_instance();
+        // Core Vulkan setup
+        create_instance();
+        create_surface();
 
         //if (!vkDestroyInstance)
         //	throw std::runtime_error("vkDestroyInstance is still NULL – check load order");
-        //select_physical_device();
-        //create_logical_device_and_queues();
+        select_physical_device();
+        create_logical_device_and_queues();
 
-        //create_surface();
 
         // Command buffers and swapchain
-        //create_swapchain();
-        //create_image_views();
-        //create_depth();
-        //create_renderpass();
-        //create_descriptor_set_layout();
-        //create_pipeline();
-        //create_command_pool();
-        //create_framebuffers();
+        create_swapchain();
+        create_image_views();
+        create_depth();
+        create_renderpass();
+        create_descriptor_set_layout();
+        create_pipeline();
+        create_command_pool();
+        create_framebuffers();
         //create_texture_image();
         //create_texture_image_view();
         //create_texture_sampler();
-        //create_vertex_buffer(); // and index buffer
+       // create_vertex_buffer(); // and index buffer
         //create_uniform_buffers();
         //create_descriptor_pool_and_sets();
         //create_command_buffers();
 
-        //// Synchronization
-        //create_sync_objects();
+        // Synchronization
+        create_sync_objects();
 
         m_ready = true;
     }
@@ -144,63 +121,57 @@ namespace Expectre
     {
 
 
-        // ------------------------------------------------------------------
-        // teardown  (reverse order)
-        // ------------------------------------------------------------------
-        vkDeviceWaitIdle(m_device);                 // 1 – stop GPU work
+        vkDeviceWaitIdle(m_device);
+
+
+        // Destroy synchronization objects
+        for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
+            vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
+            vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
+            vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
+        }
+        // Destroy vertex and index buffer
+        vkDestroyBuffer(m_device, m_indices.buffer, nullptr);
+        vkFreeMemory(m_device, m_indices.memory, nullptr);
+        vkDestroyBuffer(m_device, m_vertices.buffer, nullptr);
+        vkFreeMemory(m_device, m_vertices.memory, nullptr);
+
+        // Destroy pipeline and related layouts
+        vkDestroyPipeline(m_device, m_pipeline, nullptr);
+        vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+        vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+        // Destroy descriptor pool
+        vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+
+
+        // Destroy uniform buffers
+        for (auto& ub : m_uniform_buffers) {
+            vkDestroyBuffer(m_device, ub.buffer, nullptr);
+            vkFreeMemory(m_device, ub.memory, nullptr);
+        }
 
 
 
-        //vkDeviceWaitIdle(m_device);
+        // Destroy texture resources
+        vkDestroySampler(m_device, m_texture_sampler, nullptr);
+        vkDestroyImageView(m_device, m_texture_image_view, nullptr);
+        vkDestroyImage(m_device, m_texture_image, nullptr);
+        vkFreeMemory(m_device, m_texture_image_memory, nullptr);
 
 
-        //// Destroy pipeline and related layouts
-        //vkDestroyPipeline(m_device, m_pipeline, nullptr);
-        //vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
-        //vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 
 
-        //// Destroy uniform buffers
-        //for (auto& ub : m_uniform_buffers) {
-        //	vkDestroyBuffer(m_device, ub.buffer, nullptr);
-        //	vkFreeMemory(m_device, ub.memory, nullptr);
-        //}
 
+        // Destroy command pool
+        vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
 
-        //// Destroy descriptor pool
-        //vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
-
-        //// Destroy texture resources
-        //vkDestroySampler(m_device, m_texture_sampler, nullptr);
-        //vkDestroyImageView(m_device, m_texture_image_view, nullptr);
-        //vkDestroyImage(m_device, m_texture_image, nullptr);
-        //vkFreeMemory(m_device, m_texture_image_memory, nullptr);
-
-        //vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
-
-        //// Destroy vertex and index buffers
-        //vkDestroyBuffer(m_device, m_indices.buffer, nullptr);
-        //vkFreeMemory(m_device, m_indices.memory, nullptr);
-        //vkDestroyBuffer(m_device, m_vertices.buffer, nullptr);
-        //vkFreeMemory(m_device, m_vertices.memory, nullptr);
-
-        //// Destroy synchronization objects
-        //for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
-        //	vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
-        //	vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
-        //	vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
-        //}
-
-        //// Destroy command pool
-        //vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
-
-        //cleanup_swapchain();
+        cleanup_swapchain();
 
 
         // Destroy device, surface, instance
         vkDestroyDevice(m_device, nullptr);
 
-        vkDestroyDebugUtilsMessengerEXT(m_instance, m_debug_messenger, nullptr);
         vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 
         vkDestroyInstance(m_instance, nullptr);
@@ -209,67 +180,16 @@ namespace Expectre
         SDL_DestroyWindow(m_window);
         //SDL_Vulkan_UnloadLibrary();
         SDL_Quit();
-        //auto error = SDL_GetError();
-        //if (error) {
-        //	SDL_Log("SDL error: %s", error);
-        //}
-        //else {
-        //	SDL_Log("No SDL errors");
-        //}
-        //m_window = nullptr;
+
+        m_window = nullptr;
     }
 
     void Renderer_Vk::create_instance()
     {
-
-        uint32_t num_extensions = 0;
-
-        auto raw_extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
-
-        std::vector<const char*> instance_extensions(raw_extensions, raw_extensions + num_extensions);
-
-        if (m_enable_validation_layers)
-        {
-            instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-        VkDebugUtilsMessengerCreateInfoEXT debug_create{ VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
-        debug_create.messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        debug_create.messageType =
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        debug_create.pfnUserCallback = tools::debug_callback;
-
-
-        VkApplicationInfo app_info{ };
-        app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        app_info.pApplicationName = "Expectre";
-        app_info.apiVersion = VK_API_VERSION_1_4;
-
-        const std::vector<const char*> layers = { "VK_LAYER_KHRONOS_validation" };
-
-        VkInstanceCreateInfo create_info{ };
-        create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        create_info.pApplicationInfo = &app_info;
-        create_info.enabledExtensionCount = instance_extensions.size();
-        create_info.ppEnabledExtensionNames = instance_extensions.data();
-        create_info.enabledLayerCount = layers.size();
-        create_info.ppEnabledLayerNames = layers.data();
-        //create_info.pNext = &debug_create;
-        create_info.pNext = nullptr;
-
-        VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
-        volkLoadInstance(m_instance);
-
-
-        //VK_CHECK_RESULT(vkCreateDebugUtilsMessengerEXT(m_instance, &debug_create, nullptr, &m_debug_messenger));
-
-        //auto instance_extensions = tools::get_required_instance_extensions(m_window);
+        auto instance_extensions = tools::get_required_instance_extensions(m_window);
 
         // Check for validation layer support
-        /*VkApplicationInfo app_info = {};
+        VkApplicationInfo app_info = {};
         app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         app_info.pApplicationName = "Expectre";
         app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -286,15 +206,15 @@ namespace Expectre
         VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
 
         if (m_enable_validation_layers) {
-          tools::populate_debug_messenger_create_info(debug_create_info);
-          create_info.enabledLayerCount = m_validation_layers.size();
-          create_info.ppEnabledLayerNames = m_validation_layers.data();
-          create_info.pNext = &debug_create_info;
+            tools::populate_debug_messenger_create_info(debug_create_info);
+            create_info.enabledLayerCount = m_validation_layers.size();
+            create_info.ppEnabledLayerNames = m_validation_layers.data();
+            create_info.pNext = &debug_create_info;
         }
 
         VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
 
-        volkLoadInstance(m_instance);*/
+        volkLoadInstance(m_instance);
 
     }
 
@@ -311,149 +231,123 @@ namespace Expectre
 
     void Renderer_Vk::select_physical_device()
     {
-        // Enumerate physical devices
-        uint32_t gpu_count = 0;
-        vkEnumeratePhysicalDevices(m_instance, &gpu_count, nullptr);
-        if (gpu_count == 0) throw std::runtime_error("no GPUs found");
 
-        std::vector<VkPhysicalDevice> gpus(gpu_count);
+        uint32_t gpu_count = 0;
+        std::vector<VkPhysicalDevice> gpus;
+        vkEnumeratePhysicalDevices(m_instance, &gpu_count, nullptr);
+        gpus.resize(gpu_count);
         vkEnumeratePhysicalDevices(m_instance, &gpu_count, gpus.data());
 
-        m_chosen_phys_device = gpus[0];                // keep it simple
-        m_graphics_queue_family_index = 0;
-        m_present_queue_family_index = m_graphics_queue_family_index;
+        for (auto& gpu : gpus) {
+
+
+            VkPhysicalDeviceProperties phys_properties{};
+            vkGetPhysicalDeviceProperties(gpu, &phys_properties);
+            std::cout << "Physical device: " << std::endl;
+            std::cout << phys_properties.deviceName << std::endl;
+            std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
+            std::cout << "device type: " << phys_properties.deviceType << std::endl;
+            VkPhysicalDeviceFeatures phys_features{};
+            vkGetPhysicalDeviceFeatures(gpu, &phys_features);
+
+            vkGetPhysicalDeviceMemoryProperties(gpu, &m_phys_memory_properties);
+            std::cout << "heap count: " << m_phys_memory_properties.memoryHeapCount << std::endl;
+            for (uint32_t j = 0; j < m_phys_memory_properties.memoryHeapCount; j++)
+            {
+                VkMemoryHeap heap{};
+                heap = m_phys_memory_properties.memoryHeaps[j];
+
+                std::cout << "heap size:" << std::endl;
+                std::cout << heap.size << std::endl;
+                std::cout << "flags: " << heap.flags << std::endl;
+            }
+
+
+            if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+                m_chosen_phys_device == VK_NULL_HANDLE)
+            {
+                m_chosen_phys_device = gpu;
+                m_phys_memory_properties = m_phys_memory_properties;
+                spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
+            }
+        }
 
         assert(m_chosen_phys_device != VK_NULL_HANDLE);
-
-
-        //VkPhysicalDeviceProperties phys_properties{};
-        //vkGetPhysicalDeviceProperties(m_chosen_phys_device, &phys_properties);
-        //std::cout << "Physical device: " << std::endl;
-        //std::cout << phys_properties.deviceName << std::endl;
-        //std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
-        //std::cout << "device type: " << phys_properties.deviceType << std::endl;
-        //VkPhysicalDeviceFeatures phys_features{};
-        //vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &phys_features);
-
-        //vkGetPhysicalDeviceMemoryProperties(m_chosen_phys_device, &m_phys_memory_properties);
-        //std::cout << "heap count: " << m_phys_memory_properties.memoryHeapCount << std::endl;
-        //for (uint32_t j = 0; j < m_phys_memory_properties.memoryHeapCount; j++)
-        //{
-        //	VkMemoryHeap heap{};
-        //	heap = m_phys_memory_properties.memoryHeaps[j];
-
-        //	std::cout << "heap size:" << std::endl;
-        //	std::cout << heap.size << std::endl;
-        //	std::cout << "flags: " << heap.flags << std::endl;
-        //}
-
-
-        //if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
-        //	m_chosen_phys_device == VK_NULL_HANDLE)
-        //{
-        //	m_chosen_phys_device = m_chosen_phys_device;
-        //	spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
-        //}
-
-        //assert(m_chosen_phys_device != VK_NULL_HANDLE);
     }
 
-    void Renderer_Vk::create_logical_device_and_queues() {
+    void Renderer_Vk::create_logical_device_and_queues()
+    {
+        // Queue family logic
+        uint32_t queue_families_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
+            &queue_families_count,
+            nullptr);
+        assert(queue_families_count > 0);
+        std::vector<VkQueueFamilyProperties> family_properties(queue_families_count);
+        vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
+            &queue_families_count,
+            family_properties.data());
 
+        // Check queues for present support
+        std::vector<VkBool32> supports_present(queue_families_count);
+        for (auto i = 0; i < queue_families_count; i++)
+        {
+            vkGetPhysicalDeviceSurfaceSupportKHR(m_chosen_phys_device, i,
+                m_surface, &supports_present.at(i));
+        }
 
-        // 7. Create the logical device + queues -----------------------------
-        float priority = 1.0f;
-        VkDeviceQueueCreateInfo qci{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-        qci.queueFamilyIndex = m_graphics_queue_family_index;
-        qci.queueCount = 1;
-        qci.pQueuePriorities = &priority;
+        // Search for queue that supports transfer, present, and graphics
+        auto family_index = 0;
+        for (auto i = 0; i < queue_families_count; i++)
+        {
+            const auto& properties = family_properties.at(i);
+            if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags &&
+                VK_QUEUE_GRAPHICS_BIT & properties.queueFlags &&
+                supports_present.at(i))
+            {
+                family_index = i;
+                m_graphics_queue_family_index = i;
+                m_present_queue_family_index = i;
+                spdlog::debug("Choosing queue family with flags {} and count {}",
+                    std::bitset<8>(properties.queueFlags).to_string(), properties.queueCount);
+                break;
+            }
+        }
 
-        const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        VkDeviceQueueCreateInfo queue_create_info{};
+        queue_create_info.pNext = nullptr;
+        queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_create_info.flags = NULL;
+        queue_create_info.queueCount = 1;
+        queue_create_info.pQueuePriorities = &m_priority;
+        queue_create_info.queueFamilyIndex = m_graphics_queue_family_index;
 
-        VkDeviceCreateInfo dci{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-        dci.queueCreateInfoCount = 1;
-        dci.pQueueCreateInfos = &qci;
-        dci.enabledExtensionCount = 1;
-        dci.ppEnabledExtensionNames = devExts;
+        VkPhysicalDeviceFeatures supportedFeatures{};
+        vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &supportedFeatures);
+        VkPhysicalDeviceFeatures requiredFeatures{};
+        requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
+        requiredFeatures.tessellationShader = VK_TRUE;
+        requiredFeatures.geometryShader = VK_TRUE;
+        requiredFeatures.samplerAnisotropy = VK_TRUE;
 
-        check(vkCreateDevice(m_chosen_phys_device, &dci, nullptr, &m_device), "vkCreateDevice");
+        std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+        VkDeviceCreateInfo device_create_info{};
+        device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        device_create_info.pEnabledFeatures = &requiredFeatures;
+        device_create_info.queueCreateInfoCount = 1;
+        device_create_info.pQueueCreateInfos = &queue_create_info;
+        device_create_info.enabledExtensionCount = extensions.size();
+        device_create_info.ppEnabledExtensionNames = extensions.data();
+        // Start creating logical device
+        m_device = VK_NULL_HANDLE;
+        VK_CHECK_RESULT(vkCreateDevice(m_chosen_phys_device, &device_create_info, nullptr, &m_device));
+
         volkLoadDevice(m_device);
 
         vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
-
+        vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
     }
-    //void Renderer_Vk::create_logical_device_and_queues()
-    //{
-    //	// Queue family logic
-    //	uint32_t queue_families_count = 0;
-    //	vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
-    //		&queue_families_count,
-    //		nullptr);
-    //	assert(queue_families_count > 0);
-    //	std::vector<VkQueueFamilyProperties> family_properties(queue_families_count);
-    //	vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
-    //		&queue_families_count,
-    //		family_properties.data());
-
-    //	// Check queues for present support
-    //	std::vector<VkBool32> supports_present(queue_families_count);
-    //	for (auto i = 0; i < queue_families_count; i++)
-    //	{
-    //		vkGetPhysicalDeviceSurfaceSupportKHR(m_chosen_phys_device, i,
-    //			m_surface, &supports_present.at(i));
-    //	}
-
-    //	// Search for queue that supports transfer, present, and graphics
-    //	auto family_index = 0;
-    //	for (auto i = 0; i < queue_families_count; i++)
-    //	{
-    //		const auto& properties = family_properties.at(i);
-    //		if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags &&
-    //			VK_QUEUE_GRAPHICS_BIT & properties.queueFlags &&
-    //			supports_present.at(i))
-    //		{
-    //			family_index = i;
-    //			m_graphics_queue_family_index = i;
-    //			m_present_queue_family_index = i;
-    //			spdlog::debug("Choosing queue family with flags {} and count {}",
-    //				std::bitset<8>(properties.queueFlags).to_string(), properties.queueCount);
-    //			break;
-    //		}
-    //	}
-
-    //	VkDeviceQueueCreateInfo queue_create_info{};
-    //	queue_create_info.pNext = nullptr;
-    //	queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    //	queue_create_info.flags = NULL;
-    //	queue_create_info.queueCount = 1;
-    //	queue_create_info.pQueuePriorities = &m_priority;
-    //	queue_create_info.queueFamilyIndex = m_graphics_queue_family_index;
-
-    //	VkPhysicalDeviceFeatures supportedFeatures{};
-    //	vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &supportedFeatures);
-    //	VkPhysicalDeviceFeatures requiredFeatures{};
-    //	requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
-    //	requiredFeatures.tessellationShader = VK_TRUE;
-    //	requiredFeatures.geometryShader = VK_TRUE;
-    //	requiredFeatures.samplerAnisotropy = VK_TRUE;
-
-    //	std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
-    //	VkDeviceCreateInfo device_create_info{};
-    //	device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    //	device_create_info.pEnabledFeatures = &requiredFeatures;
-    //	device_create_info.queueCreateInfoCount = 1;
-    //	device_create_info.pQueueCreateInfos = &queue_create_info;
-    //	device_create_info.enabledExtensionCount = extensions.size();
-    //	device_create_info.ppEnabledExtensionNames = extensions.data();
-    //	// Start creating logical device
-    //	m_device = VK_NULL_HANDLE;
-    //	VK_CHECK_RESULT(vkCreateDevice(m_chosen_phys_device, &device_create_info, nullptr, &m_device));
-
-
-    //	vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
-    //	vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
-    //}
 
     uint32_t Renderer_Vk::choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
         VkMemoryPropertyFlags requiredFlags,
@@ -571,178 +465,47 @@ namespace Expectre
         }
     }
 
+
+
+    void Renderer_Vk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+        VkCommandBuffer commandBuffer = begin_single_time_commands();
+
+        VkBufferCopy copyRegion{};
+        copyRegion.size = size;
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+        end_single_time_commands(commandBuffer);
+    }
+
     void Renderer_Vk::create_vertex_buffer()
     {
-        VkResult err;
 
-        Model model = tools::import_model("C:/Expectre/assets/bunny.obj");
+
+        Model model = tools::import_model("C:/src/Expectre/assets/bunny.obj");
 
         const std::vector<Vertex> vertices = model.vertices;
-        uint32_t vertex_buffer_size =
-            static_cast<uint32_t>((vertices.size() * sizeof(Vertex)));
-        // Setup indices
-        // std::vector<uint32_t> index_buffer{0, 1, 2, 2, 3, 0};
-        std::vector<uint32_t> index_buffer = model.indices;
-        m_indices.count = static_cast<uint32_t>(index_buffer.size());
-        uint32_t index_buffer_size = m_indices.count * sizeof(index_buffer[0]);
 
-        VkMemoryAllocateInfo mem_alloc{};
-        mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 
-        struct StagingBuffer
-        {
-            VkDeviceMemory memory;
-            VkBuffer buffer;
-        };
+        VkDeviceSize buffer_size = sizeof(vertices.at(0)) * vertices.size();
 
-        struct
-        {
-            StagingBuffer vertices;
-            StagingBuffer indices;
-        } staging_buffers;
+        VkBuffer staging_buffer;
+        VkDeviceMemory staging_buffer_memory;
+
+        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            staging_buffer, staging_buffer_memory);
 
         void* data;
+        vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &data);
+        vkUnmapMemory(m_device, staging_buffer_memory);
 
-        // Vertex Buffer
-        VkBufferCreateInfo vertex_buffer_info{};
-        vertex_buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        vertex_buffer_info.size = vertex_buffer_size;
-        vertex_buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        // Create host-visible buffer to copy vertices into
-        err = vkCreateBuffer(m_device, &vertex_buffer_info, nullptr,
-            &staging_buffers.vertices.buffer);
-        VK_CHECK_RESULT(err);
-        // Get the memory requirements for the buffer
-        uint32_t mem_index;
-        VkMemoryRequirements mem_reqs{};
-        mem_alloc.allocationSize = mem_reqs.size;
-        // Get memory index and assign to mem_alloc info
-        vkGetBufferMemoryRequirements(m_device, staging_buffers.vertices.buffer, &mem_reqs);
-        bool found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-            m_phys_memory_properties.memoryTypes,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &mem_index);
-        assert(found);
-        mem_alloc.allocationSize = mem_reqs.size;
-        mem_alloc.memoryTypeIndex = mem_index;
+        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_vertices.buffer, m_vertices.memory);
 
-        err = vkAllocateMemory(m_device, &mem_alloc, nullptr, &staging_buffers.vertices.memory);
-        VK_CHECK_RESULT(err);
-        // Map the memory, then copy it
-        err = vkMapMemory(m_device, staging_buffers.vertices.memory, 0, mem_alloc.allocationSize, 0, &data);
-        VK_CHECK_RESULT(err);
-        memcpy(data, vertices.data(), vertex_buffer_size);
-        vkUnmapMemory(m_device, staging_buffers.vertices.memory);
-        err = vkBindBufferMemory(m_device, staging_buffers.vertices.buffer, staging_buffers.vertices.memory, 0);
-        VK_CHECK_RESULT(err);
+        copy_buffer(staging_buffer, m_vertices.buffer, buffer_size);
 
-        // Create device local buffer that will receive vertex data from host
-        vertex_buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        err = vkCreateBuffer(m_device, &vertex_buffer_info, nullptr, &m_vertices.buffer);
-        VK_CHECK_RESULT(err);
-        vkGetBufferMemoryRequirements(m_device, m_vertices.buffer, &mem_reqs);
-        mem_alloc.allocationSize = mem_reqs.size;
-        found = tools::find_matching_memory(mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_index);
-        assert(found);
-        mem_alloc.memoryTypeIndex = mem_index;
-        err = vkAllocateMemory(m_device, &mem_alloc, nullptr, &m_vertices.memory);
-        VK_CHECK_RESULT(err);
-        err = vkBindBufferMemory(m_device, m_vertices.buffer, m_vertices.memory, 0);
-        VK_CHECK_RESULT(err);
+        vkDestroyBuffer(m_device, staging_buffer, nullptr);
+        vkFreeMemory(m_device, staging_buffer_memory, nullptr);
 
-        // Index buffer
-        // uint32_t index_buffer_size = sizeof(index_buffer[0]) * index_buffer.size();
-
-        VkBufferCreateInfo index_buffer_info{};
-        index_buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        index_buffer_info.size = index_buffer_size;
-        index_buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
-        // Copy index data to host-visible buffer aka staging buffer
-        err = vkCreateBuffer(m_device, &index_buffer_info, nullptr, &staging_buffers.indices.buffer);
-        VK_CHECK_RESULT(err);
-
-        vkGetBufferMemoryRequirements(m_device, staging_buffers.indices.buffer, &mem_reqs);
-        mem_alloc.allocationSize = mem_reqs.size;
-        found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-            m_phys_memory_properties.memoryTypes,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &mem_index);
-
-        assert(found);
-        mem_alloc.memoryTypeIndex = mem_index;
-        VK_CHECK_RESULT(vkAllocateMemory(m_device, &mem_alloc, nullptr, &staging_buffers.indices.memory));
-        VK_CHECK_RESULT(vkMapMemory(m_device, staging_buffers.indices.memory, 0, index_buffer_size, 0, &data));
-        memcpy(data, index_buffer.data(), index_buffer_size);
-        vkUnmapMemory(m_device, staging_buffers.indices.memory);
-        err = vkBindBufferMemory(m_device, staging_buffers.indices.buffer, staging_buffers.indices.memory, 0);
-        VK_CHECK_RESULT(err);
-
-        // Create destination buffer that only the GPU can see
-        index_buffer_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        VK_CHECK_RESULT(vkCreateBuffer(m_device, &index_buffer_info, nullptr, &m_indices.buffer));
-        vkGetBufferMemoryRequirements(m_device, m_indices.buffer, &mem_reqs);
-        mem_alloc.allocationSize = mem_reqs.size;
-        found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-            m_phys_memory_properties.memoryTypes,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &mem_index);
-        assert(found);
-        mem_alloc.memoryTypeIndex = mem_index;
-        VK_CHECK_RESULT(vkAllocateMemory(m_device, &mem_alloc, nullptr, &m_indices.memory));
-        VK_CHECK_RESULT(vkBindBufferMemory(m_device, m_indices.buffer, m_indices.memory, 0));
-
-        // Buffer copies have to be submitted to a queue, so we need a command buffer for them
-        // Note: Some devices offer a dedicated transfer queue (with only the transfer bit set) that may be faster when doing lots of copies
-        VkCommandBuffer copy_cmd{};
-
-        VkCommandBufferAllocateInfo command_buffer_alloc_info{};
-        command_buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        command_buffer_alloc_info.commandPool = m_cmd_pool;
-        command_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        command_buffer_alloc_info.commandBufferCount = 1;
-        VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &command_buffer_alloc_info, &copy_cmd));
-
-        VkCommandBufferBeginInfo cmd_buffer_info{};
-        cmd_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        VK_CHECK_RESULT(vkBeginCommandBuffer(copy_cmd, &cmd_buffer_info));
-        // Put buffer region copies into command buffer
-        VkBufferCopy copy_region{};
-        // Vertex buffer
-        copy_region.size = vertex_buffer_size;
-        vkCmdCopyBuffer(copy_cmd, staging_buffers.vertices.buffer, m_vertices.buffer, 1, &copy_region);
-        // Index buffer
-        copy_region.size = index_buffer_size;
-        vkCmdCopyBuffer(copy_cmd, staging_buffers.indices.buffer, m_indices.buffer, 1, &copy_region);
-        VK_CHECK_RESULT(vkEndCommandBuffer(copy_cmd));
-
-        // Submit the command buffer to the queue to finish the copy
-        VkSubmitInfo submit_info{};
-        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit_info.commandBufferCount = 1;
-        submit_info.pCommandBuffers = &copy_cmd;
-
-        // Create fence to ensure that the command buffer has finished executing
-        VkFenceCreateInfo fence_info{};
-        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fence_info.flags = 0;
-        VkFence fence;
-        VK_CHECK_RESULT(vkCreateFence(m_device, &fence_info, nullptr, &fence));
-
-        // Submit to the queue
-        VK_CHECK_RESULT(vkQueueSubmit(m_graphics_queue, 1, &submit_info, fence));
-        // Wait for the fence to signal that command buffer has finished executing
-        VK_CHECK_RESULT(vkWaitForFences(m_device, 1, &fence, VK_TRUE, DEFAULT_FENCE_TIMEOUT));
-
-        vkDestroyFence(m_device, fence, nullptr);
-        vkFreeCommandBuffers(m_device, m_cmd_pool, 1, &copy_cmd);
-
-        // Destroy staging buffers
-        // Note: Staging buffer must not be deleted before the copies have been submitted and executed
-        vkDestroyBuffer(m_device, staging_buffers.vertices.buffer, nullptr);
-        vkFreeMemory(m_device, staging_buffers.vertices.memory, nullptr);
-        vkDestroyBuffer(m_device, staging_buffers.indices.buffer, nullptr);
-        vkFreeMemory(m_device, staging_buffers.indices.memory, nullptr);
     }
 
     void Renderer_Vk::create_depth()
@@ -842,8 +605,8 @@ namespace Expectre
 
     void Renderer_Vk::create_pipeline()
     {
-        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, "C:/Expectre/shaders/vert.vert.spv");
-        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, "C:/Expectre/shaders/frag.frag.spv");
+        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, "C:/src/Expectre/shaders/vert.vert.spv");
+        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, "C:/src/Expectre/shaders/frag.frag.spv");
 
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
         vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1347,7 +1110,7 @@ namespace Expectre
     void Renderer_Vk::create_texture_image()
     {
         int tex_width, tex_height, tex_channels;
-        stbi_uc* pixels = stbi_load("C:/Expectre/assets/textures/hello4.jpg",
+        stbi_uc* pixels = stbi_load("C:/src/Expectre/assets/textures/hello4.jpg",
             &tex_width, &tex_height,
             &tex_channels, STBI_rgb_alpha);
         VkDeviceSize image_size = tex_width * tex_height * 4;
@@ -1679,5 +1442,6 @@ namespace Expectre
             }
         }
     }
+
 
 }

@@ -125,6 +125,8 @@ namespace Expectre
 			VkMemoryPropertyFlags prefferedFlags);
 
 		void on_input_event(const SDL_Event& event) override;
+		void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
 
 		SDL_Window* m_window{};
 		VkInstance m_instance{};
@@ -151,7 +153,7 @@ namespace Expectre
 		// std::vector<VkDescriptorSet> m_descriptor_sets{};
 		VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_descriptor_set_layout{ VK_NULL_HANDLE };
-		std::vector<const char*> m_validation_layers{ "VK_LAYER_KHRONOS_validation" };
+		std::vector<const char*> m_validation_layers{ "VK_LAYER_KHRONOS_validation"};
 
 		std::vector<VkSemaphore> m_available_image_semaphores{};
 		std::vector<VkSemaphore> m_finished_render_semaphores{};
