@@ -1,5 +1,5 @@
 ﻿// Library macros
-#define VOLK_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
@@ -26,7 +26,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
-#include <Volk/volk.h>
 
 #include "shared.h"
 #include "VkTools.h"
@@ -62,19 +61,16 @@ namespace Expectre
             throw std::runtime_error("Unable to initialize application window!");
         }
 
-        VK_CHECK_RESULT(volkInitialize());
         m_enable_validation_layers = true;
 
 
         // Core Vulkan setup
         create_instance();
         create_surface();
-
-        //if (!vkDestroyInstance)
-        //	throw std::runtime_error("vkDestroyInstance is still NULL – check load order");
         select_physical_device();
         create_logical_device_and_queues();
 
+        create_memory_allocator();
 
         // Command buffers and swapchain
         create_swapchain();
@@ -85,13 +81,13 @@ namespace Expectre
         create_pipeline();
         create_command_pool();
         create_framebuffers();
-        //create_texture_image();
-        //create_texture_image_view();
-        //create_texture_sampler();
-       // create_vertex_buffer(); // and index buffer
-        //create_uniform_buffers();
-        //create_descriptor_pool_and_sets();
-        //create_command_buffers();
+        create_texture_image();
+        create_texture_image_view();
+        create_texture_sampler();
+        create_vertex_buffer(); // and index buffer
+        create_uniform_buffers();
+        create_descriptor_pool_and_sets();
+        create_command_buffers();
 
         // Synchronization
         create_sync_objects();
@@ -130,44 +126,41 @@ namespace Expectre
             vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
             vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
         }
+
+        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+        // Destroy descriptor pool
+        vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+
+        // Destroy uniform buffers
+        for (auto& ub : m_uniform_buffers) {
+            vkDestroyBuffer(m_device, ub.buffer, nullptr);
+            vmaUnmapMemory(m_allocator, ub.allocation);
+            vmaFreeMemory(m_allocator, ub.allocation);
+        }
+
         // Destroy vertex and index buffer
         vkDestroyBuffer(m_device, m_indices.buffer, nullptr);
-        vkFreeMemory(m_device, m_indices.memory, nullptr);
+        vmaFreeMemory(m_allocator, m_indices.allocation);
         vkDestroyBuffer(m_device, m_vertices.buffer, nullptr);
-        vkFreeMemory(m_device, m_vertices.memory, nullptr);
+        vmaFreeMemory(m_allocator, m_vertices.allocation);
 
         // Destroy pipeline and related layouts
         vkDestroyPipeline(m_device, m_pipeline, nullptr);
         vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
         vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
-        // Destroy descriptor pool
-        vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
-
-
-        // Destroy uniform buffers
-        for (auto& ub : m_uniform_buffers) {
-            vkDestroyBuffer(m_device, ub.buffer, nullptr);
-            vkFreeMemory(m_device, ub.memory, nullptr);
-        }
-
-
 
         // Destroy texture resources
         vkDestroySampler(m_device, m_texture_sampler, nullptr);
         vkDestroyImageView(m_device, m_texture_image_view, nullptr);
         vkDestroyImage(m_device, m_texture_image, nullptr);
-        vkFreeMemory(m_device, m_texture_image_memory, nullptr);
-
-
-
-
+        vmaFreeMemory(m_allocator, m_texture_image_allocation);
 
         // Destroy command pool
         vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
 
         cleanup_swapchain();
 
+        vmaDestroyAllocator(m_allocator);
 
         // Destroy device, surface, instance
         vkDestroyDevice(m_device, nullptr);
@@ -213,8 +206,6 @@ namespace Expectre
         }
 
         VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
-
-        volkLoadInstance(m_instance);
 
     }
 
@@ -342,8 +333,6 @@ namespace Expectre
         // Start creating logical device
         m_device = VK_NULL_HANDLE;
         VK_CHECK_RESULT(vkCreateDevice(m_chosen_phys_device, &device_create_info, nullptr, &m_device));
-
-        volkLoadDevice(m_device);
 
         vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
         vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
@@ -481,30 +470,67 @@ namespace Expectre
     {
 
 
+
         Model model = tools::import_model("C:/src/Expectre/assets/bunny.obj");
+        const std::vector<Vertex>& vertices = model.vertices;
+        const std::vector<uint32_t>& indices = model.indices;
+        m_indices.count = static_cast<uint32_t>(indices.size());
 
-        const std::vector<Vertex> vertices = model.vertices;
+        VkDeviceSize vertex_buffer_size = sizeof(vertices[0]) * vertices.size();
+        VkDeviceSize index_buffer_size = sizeof(indices[0]) * indices.size();
 
+        // === STAGING BUFFERS ===
+        VkBuffer vertex_staging_buffer;
+        VkBuffer index_staging_buffer;
+        VmaAllocation vertex_staging_alloc;
+        VmaAllocation index_staging_alloc;
 
-        VkDeviceSize buffer_size = sizeof(vertices.at(0)) * vertices.size();
+        VmaAllocationCreateInfo staging_alloc_info = {};
+        staging_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
 
-        VkBuffer staging_buffer;
-        VkDeviceMemory staging_buffer_memory;
+        // Vertex staging buffer
+        VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        buffer_info.size = vertex_buffer_size;
+        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            staging_buffer, staging_buffer_memory);
+        VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &staging_alloc_info, &vertex_staging_buffer, &vertex_staging_alloc, nullptr));
 
         void* data;
-        vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &data);
-        vkUnmapMemory(m_device, staging_buffer_memory);
+        VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging_alloc, &data));
+        memcpy(data, vertices.data(), static_cast<size_t>(vertex_buffer_size));
+        vmaUnmapMemory(m_allocator, vertex_staging_alloc);
 
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            m_vertices.buffer, m_vertices.memory);
+        // Index staging buffer
+        buffer_info.size = index_buffer_size;
+        VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &staging_alloc_info, &index_staging_buffer, &index_staging_alloc, nullptr));
 
-        copy_buffer(staging_buffer, m_vertices.buffer, buffer_size);
+        VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging_alloc, &data));
+        memcpy(data, indices.data(), static_cast<size_t>(index_buffer_size));
+        vmaUnmapMemory(m_allocator, index_staging_alloc);
 
-        vkDestroyBuffer(m_device, staging_buffer, nullptr);
-        vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+        // === DEVICE LOCAL BUFFERS ===
+        VmaAllocationCreateInfo device_alloc_info = {};
+        device_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        // Vertex buffer (device-local)
+        buffer_info.size = vertex_buffer_size;
+        buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &device_alloc_info, &m_vertices.buffer, &m_vertices.allocation, nullptr));
+
+        // Index buffer (device-local)
+        buffer_info.size = index_buffer_size;
+        buffer_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &device_alloc_info, &m_indices.buffer, &m_indices.allocation, nullptr));
+
+        // === COPY ===
+        copy_buffer(vertex_staging_buffer, m_vertices.buffer, vertex_buffer_size);
+        copy_buffer(index_staging_buffer, m_indices.buffer, index_buffer_size);
+
+        // Cleanup staging
+        vmaDestroyBuffer(m_allocator, vertex_staging_buffer, vertex_staging_alloc);
+        vmaDestroyBuffer(m_allocator, index_staging_buffer, index_staging_alloc);
+
 
     }
 
@@ -1045,42 +1071,32 @@ namespace Expectre
 
     void Renderer_Vk::create_uniform_buffers()
     {
-        VkMemoryRequirements mem_reqs;
-        VkBufferCreateInfo buffer_info{};
-        VkMemoryAllocateInfo alloc_info{};
-        alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        alloc_info.pNext = nullptr;
-        alloc_info.allocationSize = 0;
-        alloc_info.memoryTypeIndex = 0;
 
+        VkBufferCreateInfo buffer_info{};
         buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         buffer_info.size = sizeof(UBO);
         buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
+        VmaAllocationCreateInfo alloc_info{};
+        alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU; // Host-visible and coherent by default
+
+        for (int i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
         {
-            VK_CHECK_RESULT(vkCreateBuffer(m_device, &buffer_info, nullptr, &m_uniform_buffers[i].buffer));
-            // Get memory requirements of uniform buffer
-            vkGetBufferMemoryRequirements(m_device, m_uniform_buffers[i].buffer, &mem_reqs);
-            alloc_info.allocationSize = mem_reqs.size;
+            // Create buffer + allocate memory
+            VK_CHECK_RESULT(vmaCreateBuffer(
+                m_allocator,
+                &buffer_info,
+                &alloc_info,
+                &m_uniform_buffers[i].buffer,
+                &m_uniform_buffers[i].allocation,
+                nullptr));
 
-            uint32_t mem_index;
-            // Get memory index of host visibe + coherent
-            bool found = tools::find_matching_memory(
-                mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &mem_index);
-            assert(found);
-            alloc_info.memoryTypeIndex = mem_index;
-            // Allocate memory for uniformbuffer
-            VK_CHECK_RESULT(vkAllocateMemory(m_device, &alloc_info, nullptr, &m_uniform_buffers[i].memory));
-            // Bind memory to buffer
-            VK_CHECK_RESULT(vkBindBufferMemory(m_device, m_uniform_buffers[i].buffer, m_uniform_buffers[i].memory, 0));
-            // We map the buffer once so we can update it without having to map it again
-            VK_CHECK_RESULT(vkMapMemory(m_device,
-                m_uniform_buffers[i].memory, 0,
-                sizeof(UBO), 0,
-                (void**)&m_uniform_buffers[i].mapped));
+            // Map once for persistent updates
+            VK_CHECK_RESULT(vmaMapMemory(
+                m_allocator,
+                m_uniform_buffers[i].allocation,
+                reinterpret_cast<void**>(&m_uniform_buffers[i].mapped)));
         }
     }
 
@@ -1113,7 +1129,6 @@ namespace Expectre
         stbi_uc* pixels = stbi_load("C:/src/Expectre/assets/textures/hello4.jpg",
             &tex_width, &tex_height,
             &tex_channels, STBI_rgb_alpha);
-        VkDeviceSize image_size = tex_width * tex_height * 4;
 
         if (!pixels)
         {
@@ -1121,39 +1136,80 @@ namespace Expectre
             std::terminate();
         }
 
-        VkBuffer staging_buffer;
-        VkDeviceMemory staging_buffer_memory;
-        create_buffer(image_size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            staging_buffer, staging_buffer_memory);
+        VkDeviceSize image_size = tex_width * tex_height * 4;
 
+        // 1. Create staging buffer (host-visible)
+        VkBuffer staging_buffer;
+        VmaAllocation staging_alloc;
+
+        VkBufferCreateInfo buffer_info = {};
+        buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buffer_info.size = image_size;
+        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo buffer_alloc_info = {};
+        buffer_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+
+        VK_CHECK_RESULT(vmaCreateBuffer(m_allocator,
+            &buffer_info,
+            &buffer_alloc_info,
+            &staging_buffer,
+            &staging_alloc,
+            nullptr));
+
+        // 2. Upload image data to the staging buffer
         void* data;
-        VK_CHECK_RESULT(vkMapMemory(m_device, staging_buffer_memory, 0, image_size, 0, &data));
+        VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging_alloc, &data));
         memcpy(data, pixels, static_cast<size_t>(image_size));
-        vkUnmapMemory(m_device, staging_buffer_memory);
+        vmaUnmapMemory(m_allocator, staging_alloc);
 
         stbi_image_free(pixels);
 
-        create_image(tex_width, tex_height,
-            VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_texture_image,
-            m_texture_image_memory);
+        // 3. Create GPU texture image (device-local)
+        VkImageCreateInfo image_info = {};
+        image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        image_info.imageType = VK_IMAGE_TYPE_2D;
+        image_info.extent.width = static_cast<uint32_t>(tex_width);
+        image_info.extent.height = static_cast<uint32_t>(tex_height);
+        image_info.extent.depth = 1;
+        image_info.mipLevels = 1;
+        image_info.arrayLayers = 1;
+        image_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+        image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+        image_info.flags = 0;
+
+        VmaAllocationCreateInfo image_alloc_info = {};
+        image_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        VK_CHECK_RESULT(vmaCreateImage(m_allocator,
+            &image_info,
+            &image_alloc_info,
+            &m_texture_image,
+            &m_texture_image_allocation,
+            nullptr));
+
+        // 4. Transfer layout and copy data
         transition_image_layout(m_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
         copy_buffer_to_image(staging_buffer, m_texture_image,
             static_cast<uint32_t>(tex_width),
             static_cast<uint32_t>(tex_height));
+
         transition_image_layout(m_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-        vkDestroyBuffer(m_device, staging_buffer, nullptr);
-        vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+        // 5. Cleanup staging buffer
+        vmaDestroyBuffer(m_allocator, staging_buffer, staging_alloc);
     }
+
 
     bool Renderer_Vk::isReady() { return m_ready; };
 
@@ -1443,5 +1499,16 @@ namespace Expectre
         }
     }
 
+
+    void Renderer_Vk::create_memory_allocator() {
+        VmaAllocatorCreateInfo allocatorCreateInfo = {};
+        allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+        allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+        allocatorCreateInfo.physicalDevice = m_chosen_phys_device;
+        allocatorCreateInfo.device = m_device;
+        allocatorCreateInfo.instance = m_instance;
+
+        vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+    }
 
 }
