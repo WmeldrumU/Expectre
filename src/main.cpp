@@ -7,6 +7,7 @@
 
 #include <crtdbg.h>
 
+
 // TODO: Fix long warnings, camera postiion/movement, heap corruption
 int main(int argc, char* argv[])
 {

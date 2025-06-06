@@ -39,3 +39,6 @@ message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${COMMON_LIBRARIES}
 )
+
+# Define it as a macro so it can be used in C++
+add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
