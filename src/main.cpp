@@ -7,23 +7,28 @@
 
 #include <crtdbg.h>
 
-
 // TODO: Fix long warnings, camera postiion/movement, heap corruption
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-    spdlog::set_level(spdlog::level::debug);
-    try
-    {
-        std::cout << "STARTING UP...." << std::endl;
-        Expectre::Engine engine{};
-        engine.run();
-    }
-    catch (std::exception& e)
-    {
-        std::cout << "EXCEPTION: \n"
-            << e.what() << std::endl;
-        return 1;
-    }
 
-    return 0;
+#ifdef _MSC_VER &&__clang__
+	std::cout << "Compiled with clang-cl\n";
+#else
+	std::cout << "Other compiler\n";
+#endif
+	spdlog::set_level(spdlog::level::debug);
+	try
+	{
+		std::cout << "STARTING UP...." << std::endl;
+		Expectre::Engine engine{};
+		engine.run();
+	}
+	catch (std::exception &e)
+	{
+		std::cout << "EXCEPTION: \n"
+				  << e.what() << std::endl;
+		return 1;
+	}
+
+	return 0;
 }

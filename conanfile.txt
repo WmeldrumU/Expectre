@@ -1,5 +1,5 @@
 [requires]
-sdl/3.2.6
+sdl/3.2.14
 spdlog/1.11.0
 glm/0.9.5.4
 stb/cci.20230920
