@@ -11,20 +11,20 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-//#define VK_NO_PROTOTYPES
+// #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
 #include "Model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                       \
-    {                                                                                                                                            \
-        VkResult res = (f);                                                                                                                      \
-        if (res != VK_SUCCESS)                                                                                                                   \
-        {                                                                                                                                        \
-            std::cout << "Fatal : VkResult is \"" << tools::errorString(res).c_str() << "\" in " << __FILE__ << " at line " << __LINE__ << "\n"; \
-            assert(res == VK_SUCCESS);                                                                                                           \
-        }                                                                                                                                        \
-    }
+	{                                                                                                                                            \
+		VkResult res = (f);                                                                                                                      \
+		if (res != VK_SUCCESS)                                                                                                                   \
+		{                                                                                                                                        \
+			std::cout << "Fatal : VkResult is \"" << tools::errorString(res).c_str() << "\" in " << __FILE__ << " at line " << __LINE__ << "\n"; \
+			assert(res == VK_SUCCESS);                                                                                                           \
+		}                                                                                                                                        \
+	}
 namespace tools
 {
 
@@ -33,8 +33,8 @@ namespace tools
 		switch (errorCode)
 		{
 #define STR(r)   \
-    case VK_##r: \
-        return #r
+	case VK_##r: \
+		return #r
 			STR(NOT_READY);
 			STR(TIMEOUT);
 			STR(EVENT_SET);
@@ -70,8 +70,8 @@ namespace tools
 	// This is necessary as implementations can offer an arbitrary number of memory types with different
 	// memory properties.
 	// You can check https://vulkan.gpuinfo.org/ for details on different memory configurations
-	bool find_matching_memory(uint32_t type_bits, VkMemoryType* memory_types,
-		VkFlags requirements, uint32_t* mem_index)
+	bool find_matching_memory(uint32_t type_bits, VkMemoryType *memory_types,
+							  VkFlags requirements, uint32_t *mem_index)
 	{
 
 		for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
@@ -92,7 +92,7 @@ namespace tools
 		return false;
 	}
 
-	VkShaderModule createShaderModule(const VkDevice& device, const std::string& filename)
+	VkShaderModule createShaderModule(const VkDevice &device, const std::string &filename)
 	{
 		std::ifstream file(filename, std::ios::ate | std::ios::binary);
 		if (!file.is_open())
@@ -109,7 +109,7 @@ namespace tools
 		VkShaderModuleCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		createInfo.codeSize = buffer.size();
-		createInfo.pCode = reinterpret_cast<const uint32_t*>(buffer.data());
+		createInfo.pCode = reinterpret_cast<const uint32_t *>(buffer.data());
 
 		VkShaderModule shaderModule;
 		if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
@@ -120,7 +120,7 @@ namespace tools
 		return shaderModule;
 	}
 
-	void printMatrix(const glm::mat4& matrix)
+	void printMatrix(const glm::mat4 &matrix)
 	{
 		for (int i = 0; i < 4; ++i)
 		{
@@ -133,11 +133,20 @@ namespace tools
 		std::cout << std::endl;
 	}
 
-	Expectre::Model import_model(const std::string& file_path)
+	glm::mat4 to_glm(const aiMatrix4x4 &m)
+	{
+		return glm::mat4(
+			m.a1, m.b1, m.c1, m.d1,
+			m.a2, m.b2, m.c2, m.d2,
+			m.a3, m.b3, m.c3, m.d3,
+			m.a4, m.b4, m.c4, m.d4);
+	}
+
+	Expectre::Model import_model(const std::string &file_path, std::vector<Expectre::Vertex> &vertices, std::vector<uint32_t> &indices)
 	{
 		Assimp::Importer importer;
-		const aiScene* scene = importer.ReadFile(file_path,
-			aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
+		const aiScene *scene = importer.ReadFile(file_path,
+												 aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
 
 		if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
 		{
@@ -145,37 +154,47 @@ namespace tools
 			return {};
 		}
 
-		std::vector<Expectre::Vertex> vertices;
-		std::vector<uint32_t> indices;
+		const aiNode *root = scene->mRootNode;
+		glm::mat4 model_transform = to_glm(root->mTransformation);
+
+		Expectre::Model model{
+			.transform = model_transform};
+
+		uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());
+		uint32_t running_index_offset = static_cast<uint32_t>(indices.size());
 
 		// Iterate through each mesh
 		for (unsigned int i = 0; i < scene->mNumMeshes; i++)
 		{
-			aiMesh* mesh = scene->mMeshes[i];
+			aiMesh *ai_mesh = scene->mMeshes[i];
+			Expectre::Mesh mesh = {};
+
+			mesh.vertex_offset = static_cast<uint32_t>(vertices.size());
+			mesh.index_offset = static_cast<uint32_t>(indices.size());
 
 			// Iterate through each vertex of the mesh
-			for (unsigned int j = 0; j < mesh->mNumVertices; j++)
+			for (unsigned int j = 0; j < ai_mesh->mNumVertices; j++)
 			{
 				Expectre::Vertex vertex;
 
 				// Positions
-				vertex.pos.x = mesh->mVertices[j].x;
-				vertex.pos.y = mesh->mVertices[j].y;
-				vertex.pos.z = mesh->mVertices[j].z;
+				vertex.pos.x = ai_mesh->mVertices[j].x;
+				vertex.pos.y = ai_mesh->mVertices[j].y;
+				vertex.pos.z = ai_mesh->mVertices[j].z;
 
 				// Normals
-				if (mesh->HasNormals())
+				if (ai_mesh->HasNormals())
 				{
-					vertex.normal.x = mesh->mNormals[j].x;
-					vertex.normal.y = mesh->mNormals[j].y;
-					vertex.normal.z = mesh->mNormals[j].z;
+					vertex.normal.x = ai_mesh->mNormals[j].x;
+					vertex.normal.y = ai_mesh->mNormals[j].y;
+					vertex.normal.z = ai_mesh->mNormals[j].z;
 				}
 
 				// Texture Coordinates
-				if (mesh->mTextureCoords[0])
+				if (ai_mesh->mTextureCoords[0])
 				{ // Check if the mesh contains texture coordinates
-					vertex.tex_coord.x = mesh->mTextureCoords[0][j].x;
-					vertex.tex_coord.y = mesh->mTextureCoords[0][j].y;
+					vertex.tex_coord.x = ai_mesh->mTextureCoords[0][j].x;
+					vertex.tex_coord.y = ai_mesh->mTextureCoords[0][j].y;
 				}
 				else
 				{
@@ -185,36 +204,37 @@ namespace tools
 				vertices.push_back(vertex);
 			}
 
-			// Iterate through faces
-			for (auto j = 0; j < mesh->mNumFaces; j++)
+			// Indices
+			for (auto j = 0; j < ai_mesh->mNumFaces; j++)
 			{
-				aiFace& face = mesh->mFaces[j];
+				aiFace &face = ai_mesh->mFaces[j];
 				for (auto k = 0; k < face.mNumIndices; k++)
 				{
-					indices.push_back(face.mIndices[k]);
+					indices.push_back(face.mIndices[k] + mesh.vertex_offset);
 				}
 			}
+			mesh.index_offset = static_cast<uint32_t>(indices.size()) - mesh.index_offset;
+			mesh.name = std::string(ai_mesh->mName.C_Str());
+			model.meshes.push_back(mesh);
+			model.vertex_count += static_cast<uint32_t>(vertices.size());
+			model.index_count += static_cast<uint32_t>(indices.size());
 		}
-
-		Expectre::Model model{};
-		model.indices = indices;
-		model.vertices = vertices;
-
 		return model;
 	}
 
-
-	VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window) {
-		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+	VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR &capabilities, SDL_Window *window)
+	{
+		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+		{
 			return capabilities.currentExtent;
 		}
-		else {
+		else
+		{
 			int width, height;
 			SDL_GetWindowSizeInPixels(window, &width, &height);
 			VkExtent2D actualExtent = {
 				static_cast<uint32_t>(width),
-				static_cast<uint32_t>(height)
-			};
+				static_cast<uint32_t>(height)};
 
 			actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
 			actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
@@ -223,9 +243,12 @@ namespace tools
 		}
 	}
 
-	VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-		for (const auto& availableFormat : availableFormats) {
-			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+	VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR> &availableFormats)
+	{
+		for (const auto &availableFormat : availableFormats)
+		{
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			{
 				return availableFormat;
 			}
 		}
@@ -233,7 +256,8 @@ namespace tools
 		return availableFormats[0];
 	}
 
-	struct SwapChainSupportDetails {
+	struct SwapChainSupportDetails
+	{
 		VkSurfaceCapabilitiesKHR capabilities;
 		std::vector<VkSurfaceFormatKHR> formats;
 		std::vector<VkPresentModeKHR> present_modes;
@@ -248,7 +272,8 @@ namespace tools
 		uint32_t formatCount;
 		vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, surface, &formatCount, nullptr);
 
-		if (formatCount != 0) {
+		if (formatCount != 0)
+		{
 			details.formats.resize(formatCount);
 			vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, surface, &formatCount, details.formats.data());
 		}
@@ -256,7 +281,8 @@ namespace tools
 		uint32_t presentModeCount;
 		vkGetPhysicalDeviceSurfacePresentModesKHR(phys_device, surface, &presentModeCount, nullptr);
 
-		if (presentModeCount != 0) {
+		if (presentModeCount != 0)
+		{
 			details.present_modes.resize(presentModeCount);
 			vkGetPhysicalDeviceSurfacePresentModesKHR(phys_device, surface, &presentModeCount, details.present_modes.data());
 		}
@@ -264,15 +290,18 @@ namespace tools
 		return details;
 	}
 
-	struct QueueFamilyIndices {
+	struct QueueFamilyIndices
+	{
 		std::optional<uint32_t> graphicsFamily;
 		std::optional<uint32_t> presentFamily;
 
-		bool isComplete() {
+		bool isComplete()
+		{
 			return graphicsFamily.has_value() && presentFamily.has_value();
 		}
 	};
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface)
+	{
 		QueueFamilyIndices indices;
 
 		uint32_t queueFamilyCount = 0;
@@ -282,19 +311,23 @@ namespace tools
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
 		int i = 0;
-		for (const auto& queueFamily : queueFamilies) {
-			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+		for (const auto &queueFamily : queueFamilies)
+		{
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			{
 				indices.graphicsFamily = i;
 			}
 
 			VkBool32 presentSupport = false;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
-			if (presentSupport) {
+			if (presentSupport)
+			{
 				indices.presentFamily = i;
 			}
 
-			if (indices.isComplete()) {
+			if (indices.isComplete())
+			{
 				break;
 			}
 
@@ -304,7 +337,8 @@ namespace tools
 		return indices;
 	}
 
-	VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+	VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
+	{
 		VkImageViewCreateInfo view_info{};
 		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view_info.image = image;
@@ -317,16 +351,19 @@ namespace tools
 		view_info.subresourceRange.layerCount = 1;
 
 		VkImageView imageView;
-		if (vkCreateImageView(device, &view_info, nullptr, &imageView) != VK_SUCCESS) {
+		if (vkCreateImageView(device, &view_info, nullptr, &imageView) != VK_SUCCESS)
+		{
 			throw std::runtime_error("failed to create texture image view!");
 		}
 
 		return imageView;
 	}
 
-	static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_type, const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data) {
+	static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_type, const VkDebugUtilsMessengerCallbackDataEXT *p_callback_data, void *p_user_data)
+	{
 
-		switch (message_severity) {
+		switch (message_severity)
+		{
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 			spdlog::info("VERBOSE: {}", p_callback_data->pMessage);
 			break;
@@ -338,17 +375,17 @@ namespace tools
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 			spdlog::error("ERROR: {}", p_callback_data->pMessage);
-			//return VK_FALSE;
+			// return VK_FALSE;
 			break;
 		default:
 			spdlog::info("UNKNOWN: {}", p_callback_data->pMessage);
 			break;
-
 		}
 		return VK_FALSE;
 	}
 
-	void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& create_info) {
+	void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT &create_info)
+	{
 		create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -356,38 +393,42 @@ namespace tools
 		create_info.pfnUserCallback = debug_callback;
 	}
 
-	std::vector<const char*> get_required_instance_extensions(bool enable_validation_layers) {
+	std::vector<const char *> get_required_instance_extensions(bool enable_validation_layers)
+	{
 		uint32_t num_extensions = 0;
 
 		auto raw_extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
 
-		std::vector<const char*> extensions(raw_extensions, raw_extensions + num_extensions);
+		std::vector<const char *> extensions(raw_extensions, raw_extensions + num_extensions);
 
 		if (enable_validation_layers)
 		{
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
 		// print extensions
-		for (const char* ext : extensions)
+		for (const char *ext : extensions)
 		{
 			std::printf("%s", ext);
 			std::cout << "\n"
-				<< std::endl;
+					  << std::endl;
 		}
 
 		return extensions;
-
 	}
 
-	VkFormat find_supported_format(VkPhysicalDevice phys_device, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-		for (VkFormat format : candidates) {
+	VkFormat find_supported_format(VkPhysicalDevice phys_device, const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+	{
+		for (VkFormat format : candidates)
+		{
 			VkFormatProperties props;
 			vkGetPhysicalDeviceFormatProperties(phys_device, format, &props);
 
-			if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+			if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
+			{
 				return format;
 			}
-			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+			{
 				return format;
 			}
 		}
@@ -395,12 +436,12 @@ namespace tools
 		throw std::runtime_error("failed to find supported format!");
 	}
 
-	VkFormat find_depth_format(VkPhysicalDevice phys_device) {
+	VkFormat find_depth_format(VkPhysicalDevice phys_device)
+	{
 		return find_supported_format(phys_device,
-			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-		);
+									 {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+									 VK_IMAGE_TILING_OPTIMAL,
+									 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 	}
 
 } // namespace tools
