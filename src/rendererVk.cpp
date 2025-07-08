@@ -96,8 +96,8 @@ namespace Expectre
 		create_sync_objects();
 
 		m_ready = true;
-		*m_frag_shader_watcher = ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert");
-		*m_vert_shader_watcher = ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/frag.frag");
+		m_frag_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/frag.frag"));
+		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 	}
 
 	void Renderer_Vk::load_model(std::string dir) {
@@ -141,9 +141,9 @@ namespace Expectre
 
 		// Destroy uniform buffers
 		for (auto& ub : m_uniform_buffers) {
-			vkDestroyBuffer(m_device, ub.buffer, nullptr);
-			vmaUnmapMemory(m_allocator, ub.allocation);
-			vmaFreeMemory(m_allocator, ub.allocation);
+			vkDestroyBuffer(m_device, ub.allocated_buffer.buffer, nullptr);
+			vmaUnmapMemory(m_allocator, ub.allocated_buffer.allocation);
+			vmaFreeMemory(m_allocator, ub.allocated_buffer.allocation);
 		}
 
 		// Destroy vertex and index buffer
@@ -479,62 +479,46 @@ namespace Expectre
 		VkDeviceSize vertex_buffer_size = sizeof(Vertex) * m_all_vertices.size();
 		VkDeviceSize index_buffer_size = sizeof(uint32_t) * m_all_indices.size();
 
-		m_geometry_buffer.indices.count = m_all_indices.size();
-		m_geometry_buffer.vertices.count = m_all_vertices.size();
+		m_geometry_buffer.index_count = m_all_indices.size();
+		m_geometry_buffer.vertex_count = m_all_vertices.size();
 
 		// === STAGING BUFFERS ===
-		VkBuffer vertex_staging_buffer;
-		VkBuffer index_staging_buffer;
-		VmaAllocation vertex_staging_alloc;
-		VmaAllocation index_staging_alloc;
+
+		AllocatedBuffer vertex_staging = create_buffer(vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
 
 		VmaAllocationCreateInfo staging_alloc_info = {};
 		staging_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
 
-		// Vertex staging buffer
-		VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-		buffer_info.size = vertex_buffer_size;
-		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &staging_alloc_info, &vertex_staging_buffer, &vertex_staging_alloc, nullptr));
-
 		void* data;
-		VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging_alloc, &data));
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging.allocation, &data));
 		memcpy(data, m_all_vertices.data(), static_cast<size_t>(vertex_buffer_size));
-		vmaUnmapMemory(m_allocator, vertex_staging_alloc);
+		vmaUnmapMemory(m_allocator, vertex_staging.allocation);
 
-		// Index staging buffer
-		buffer_info.size = index_buffer_size;
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &staging_alloc_info, &index_staging_buffer, &index_staging_alloc, nullptr));
+		AllocatedBuffer index_staging = create_buffer(index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
 
-		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging_alloc, &data));
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
 		memcpy(data, m_all_indices.data(), static_cast<size_t>(index_buffer_size));
-		vmaUnmapMemory(m_allocator, index_staging_alloc);
+		vmaUnmapMemory(m_allocator, index_staging.allocation);
 
 		// === DEVICE LOCAL BUFFERS ===
 		VmaAllocationCreateInfo device_alloc_info = {};
 		device_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
 		// Vertex buffer (device-local)
-		buffer_info.size = vertex_buffer_size;
-		buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &device_alloc_info, &m_geometry_buffer.vertices.buffer, &m_geometry_buffer.vertices.allocation, nullptr));
-
+		m_geometry_buffer.vertices = create_buffer(vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VMA_MEMORY_USAGE_GPU_ONLY);
 		// Index buffer (device-local)
-		buffer_info.size = index_buffer_size;
-		buffer_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &device_alloc_info, &m_geometry_buffer.indices.buffer, &m_geometry_buffer.indices.allocation, nullptr));
-
+		m_geometry_buffer.indices = create_buffer(index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VMA_MEMORY_USAGE_GPU_ONLY);
 		// === COPY ===
-		copy_buffer(vertex_staging_buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
-		copy_buffer(index_staging_buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
+		copy_buffer(vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
+		copy_buffer(index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
 
 		// Cleanup staging
-		vmaDestroyBuffer(m_allocator, vertex_staging_buffer, vertex_staging_alloc);
-		vmaDestroyBuffer(m_allocator, index_staging_buffer, index_staging_alloc);
-
-
+		vmaDestroyBuffer(m_allocator, vertex_staging.buffer, vertex_staging.allocation);
+		vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
 	}
 
 	void Renderer_Vk::create_depth_stencil()
@@ -587,12 +571,12 @@ namespace Expectre
 		depth_ref.attachment = 1;
 		depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		// One subpass
-		VkSubpassDescription subpass{};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &color_ref;
-		subpass.pDepthStencilAttachment = &depth_ref;
+		// Geometry subpass
+		std::array<VkSubpassDescription, 1> subpasses{};
+		subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpasses[0].colorAttachmentCount = 1;
+		subpasses[0].pColorAttachments = &color_ref;
+		subpasses[0].pDepthStencilAttachment = &depth_ref;
 
 		std::array<VkSubpassDependency, 2> dependencies{};
 		// 1) External -> Subpass 0: sync clears (color + depth)
@@ -621,8 +605,8 @@ namespace Expectre
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 			render_pass_info.attachmentCount = static_cast<uint32_t>(attachments.size());
 		render_pass_info.pAttachments = attachments.data();
-		render_pass_info.subpassCount = 1;
-		render_pass_info.pSubpasses = &subpass;
+		render_pass_info.subpassCount = static_cast<uint32_t>(subpasses.size());
+		render_pass_info.pSubpasses = subpasses.data();
 		render_pass_info.dependencyCount = static_cast<uint32_t>(dependencies.size());
 		render_pass_info.pDependencies = dependencies.data();
 
@@ -828,7 +812,7 @@ namespace Expectre
 				&m_uniform_buffers[i].descriptorSet));
 
 			VkDescriptorBufferInfo buffer_info{};
-			buffer_info.buffer = m_uniform_buffers[i].buffer;
+			buffer_info.buffer = m_uniform_buffers[i].allocated_buffer.buffer;
 			buffer_info.offset = 0;
 			buffer_info.range = sizeof(UBO);
 
@@ -981,7 +965,7 @@ namespace Expectre
 			&m_uniform_buffers[m_current_frame].descriptorSet,
 			0, nullptr);
 
-		vkCmdDrawIndexed(command_buffer, static_cast<uint32_t>(m_geometry_buffer.indices.count), 1, 0, 0, 0);
+		vkCmdDrawIndexed(command_buffer, static_cast<uint32_t>(m_geometry_buffer.index_count), 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(command_buffer);
 
@@ -1075,7 +1059,6 @@ namespace Expectre
 
 	void Renderer_Vk::create_uniform_buffers()
 	{
-
 		VkBufferCreateInfo buffer_info{};
 		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		buffer_info.size = sizeof(UBO);
@@ -1087,19 +1070,16 @@ namespace Expectre
 
 		for (int i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
 		{
-			// Create buffer + allocate memory
-			VK_CHECK_RESULT(vmaCreateBuffer(
-				m_allocator,
-				&buffer_info,
-				&alloc_info,
-				&m_uniform_buffers[i].buffer,
-				&m_uniform_buffers[i].allocation,
-				nullptr));
+			AllocatedBuffer& allocated_buffer = m_uniform_buffers[i].allocated_buffer;
+			allocated_buffer = create_buffer(
+				sizeof(UBO),
+				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 			// Map once for persistent updates
 			VK_CHECK_RESULT(vmaMapMemory(
 				m_allocator,
-				m_uniform_buffers[i].allocation,
+				allocated_buffer.allocation,
 				reinterpret_cast<void**>(&m_uniform_buffers[i].mapped)));
 		}
 	}
@@ -1147,30 +1127,16 @@ namespace Expectre
 		VkDeviceSize image_size = tex_width * tex_height * tex_channels;
 
 		// 1. Create staging buffer (host-visible)
-		VkBuffer staging_buffer;
-		VmaAllocation staging_alloc;
-
-		VkBufferCreateInfo buffer_info = {};
-		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_info.size = image_size;
-		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VmaAllocationCreateInfo buffer_alloc_info = {};
-		buffer_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator,
-			&buffer_info,
-			&buffer_alloc_info,
-			&staging_buffer,
-			&staging_alloc,
-			nullptr));
+		AllocatedBuffer staging = create_buffer(
+			image_size,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
 
 		// 2. Upload image data to the staging buffer
 		void* data;
-		VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging_alloc, &data));
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging.allocation, &data));
 		memcpy(data, pixels, static_cast<size_t>(image_size));
-		vmaUnmapMemory(m_allocator, staging_alloc);
+		vmaUnmapMemory(m_allocator, staging.allocation);
 
 		stbi_image_free(pixels);
 
@@ -1206,7 +1172,7 @@ namespace Expectre
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-		copy_buffer_to_image(staging_buffer, image,
+		copy_buffer_to_image(staging.buffer, image,
 			static_cast<uint32_t>(tex_width),
 			static_cast<uint32_t>(tex_height));
 
@@ -1215,7 +1181,7 @@ namespace Expectre
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		// 5. Cleanup staging buffer
-		vmaDestroyBuffer(m_allocator, staging_buffer, staging_alloc);
+		vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
 
 		// 6. Create image view
 		VkImageViewCreateInfo view_info{};
@@ -1334,32 +1300,18 @@ namespace Expectre
 
 	bool Renderer_Vk::isReady() { return m_ready; };
 
-	void Renderer_Vk::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
-		VkMemoryPropertyFlags properties, VkBuffer& buffer,
-		VkDeviceMemory& buffer_memory)
-	{
-		VkBufferCreateInfo buffer_info{};
-		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	AllocatedBuffer Renderer_Vk::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage) {
+		VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		buffer_info.size = size;
 		buffer_info.usage = usage;
 		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		VK_CHECK_RESULT(vkCreateBuffer(m_device, &buffer_info, nullptr, &buffer));
+		VmaAllocationCreateInfo alloc_info = {};
+		alloc_info.usage = memory_usage;
 
-		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(m_device, buffer, &mem_reqs);
-
-		VkMemoryAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = mem_reqs.size;
-		bool found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-			m_phys_memory_properties.memoryTypes,
-			properties, &alloc_info.memoryTypeIndex);
-		assert(found);
-
-		VK_CHECK_RESULT(vkAllocateMemory(m_device, &alloc_info, nullptr, &buffer_memory));
-
-		vkBindBufferMemory(m_device, buffer, buffer_memory, 0);
+		AllocatedBuffer result{};
+		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &alloc_info, &result.buffer, &result.allocation, nullptr));
+		return result;
 	}
 
 	void Renderer_Vk::create_image(uint32_t width, uint32_t height,
@@ -1574,9 +1526,12 @@ namespace Expectre
 		m_camera.pos += dir * m_camera.camera_speed * static_cast<float>(delta_t) / 1000.0f;
 
 		// Check if shader files have changed
-		m_frag_shader_watcher->check_for_changes();
-		m_vert_shader_watcher->check_for_changes();
-		
+		const bool frag_shader_changed = m_frag_shader_watcher->check_for_changes();
+		const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
+		if (frag_shader_changed || vert_shader_changed) {
+			create_pipeline();
+		}
+
 
 	}
 	void Renderer_Vk::on_input_event(const SDL_Event& event)
