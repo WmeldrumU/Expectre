@@ -30,6 +30,7 @@
 #include "shared.h"
 #include "VkTools.h"
 #include "Model.h"
+#include "ShaderFileWatcher.h"
 
 struct UBO
 {
@@ -85,6 +86,7 @@ namespace Expectre
 		create_texture_image_view();
 		create_texture_sampler();
 		load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj"));
+		load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj"));
 		create_geometry_buffer();
 		create_uniform_buffers();
 		create_descriptor_pool_and_sets();
@@ -94,6 +96,8 @@ namespace Expectre
 		create_sync_objects();
 
 		m_ready = true;
+		*m_frag_shader_watcher = ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert");
+		*m_vert_shader_watcher = ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/frag.frag");
 	}
 
 	void Renderer_Vk::load_model(std::string dir) {
@@ -1568,6 +1572,11 @@ namespace Expectre
 			dir = glm::normalize(dir);
 
 		m_camera.pos += dir * m_camera.camera_speed * static_cast<float>(delta_t) / 1000.0f;
+
+		// Check if shader files have changed
+		m_frag_shader_watcher->check_for_changes();
+		m_vert_shader_watcher->check_for_changes();
+		
 
 	}
 	void Renderer_Vk::on_input_event(const SDL_Event& event)

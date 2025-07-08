@@ -19,6 +19,8 @@
 #include "IRenderer.h"
 #include "observer.h"
 #include "model.h"
+#include "ShaderFileWatcher.h"
+
 #define MAX_CONCURRENT_FRAMES 2
 
 // Default fence timeout in nanoseconds
@@ -220,6 +222,10 @@ namespace Expectre
 			glm::f32vec3 forward_dir = { 0.0f, 0.0f, -1.0f };
 
 		} m_camera{};
+
+		ShaderFileWatcher *m_vert_shader_watcher = nullptr;
+		ShaderFileWatcher *m_frag_shader_watcher = nullptr;
+
 	};
 }
 #endif // RENDERER_VK_H
