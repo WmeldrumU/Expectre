@@ -4,12 +4,6 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
 
-// Renderer macros
-#define RESOLUTION_X 640
-#define RESOLUTION_Y 480
-
-#define EXTENT { RESOLUTION_X, RESOLUTION_Y }
-
 #include "RendererVk.h"
 
 #include <iostream>
@@ -42,28 +36,10 @@ struct UBO
 namespace Expectre
 {
 
-	Renderer_Vk::Renderer_Vk()
+	RendererVk::RendererVk(SDL_Window* window, uint32_t resolution_x, uint32_t resolution_y) : m_window(window), m_extent{ resolution_x, resolution_y }
 	{
 
-		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
-		{
-			SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
-			throw std::runtime_error("failed to initialize SDL!");
-		}
-
-
-		m_window = SDL_CreateWindow("Expectre",
-			RESOLUTION_X, RESOLUTION_Y,
-			SDL_WINDOW_VULKAN);
-
-		if (!m_window)
-		{
-			SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
-			throw std::runtime_error("Unable to initialize application window!");
-		}
-
 		m_enable_validation_layers = true;
-
 
 		// Core Vulkan setup
 		create_instance();
@@ -100,12 +76,12 @@ namespace Expectre
 		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 	}
 
-	void Renderer_Vk::load_model(std::string dir) {
+	void RendererVk::load_model(std::string dir) {
 		const Model& model = tools::import_model(dir, m_all_vertices, m_all_indices);
 		m_models.push_back(model);
 	}
 
-	void Renderer_Vk::cleanup_swapchain() {
+	void RendererVk::cleanup_swapchain() {
 		// Destroy depth buffer
 		vkDestroyImageView(m_device, m_depth_image_view, nullptr);
 		vkDestroyImage(m_device, m_depth_image, nullptr);
@@ -123,7 +99,7 @@ namespace Expectre
 
 	}
 
-	Renderer_Vk::~Renderer_Vk()
+	RendererVk::~RendererVk()
 	{
 		vkDeviceWaitIdle(m_device);
 
@@ -177,17 +153,12 @@ namespace Expectre
 
 		vkDestroyInstance(m_instance, nullptr);
 
-		// SDL cleanup
-		SDL_DestroyWindow(m_window);
-		//SDL_Vulkan_UnloadLibrary();
-		SDL_Quit();
-
 		m_window = nullptr;
 	}
 
-	void Renderer_Vk::create_instance()
+	void RendererVk::create_instance()
 	{
-		auto instance_extensions = tools::get_required_instance_extensions(m_window);
+		auto instance_extensions = tools::get_required_instance_extensions(m_enable_validation_layers);
 
 		// Check for validation layer support
 		VkApplicationInfo app_info = {};
@@ -217,7 +188,7 @@ namespace Expectre
 
 	}
 
-	void Renderer_Vk::create_surface()
+	void RendererVk::create_surface()
 	{
 		auto err = SDL_Vulkan_CreateSurface(m_window, m_instance, nullptr, &m_surface);
 		// Create a Vulkan surface using SDL
@@ -228,7 +199,7 @@ namespace Expectre
 		}
 	}
 
-	void Renderer_Vk::select_physical_device()
+	void RendererVk::select_physical_device()
 	{
 
 		uint32_t gpu_count = 0;
@@ -274,7 +245,7 @@ namespace Expectre
 		assert(m_chosen_phys_device != VK_NULL_HANDLE);
 	}
 
-	void Renderer_Vk::create_logical_device_and_queues()
+	void RendererVk::create_logical_device_and_queues()
 	{
 		// Queue family logic
 		uint32_t queue_families_count = 0;
@@ -346,7 +317,7 @@ namespace Expectre
 		vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
 	}
 
-	uint32_t Renderer_Vk::choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
+	uint32_t RendererVk::choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
 		VkMemoryPropertyFlags requiredFlags,
 		VkMemoryPropertyFlags preferredFlags)
 	{
@@ -396,13 +367,12 @@ namespace Expectre
 
 
 
-	void Renderer_Vk::create_swapchain()
+	void RendererVk::create_swapchain()
 	{
 		tools::SwapChainSupportDetails swapchain_support_details = tools::query_swap_chain_support(m_chosen_phys_device, m_surface);
 
 		m_surface_format = tools::choose_swap_surface_format(swapchain_support_details.formats);
 		//VkExtent2D extent = tools::choose_swap_extent(swapchain_support_details.capabilities, m_window);
-		VkExtent2D extent = EXTENT;
 
 		//uint32_t image_count = swapchain_support_details.capabilities.minImageCount + 1;
 		uint32_t image_count = MAX_CONCURRENT_FRAMES;
@@ -418,7 +388,7 @@ namespace Expectre
 		create_info.minImageCount = image_count;
 		create_info.imageFormat = m_surface_format.format;
 		create_info.imageColorSpace = m_surface_format.colorSpace;
-		create_info.imageExtent = extent;
+		create_info.imageExtent = m_extent;
 		create_info.imageArrayLayers = 1;
 		create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
@@ -449,11 +419,11 @@ namespace Expectre
 		vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, m_swapchain_images.data());
 
 		m_swapchain_image_format = m_surface_format.format;
-		m_swapchain_extent = extent;
+		m_extent = m_extent;
 
 	}
 
-	void Renderer_Vk::create_swapchain_image_views() {
+	void RendererVk::create_swapchain_image_views() {
 		m_swapchain_image_views.resize(m_swapchain_images.size());
 
 		for (auto i = 0; i < m_swapchain_images.size(); i++) {
@@ -464,7 +434,7 @@ namespace Expectre
 
 
 
-	void Renderer_Vk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+	void RendererVk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
 		VkCommandBuffer commandBuffer = begin_single_time_commands();
 
 		VkBufferCopy copyRegion{};
@@ -474,7 +444,7 @@ namespace Expectre
 		end_single_time_commands(commandBuffer);
 	}
 
-	void Renderer_Vk::create_geometry_buffer()
+	void RendererVk::create_geometry_buffer()
 	{
 		VkDeviceSize vertex_buffer_size = sizeof(Vertex) * m_all_vertices.size();
 		VkDeviceSize index_buffer_size = sizeof(uint32_t) * m_all_indices.size();
@@ -521,11 +491,11 @@ namespace Expectre
 		vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
 	}
 
-	void Renderer_Vk::create_depth_stencil()
+	void RendererVk::create_depth_stencil()
 	{
 		m_depth_format = tools::find_depth_format(m_chosen_phys_device);
 
-		create_image(m_swapchain_extent.width, m_swapchain_extent.height, m_depth_format,
+		create_image(m_extent.width, m_extent.height, m_depth_format,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -534,7 +504,7 @@ namespace Expectre
 
 	}
 
-	void Renderer_Vk::create_renderpass()
+	void RendererVk::create_renderpass()
 	{
 
 		// This function will prepare a single render pass with one subpass
@@ -616,7 +586,7 @@ namespace Expectre
 		VK_CHECK_RESULT(err);
 	}
 
-	void Renderer_Vk::create_pipeline()
+	void RendererVk::create_pipeline()
 	{
 
 		VkShaderModule vert_shader_module = tools::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
@@ -750,7 +720,7 @@ namespace Expectre
 		vkDestroyShaderModule(m_device, vert_shader_module, nullptr);
 	}
 
-	void Renderer_Vk::create_command_pool()
+	void RendererVk::create_command_pool()
 	{
 
 		VkCommandPoolCreateInfo pool_info{};
@@ -762,7 +732,7 @@ namespace Expectre
 		VK_CHECK_RESULT(vkCreateCommandPool(m_device, &pool_info, nullptr, &m_cmd_pool));
 	}
 
-	void Renderer_Vk::create_command_buffers()
+	void RendererVk::create_command_buffers()
 	{
 		m_cmd_buffers.resize(MAX_CONCURRENT_FRAMES);
 
@@ -776,7 +746,7 @@ namespace Expectre
 		VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &cmd_buf_info, m_cmd_buffers.data()));
 	}
 
-	void Renderer_Vk::create_descriptor_pool_and_sets()
+	void RendererVk::create_descriptor_pool_and_sets()
 	{
 
 		// pool
@@ -842,7 +812,7 @@ namespace Expectre
 		}
 	}
 
-	void Renderer_Vk::create_framebuffers()
+	void RendererVk::create_framebuffers()
 	{
 		VkResult err;
 
@@ -858,8 +828,8 @@ namespace Expectre
 			framebuffer_info.renderPass = m_render_pass;
 			framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
 			framebuffer_info.pAttachments = attachments.data();
-			framebuffer_info.width = RESOLUTION_X;
-			framebuffer_info.height = RESOLUTION_Y;
+			framebuffer_info.width = m_extent.width;
+			framebuffer_info.height = m_extent.height;
 			framebuffer_info.layers = 1;
 
 			// Create framebuffer
@@ -868,7 +838,7 @@ namespace Expectre
 		}
 	}
 
-	void Renderer_Vk::create_sync_objects()
+	void RendererVk::create_sync_objects()
 	{
 		m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);
 		m_finished_render_semaphores.resize(MAX_CONCURRENT_FRAMES);
@@ -908,7 +878,7 @@ namespace Expectre
 		}
 	}
 
-	void Renderer_Vk::record_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index)
+	void RendererVk::record_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index)
 	{
 		VkCommandBufferBeginInfo begin_info{};
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -928,8 +898,8 @@ namespace Expectre
 		renderpass_info.framebuffer = m_swapchain_framebuffers[image_index];
 		renderpass_info.renderArea.offset.x = 0;
 		renderpass_info.renderArea.offset.y = 0;
-		renderpass_info.renderArea.extent.width = RESOLUTION_X;
-		renderpass_info.renderArea.extent.height = RESOLUTION_Y;
+		renderpass_info.renderArea.extent.width = m_extent.width;
+		renderpass_info.renderArea.extent.height = m_extent.height;
 		renderpass_info.clearValueCount = 2;
 		renderpass_info.pClearValues = clear_col.data();
 
@@ -940,8 +910,8 @@ namespace Expectre
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float)RESOLUTION_X;
-		viewport.height = (float)RESOLUTION_Y;
+		viewport.width = (float)m_extent.width;
+		viewport.height = (float)m_extent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
@@ -950,8 +920,8 @@ namespace Expectre
 		VkRect2D scissor{};
 		scissor.offset.x = 0;
 		scissor.offset.y = 0;
-		scissor.extent.width = RESOLUTION_X;
-		scissor.extent.height = RESOLUTION_Y;
+		scissor.extent.width = m_extent.width;
+		scissor.extent.height = m_extent.height;
 
 		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
@@ -972,7 +942,7 @@ namespace Expectre
 		VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 	}
 
-	void Renderer_Vk::draw_frame()
+	void RendererVk::draw_frame()
 	{
 		vkWaitForFences(m_device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE, UINT64_MAX);
 
@@ -1023,7 +993,7 @@ namespace Expectre
 		m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
 	}
 
-	void Renderer_Vk::create_descriptor_set_layout()
+	void RendererVk::create_descriptor_set_layout()
 	{
 		VkDescriptorSetLayoutBinding ubo_layout_binding{};
 		ubo_layout_binding.binding = 0;
@@ -1057,7 +1027,7 @@ namespace Expectre
 		VK_CHECK_RESULT(vkCreatePipelineLayout(m_device, &pipeline_layout_info, nullptr, &m_pipeline_layout));
 	}
 
-	void Renderer_Vk::create_uniform_buffers()
+	void RendererVk::create_uniform_buffers()
 	{
 		VkBufferCreateInfo buffer_info{};
 		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1084,7 +1054,7 @@ namespace Expectre
 		}
 	}
 
-	void Renderer_Vk::update_uniform_buffer()
+	void RendererVk::update_uniform_buffer()
 	{
 		static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -1100,14 +1070,14 @@ namespace Expectre
 		//ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.model = glm::mat4(1.0f);
 		ubo.view = glm::lookAt(m_camera.pos, m_camera.forward_dir, glm::vec3(0.0f, 1.0f, 0.0f));
-		ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(RESOLUTION_X) / RESOLUTION_Y, 0.1f, 1000.0f);
+		ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(m_extent.width) / m_extent.height, 0.1f, 1000.0f);
 
 		ubo.projection[1][1] *= -1;
 
 		memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(ubo));
 	}
 
-	const TextureVk Renderer_Vk::create_texture_from_file(std::string dir)
+	const TextureVk RendererVk::create_texture_from_file(std::string dir)
 	{
 		VkImage image;
 		VkImageView image_view;
@@ -1209,7 +1179,7 @@ namespace Expectre
 		};
 	}
 
-	void Renderer_Vk::create_texture_image()
+	void RendererVk::create_texture_image()
 	{
 		int tex_width, tex_height, tex_channels;
 		std::string dir = WORKSPACE_DIR + std::string("/assets/teapot/brick.png");
@@ -1298,9 +1268,9 @@ namespace Expectre
 	}
 
 
-	bool Renderer_Vk::isReady() { return m_ready; };
+	bool RendererVk::isReady() { return m_ready; };
 
-	AllocatedBuffer Renderer_Vk::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage) {
+	AllocatedBuffer RendererVk::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage) {
 		VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		buffer_info.size = size;
 		buffer_info.usage = usage;
@@ -1314,7 +1284,7 @@ namespace Expectre
 		return result;
 	}
 
-	void Renderer_Vk::create_image(uint32_t width, uint32_t height,
+	void RendererVk::create_image(uint32_t width, uint32_t height,
 		VkFormat format, VkImageTiling tiling,
 		VkImageUsageFlags usage,
 		VkMemoryPropertyFlags properties,
@@ -1352,7 +1322,7 @@ namespace Expectre
 		vkBindImageMemory(m_device, image, image_memory, 0);
 	}
 
-	void Renderer_Vk::copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+	void RendererVk::copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 	{
 		VkCommandBuffer cmd_buffer = begin_single_time_commands();
 
@@ -1375,7 +1345,7 @@ namespace Expectre
 		end_single_time_commands(cmd_buffer);
 	}
 
-	VkCommandBuffer Renderer_Vk::begin_single_time_commands()
+	VkCommandBuffer RendererVk::begin_single_time_commands()
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1395,7 +1365,7 @@ namespace Expectre
 		return commandBuffer;
 	}
 
-	void Renderer_Vk::end_single_time_commands(VkCommandBuffer cmd_buffer)
+	void RendererVk::end_single_time_commands(VkCommandBuffer cmd_buffer)
 	{
 		vkEndCommandBuffer(cmd_buffer);
 
@@ -1410,7 +1380,7 @@ namespace Expectre
 		vkFreeCommandBuffers(m_device, m_cmd_pool, 1, &cmd_buffer);
 	}
 
-	void Renderer_Vk::transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
+	void RendererVk::transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
 	{
 		VkCommandBuffer cmd_buffer = begin_single_time_commands();
 
@@ -1462,7 +1432,7 @@ namespace Expectre
 		end_single_time_commands(cmd_buffer);
 	}
 
-	void Renderer_Vk::create_texture_image_view()
+	void RendererVk::create_texture_image_view()
 	{
 		VkImageViewCreateInfo view_info{};
 		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1480,7 +1450,7 @@ namespace Expectre
 			nullptr, &m_texture_image_view));
 	}
 
-	void Renderer_Vk::create_texture_sampler()
+	void RendererVk::create_texture_sampler()
 	{
 		VkSamplerCreateInfo sampler_info{};
 		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1506,7 +1476,7 @@ namespace Expectre
 		VK_CHECK_RESULT(vkCreateSampler(m_device, &sampler_info, nullptr, &m_texture_sampler));
 	}
 
-	void Renderer_Vk::update(uint64_t delta_t)
+	void RendererVk::update(uint64_t delta_t)
 	{
 		// update camera velocity
 		glm::vec3 dir(0.0f);
@@ -1534,7 +1504,7 @@ namespace Expectre
 
 
 	}
-	void Renderer_Vk::on_input_event(const SDL_Event& event)
+	void RendererVk::on_input_event(const SDL_Event& event)
 	{
 
 		// Check for up keys
@@ -1579,7 +1549,7 @@ namespace Expectre
 	}
 
 
-	void Renderer_Vk::create_memory_allocator() {
+	void RendererVk::create_memory_allocator() {
 		VmaAllocatorCreateInfo allocatorCreateInfo = {};
 		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
