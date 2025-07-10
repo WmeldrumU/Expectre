@@ -4,6 +4,10 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 project(Expectre CXX)
 option(USE_WEBGPU "Build with WebGPU support" OFF)
 
+# Noesis Include/Lib Paths
+set(NOESIS_ROOT "C:/noesis")
+include_directories(${NOESIS_ROOT}/Include)
+link_directories(${NOESIS_ROOT}/Lib/windows_x86_64)
 
 # use c++ 20, this version is required
 set(CMAKE_CXX_STANDARD 20)
@@ -15,7 +19,7 @@ find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
-find_package(Vulkan REQUIRED)
+find_package( Vulkan REQUIRED COMPONENTS shaderc_combined )
 
 file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp ${PROJECT_SOURCE_DIR}/lib/*.cpp 
 ${PROJECT_SOURCE_DIR}/lib/*.c 
@@ -34,6 +38,8 @@ set(COMMON_LIBRARIES
     assimp::assimp
     fmt::fmt
     Vulkan::Vulkan
+    Vulkan::shaderc_combined
+    Noesis
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(${PROJECT_NAME} PRIVATE
