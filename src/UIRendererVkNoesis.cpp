@@ -1,8 +1,197 @@
 #include "UIRendererVkNoesis.h"
+#include <NsRender/RenderDevice.h>
+#include <NsCore/Noesis.h>
+#include <NsRender/RenderTarget.h>
+
 #include <vulkan/vulkan.h>
 
+//#include "Shaders.h"
+
+#include <NsCore/Log.h>
+#include <NsCore/HighResTimer.h>
+#include <NsCore/DynamicCast.h>
+#include <NsCore/String.h>
+//#include <NsApp/FastLZ.h>
+#include <NsRender/Texture.h>
+#include <NsRender/RenderTarget.h>
+
+#include <stdio.h>
+#include <inttypes.h>
+
+// In Noesis, render targets are never fully used. They are always loaded with 'LOAD_OP_DONT_CARE'.
+// When doing multisampling it is very important to only resolve affected regions. On tiled
+// architectures, we can resolve the whole surface on writeback because only touched tiled will be
+// really resolved. For desktop, we need to manually resolve each region with 'vkCmdResolveImage'.
+
+#ifdef NS_PLATFORM_ANDROID
+#define RESOLVE_ON_WRITEBACK 1
+#else
+#define RESOLVE_ON_WRITEBACK 0
+#endif
+
+#define DESCRIPTOR_POOL_MAX_SETS 128
+#define PREALLOCATED_DYNAMIC_PAGES 2
+#define CBUFFER_SIZE 16 * 1024
+
+#define V(exp) \
+    NS_MACRO_BEGIN \
+        VkResult err_ = (exp); \
+        NS_ASSERT(err_ == VK_SUCCESS); \
+    NS_MACRO_END
+
+#define LOAD_INSTANCE_FUNC(x) \
+    NS_MACRO_BEGIN \
+        NS_ASSERT(mInstance != nullptr); \
+        x = (decltype(x))vkGetInstanceProcAddr(mInstance, #x); \
+        NS_ASSERT(x != nullptr); \
+    NS_MACRO_END
+
+#define LOAD_INSTANCE_EXT_FUNC(x) \
+    NS_MACRO_BEGIN \
+        NS_ASSERT(mInstance != nullptr); \
+        x = (decltype(x))vkGetInstanceProcAddr(mInstance, #x); \
+    NS_MACRO_END
+
+#define LOAD_DEVICE_FUNC(x) \
+    NS_MACRO_BEGIN \
+        NS_ASSERT(mDevice != nullptr); \
+        x = (decltype(x))vkGetDeviceProcAddr(mDevice, #x); \
+        NS_ASSERT(x != nullptr); \
+    NS_MACRO_END
+
+#define LOAD_DEVICE_EXT_FUNC(x) \
+    NS_MACRO_BEGIN \
+        NS_ASSERT(mDevice != nullptr); \
+        x = (decltype(x))vkGetDeviceProcAddr(mDevice, #x); \
+    NS_MACRO_END
+
+#ifdef NS_PROFILE
+#define VK_BEGIN_EVENT(...) \
+        NS_MACRO_BEGIN \
+            if (vkCmdDebugMarkerBeginEXT != nullptr) \
+            { \
+                char name[128]; \
+                snprintf(name, sizeof(name), __VA_ARGS__); \
+                VkDebugMarkerMarkerInfoEXT info{}; \
+                info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT; \
+                info.pMarkerName = name; \
+                vkCmdDebugMarkerBeginEXT(mCommandBuffer, &info); \
+            } \
+            else if (vkCmdBeginDebugUtilsLabelEXT != nullptr) \
+            { \
+                char name[128]; \
+                snprintf(name, sizeof(name), __VA_ARGS__); \
+                VkDebugUtilsLabelEXT info{}; \
+                info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT; \
+                info.pLabelName = name; \
+                vkCmdBeginDebugUtilsLabelEXT(mCommandBuffer, &info); \
+            } \
+        NS_MACRO_END
+#define VK_END_EVENT() \
+        NS_MACRO_BEGIN \
+            if (vkCmdDebugMarkerEndEXT != nullptr) \
+            { \
+                vkCmdDebugMarkerEndEXT(mCommandBuffer); \
+            } \
+            else if (vkCmdEndDebugUtilsLabelEXT != nullptr) \
+            { \
+                vkCmdEndDebugUtilsLabelEXT(mCommandBuffer); \
+            } \
+        NS_MACRO_END
+#define VK_NAME(obj, type, ...) \
+        NS_MACRO_BEGIN \
+            NS_ASSERT(mDevice != nullptr); \
+            if (vkDebugMarkerSetObjectNameEXT != nullptr) \
+            { \
+                char name[128]; \
+                snprintf(name, sizeof(name), __VA_ARGS__); \
+                VkDebugMarkerObjectNameInfoEXT info{}; \
+                info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
+                info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT; \
+                info.object = (uint64_t)obj; \
+                info.pObjectName = name; \
+                V(vkDebugMarkerSetObjectNameEXT(mDevice, &info)); \
+            } \
+            else if (vkSetDebugUtilsObjectNameEXT != nullptr) \
+            { \
+                char name[128]; \
+                snprintf(name, sizeof(name), __VA_ARGS__); \
+                VkDebugUtilsObjectNameInfoEXT info{}; \
+                info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT; \
+                info.objectType = VK_OBJECT_TYPE_##type; \
+                info.objectHandle = (uint64_t)obj; \
+                info.pObjectName = name; \
+                V(vkSetDebugUtilsObjectNameEXT(mDevice, &info)); \
+            } \
+        NS_MACRO_END
+#else
+#define VK_BEGIN_EVENT(...) NS_NOOP
+#define VK_END_EVENT() NS_NOOP
+#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
+#endif
 
 namespace Expectre {
+
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////
+	class VKTexture final : public Noesis::Texture
+	{
+	public:
+		VKTexture(uint32_t hash_) : hash(hash_) {}
+
+		~VKTexture()
+		{
+			if (device)
+			{
+				device->SafeReleaseTexture(this);
+			}
+		}
+
+		uint32_t GetWidth() const override { return width; }
+		uint32_t GetHeight() const override { return height; }
+		bool HasMipMaps() const override { return levels > 1; }
+		bool IsInverted() const override { return isInverted; }
+		bool HasAlpha() const override { return hasAlpha; }
+
+		VkImage image = VK_NULL_HANDLE;
+		VkImageView view = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t levels = 0;
+
+		UIRendererVkNoesis* device = VK_NULL_HANDLE;
+
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		bool hasAlpha = true;
+		bool isInverted = false;
+
+		uint32_t hash = 0;
+	};
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////
+	class VKRenderTarget final : public Noesis::RenderTarget
+	{
+	public:
+		~VKRenderTarget()
+		{
+			color->device->SafeReleaseRenderTarget(this);
+		}
+
+		Noesis::Texture* GetTexture() override { return color; }
+
+		Noesis::Ptr<VKTexture> color;
+		Noesis::Ptr<VKTexture> colorAA;
+		Noesis::Ptr<VKTexture> stencil;
+
+		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+		VkRenderPass renderPass = VK_NULL_HANDLE;
+		VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+	};
+
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	const Noesis::DeviceCaps& UIRendererVkNoesis::GetCaps() const
 	{
@@ -43,96 +232,96 @@ namespace Expectre {
 	}
 	//
 	//	////////////////////////////////////////////////////////////////////////////////////////////////////
-	//	Noesis::Ptr<Noesis::RenderTarget> UIRendererVkNoesis::CreateRenderTarget(const char* label, uint32_t width,
-	//		uint32_t height, uint32_t samples_, bool needsStencil)
-	//	{
-	//		Ptr<Noesis::VKRenderTarget> surface = MakePtr<VKRenderTarget>();
-	//		surface->samples = GetSampleCount(samples_, mDeviceProperties.limits);
-	//
-	//		EnsureTransferCommands();
-	//
-	//		Noesis::Vector<VkImageView, 3> attachments;
-	//
-	//		if (needsStencil)
-	//		{
-	//			surface->stencil = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mStencilFormat, surface->samples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-	//				VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-	//				VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_STENCIL_BIT));
-	//			attachments.PushBack(surface->stencil->view);
-	//			ChangeLayout(mTransferCommands, surface->stencil, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	//		}
-	//
-	//		if (surface->samples > 1)
-	//		{
-	//#if RESOLVE_ON_WRITEBACK
-	//			// Multisample surface
-	//			surface->colorAA = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mBackBufferFormat, surface->samples, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-	//				VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-	//				VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
-	//			ChangeLayout(mTransferCommands, surface->colorAA, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	//			attachments.PushBack(surface->colorAA->view);
-	//
-	//			// Resolve surface
-	//			surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_SAMPLED_BIT,
-	//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
-	//			ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	//			attachments.PushBack(surface->color->view);
-	//#else
-	//			// Multisample surface
-	//			surface->colorAA = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mBackBufferFormat, surface->samples, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-	//				VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-	//				VK_IMAGE_ASPECT_COLOR_BIT));
-	//			ChangeLayout(mTransferCommands, surface->colorAA, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	//
-	//			// Resolve surface
-	//			surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_SAMPLED_BIT |
-	//				VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-	//				VK_IMAGE_ASPECT_COLOR_BIT));
-	//			attachments.PushBack(surface->colorAA->view);
-	//#endif
-	//		}
-	//		else
-	//		{
-	//			// XamlTester needs VK_IMAGE_USAGE_TRANSFER_SRC_BIT for grabbing screenshots
-	//			surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-	//				mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-	//				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-	//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
-	//			attachments.PushBack(surface->color->view);
-	//			ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	//		}
-	//
-	//		uint32_t index = Index(surface->samples);
-	//		uint32_t stencilCount = needsStencil ? 1 : 0;
-	//		NS_ASSERT(index < NS_COUNTOF(mRenderPasses));
-	//
-	//		if (NS_UNLIKELY(mRenderPasses[index][stencilCount] == VK_NULL_HANDLE))
-	//		{
-	//			VkRenderPass renderPass = CreateRenderPass(surface->samples, needsStencil);
-	//			CreatePipelines(renderPass, surface->samples);
-	//			mRenderPasses[index][stencilCount] = renderPass;
-	//		}
-	//
-	//		surface->renderPass = mRenderPasses[index][stencilCount];
-	//
-	//		VkFramebufferCreateInfo framebufferInfo{};
-	//		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	//		framebufferInfo.renderPass = surface->renderPass;
-	//		framebufferInfo.attachmentCount = attachments.Size();
-	//		framebufferInfo.pAttachments = attachments.Data();
-	//		framebufferInfo.width = width;
-	//		framebufferInfo.height = height;
-	//		framebufferInfo.layers = 1;
-	//
-	//		V(vkCreateFramebuffer(mDevice, &framebufferInfo, nullptr, &surface->framebuffer));
-	//		VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
-	//		return surface;
-	//	}
+		Noesis::Ptr<Noesis::RenderTarget> UIRendererVkNoesis::CreateRenderTarget(const char* label, uint32_t width,
+			uint32_t height, uint32_t samples_, bool needsStencil)
+		{
+			Noesis::Ptr<VKRenderTarget> surface = Noesis::MakePtr<VKRenderTarget>();
+			surface->samples = GetSampleCount(samples_, mDeviceProperties.limits);
+	
+			EnsureTransferCommands();
+	
+			Noesis::Vector<VkImageView, 3> attachments;
+	
+			if (needsStencil)
+			{
+				surface->stencil = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mStencilFormat, surface->samples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+					VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+					VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_STENCIL_BIT));
+				attachments.PushBack(surface->stencil->view);
+				ChangeLayout(mTransferCommands, surface->stencil, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+			}
+	
+			if (surface->samples > 1)
+			{
+	#if RESOLVE_ON_WRITEBACK
+				// Multisample surface
+				surface->colorAA = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mBackBufferFormat, surface->samples, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+					VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+					VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
+				ChangeLayout(mTransferCommands, surface->colorAA, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+				attachments.PushBack(surface->colorAA->view);
+	
+				// Resolve surface
+				surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_SAMPLED_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
+				ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				attachments.PushBack(surface->color->view);
+	#else
+				// Multisample surface
+				surface->colorAA = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mBackBufferFormat, surface->samples, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+					VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT));
+				ChangeLayout(mTransferCommands, surface->colorAA, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	
+				// Resolve surface
+				surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_SAMPLED_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT));
+				attachments.PushBack(surface->colorAA->view);
+	#endif
+			}
+			else
+			{
+				// XamlTester needs VK_IMAGE_USAGE_TRANSFER_SRC_BIT for grabbing screenshots
+				surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+					mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
+				attachments.PushBack(surface->color->view);
+				ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			}
+	
+			uint32_t index = Index(surface->samples);
+			uint32_t stencilCount = needsStencil ? 1 : 0;
+			NS_ASSERT(index < NS_COUNTOF(mRenderPasses));
+	
+			if (NS_UNLIKELY(mRenderPasses[index][stencilCount] == VK_NULL_HANDLE))
+			{
+				VkRenderPass renderPass = CreateRenderPass(surface->samples, needsStencil);
+				CreatePipelines(renderPass, surface->samples);
+				mRenderPasses[index][stencilCount] = renderPass;
+			}
+	
+			surface->renderPass = mRenderPasses[index][stencilCount];
+	
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = surface->renderPass;
+			framebufferInfo.attachmentCount = attachments.Size();
+			framebufferInfo.pAttachments = attachments.Data();
+			framebufferInfo.width = width;
+			framebufferInfo.height = height;
+			framebufferInfo.layers = 1;
+	
+			V(vkCreateFramebuffer(mDevice, &framebufferInfo, nullptr, &surface->framebuffer));
+			VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
+			return surface;
+		}
 	//
 	//	////////////////////////////////////////////////////////////////////////////////////////////////////
 	//	Ptr<RenderTarget> UIRendererVkNoesis::CloneRenderTarget(const char* label, RenderTarget* surface_)

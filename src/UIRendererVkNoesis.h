@@ -1,13 +1,13 @@
 #ifndef UI_RENDERER_VK_NOESIS_H
 #define UI_RENDERER_VK_NOESIS_H
 #include <NsRender/RenderDevice.h>
-//#include <NsRender/VKFactory.h>
+#include <NsRender/VKFactory.h>
 #include <NsCore/HashMap.h>
 #include <NsCore/Vector.h>
 #include <NsCore/String.h>
 #include <vulkan/vulkan.h>
 
-namespace Expectre {
+namespace Expectre { 
 	class UIRendererVkNoesis : public Noesis::RenderDevice {
 		/// From RenderDevice
 //@{
@@ -19,6 +19,10 @@ namespace Expectre {
 			Noesis::RenderTarget* surface) override;
 		Noesis::Ptr<Noesis::Texture> CreateTexture(const char* label, uint32_t width, uint32_t height,
 			uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data) override;
+		Noesis::Ptr<Noesis::Texture> CreateTexture(const char* label, uint32_t width, uint32_t height,
+			uint32_t levels, VkFormat format, VkSampleCountFlagBits samples, VkImageUsageFlags usage,
+			VkMemoryPropertyFlags memFlags, VkImageAspectFlags aspect);
+
 		void UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y,
 			uint32_t width, uint32_t height, const void* data) override;
 		void BeginOffscreenRender() override;
@@ -36,10 +40,29 @@ namespace Expectre {
 		void UnmapIndices() override;
 		void DrawBatch(const Noesis::Batch& batch) override;
 		//@}
+
+		void SafeReleaseTexture(Noesis::Texture* texture);
+		void SafeReleaseRenderTarget(Noesis::RenderTarget* surface);
+		void SafeReleaseBuffer(VkBuffer buffer, VkDeviceMemory memory);
+		void EnsureTransferCommands();
+		void ChangeLayout(VkCommandBuffer commands, Noesis::Texture* texture, VkImageLayout layout);
+	
+
 	private:
+		VkRenderPass CreateRenderPass(VkSampleCountFlagBits samples, bool needsStencil);
+
+		void CreatePipelines(const char* label, uint8_t shader, VkRenderPass renderPass,
+			VkGraphicsPipelineCreateInfo& pipelineInfo, uint32_t custom);
+		void CreatePipelines(const char* label, uint8_t shader, VkRenderPass renderPass,
+			VkShaderModule psModule, VkPipelineLayout layout, VkSampleCountFlagBits sampleCount,
+			uint32_t custom);
+		void CreatePipelines(VkRenderPass renderPass, VkSampleCountFlagBits sampleCount);
+		void DestroyPipelines();
+
 		Noesis::DeviceCaps m_caps;
 
-
+		VkDevice mDevice = VK_NULL_HANDLE;
+		VkCommandBuffer mTransferCommands = VK_NULL_HANDLE;
 		bool mStereoSupport;
 		bool mHasExtendedDynamicState;
 		VkPhysicalDeviceMemoryProperties mMemoryProperties;
