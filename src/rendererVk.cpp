@@ -25,6 +25,7 @@
 #include "VkTools.h"
 #include "Model.h"
 #include "ShaderFileWatcher.h"
+#include "UIRendererVkNoesis.h"
 
 struct UBO
 {
@@ -67,6 +68,7 @@ namespace Expectre
 		create_uniform_buffers();
 		create_descriptor_pool_and_sets();
 		create_command_buffers();
+		create_ui_renderer();
 
 		// Synchronization
 		create_sync_objects();
@@ -1560,4 +1562,16 @@ namespace Expectre
 		vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 	}
 
+	void RendererVk::create_ui_renderer() {
+		RendererInfoVk renderer_info{};
+		renderer_info.instance = m_instance;
+		renderer_info.phys_device = m_chosen_phys_device;
+		renderer_info.device = m_device;
+		renderer_info.command_bufffers = m_cmd_buffers;
+		renderer_info.current_frame = m_current_frame;
+		renderer_info.queue_submit_function = [this](VkCommandBuffer cmd) {
+			end_single_time_commands(cmd);
+			};
+		//m_ui_renderer = std::make_unique<UIRendererVkNoesis>(renderer_info);
+	}
 }

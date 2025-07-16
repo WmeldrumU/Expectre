@@ -48,3 +48,6 @@ TODOS
 - runtime shader compilation
 - noesis integration
 - zoom to fit
+- Create separate VkQueue for layout transitions so graphic's queue isn't blocked by resource loading
+- Add cmake logic to copy Noesis.dll to build directory
+- Move end_single_time_commands out of rendererVk to some utility/tools class
