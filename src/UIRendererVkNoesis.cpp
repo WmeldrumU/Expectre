@@ -11,18 +11,33 @@
 #include "UIRendererVkNoesis.h"
 #include "NoesisShaders.h"
 
+//#include "fastlz/fastlz.h"
+
+
+// #include "fastlz/fastlz.h"
+
 #include <NsCore/Log.h>
 #include <NsCore/HighResTimer.h>
 #include <NsCore/DynamicCast.h>
 #include <NsCore/String.h>
+#include <NsGui/IntegrationAPI.h>
+#include <NsGui/IView.h>
+#include <NsGui/IRenderer.h>
+
 //#include <NsApp/FastLZ.h>
 #include <NsRender/Texture.h>
 #include <NsRender/RenderTarget.h>
+#include <vma/vk_mem_alloc.h>
 
 #include <stdio.h>
 #include <inttypes.h>
-
-
+#include <iostream>
+// #include "../lib/fastlz/fastlz.h"
+//#include "zlib/zlib.h"
+//#include "zlib.h"
+#include "FastLZ.h"
+#include "Time.h"
+#include <chrono>
 using namespace Noesis;
 //using namespace NoesisApp;
 using namespace Expectre;
@@ -351,6 +366,20 @@ namespace
 }
 
 void UIRendererVkNoesis::Draw(uint32_t current_frame) {
+	
+	mView->Update(Time::Instance().RunningTimeSeconds());
+	auto* noesisRenderer = mView->GetRenderer();
+	noesisRenderer->UpdateRenderTree();
+	//BeginOffscreenRender();
+	noesisRenderer->RenderOffscreen();
+	//EndOffscreenRender();
+	Ptr<RenderTarget> target = CreateRenderTarget("target", 720, 480, 1, false);
+	//SetRenderTarget(target);
+
+	// This tells Noesis to start drawing to the screen (using the Vulkan command buffer)
+	//BeginOnscreenRender();
+	noesisRenderer->Render();
+	//EndOnscreenRender();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,6 +390,7 @@ UIRendererVkNoesis::UIRendererVkNoesis(const RendererInfoVk& info)
 	NS_ASSERT(info.device);
 	NS_ASSERT(info.queue_submit_function);
 
+	mAllocator = info.allocator;
 	mInstance = info.instance;
 	mPhysicalDevice = info.phys_device;
 	mDevice = info.device;
@@ -368,6 +398,37 @@ UIRendererVkNoesis::UIRendererVkNoesis(const RendererInfoVk& info)
 	mQueueFamilyIndex = info.queue_family_index;
 	mStereoSupport = false;
 	mQueueSubmit = info.queue_submit_function;
+	//mCommandbuffer = info.command_bufffers;
+	mCommandBuffers = info.command_bufffers;
+	Noesis::SetLogHandler([](const char*, uint32_t, uint32_t level, const char*, const char* msg)
+		{
+			// [TRACE] [DEBUG] [INFO] [WARNING] [ERROR]
+			const char* prefixes[] = { "T", "D", "I", "W", "E" };
+			printf("[NOESIS/%s] %s\n", prefixes[level], msg);
+		});
+	Noesis::GUI::SetLicense(NS_LICENSE_NAME, NS_LICENSE_KEY);
+
+	Noesis::GUI::Init();
+
+	// You need a view to render the user interface and interact with it. A view holds a tree of
+	// elements. The easiest way to construct a tree is from a XAML file
+	const char* xaml = R"(
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+  <TextBlock Text="Hello, Noesis!" />
+</Grid>
+)";
+	Noesis::Ptr<Noesis::FrameworkElement> root = Noesis::GUI::ParseXaml<Noesis::FrameworkElement>(xaml);
+
+
+	// You need a view to render the user interface and interact with it. A view holds a tree of
+// elements. The easiest way to construct a tree is from a XAML file
+	mView = Noesis::GUI::CreateView(root);
+	mView->SetSize(720, 480);
+
+
+	// As we are not using MSAA in this sample, we enable PPAA here. PPAA is a cheap antialising
+	// technique that extrudes the contours of the geometry smoothing them
+	mView->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
 
 	FillCaps(true); // used to be FillCaps(sRGB)
 
@@ -377,6 +438,10 @@ UIRendererVkNoesis::UIRendererVkNoesis(const RendererInfoVk& info)
 	CreateSamplers();
 	CreateTransferCommandPool();
 	CreateDescriptorPool();
+	// Once the view is created you need to get its internal renderer and initialize it with a valid
+// render device. This can be done in a separate render thread but for simplification purposes
+// we are using the same thread in this sample
+	mView->GetRenderer()->Init(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -393,6 +458,7 @@ UIRendererVkNoesis::~UIRendererVkNoesis()
 	DestroyShaders();
 	DestroyLayouts();
 	DestroyBuffers();
+	Noesis::GUI::Shutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1214,24 +1280,18 @@ Ptr<Texture> UIRendererVkNoesis::CreateTexture(const char* label, uint32_t width
 	createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	V(vkCreateImage(mDevice, &createInfo, nullptr, &texture->image));
+	VmaAllocationCreateInfo allocInfo{};
+	allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+	allocInfo.requiredFlags = memFlags;
+
+
+	VmaAllocation allocation = {};
+	VmaAllocationInfo allocationInfo = {};
+	V(vmaCreateImage(mAllocator, &createInfo, &allocInfo, &texture->image, &allocation, &allocationInfo));
+	//texture->allocation = allocation;  // Store for destruction
+
 	VK_NAME(texture->image, IMAGE, "Noesis_%s%s", label, suffix);
-
-	// Allocate memory
-	VkMemoryRequirements memoryRequirements;
-	vkGetImageMemoryRequirements(mDevice, texture->image, &memoryRequirements);
-
-	VkMemoryAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memoryRequirements.size;
-	allocInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, memFlags,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	V(vkAllocateMemory(mDevice, &allocInfo, nullptr, &texture->memory));
-	V(vkBindImageMemory(mDevice, texture->image, texture->memory, 0));
-	VK_NAME(texture->memory, DEVICE_MEMORY, "Noesis_%s%s_Mem", label, suffix);
-	NS_LOG_TRACE("Texture '%s' created (%zu KB) (Type %02d)", label,
-		(size_t)allocInfo.allocationSize / 1024, allocInfo.memoryTypeIndex);
+	NS_LOG_TRACE("Texture '%s' created (%zu KB)", label, allocationInfo.size / 1024);
 
 	// Create View
 	VkImageViewCreateInfo viewInfo{};
@@ -1458,11 +1518,8 @@ void UIRendererVkNoesis::DestroyBuffers()
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 void UIRendererVkNoesis::CreateShaders()
 {
-	//uint8_t* shaders = (uint8_t*)Alloc(FastLZ::DecompressBufferSize(Shaders));
-	uint8_t* shaders = nullptr;
-	///FastLZ::Decompress(Shaders, sizeof(Shaders), shaders);
-
-
+	uint8_t* shaders = (uint8_t*)Alloc(NoesisApp::FastLZ::DecompressBufferSize(Shaders));
+	NoesisApp::FastLZ::Decompress(Shaders, sizeof(Shaders), shaders);
 
 	for (uint32_t i = 0; i < Shader::Vertex::Count; i++)
 	{

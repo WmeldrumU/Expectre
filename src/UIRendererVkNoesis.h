@@ -15,7 +15,7 @@
 #include <NsCore/Vector.h>
 #include <NsCore/String.h>
 #include <vulkan/vulkan.h>
-
+#include <NsGui/IView.h>
 
 namespace Noesis { template<class T> class Ptr; }
 
@@ -28,7 +28,7 @@ namespace Expectre
 	class UIRendererVkNoesis final : public Noesis::RenderDevice, public IUIRenderer
 	{
 	public:
-		/// From RenderDevice
+		/// From IUIRenderer
 		//@{
 		void Draw(uint32_t current_frame) override;
 		//@}
@@ -164,6 +164,7 @@ namespace Expectre
 		VkDevice mDevice = VK_NULL_HANDLE;
 		VkPipelineCache mPipelineCache = VK_NULL_HANDLE;
 		VkCommandBuffer mCommandBuffer = VK_NULL_HANDLE;
+		std::vector<VkCommandBuffer> mCommandBuffers;
 		VkRenderPass mActiveRenderPass = VK_NULL_HANDLE;
 		uint32_t mQueueFamilyIndex = 0;
 
@@ -242,6 +243,7 @@ namespace Expectre
 		Noesis::HashMap<VkRenderPass, VkSampleCountFlagBits> mCachedPipelineRenderPasses;
 		Noesis::HashMap<uint32_t, uint32_t> mPipelineMap;
 		Noesis::Vector<VkPipeline> mPipelines;
+		Noesis::Ptr<Noesis::IView> mView;
 
 		VkShaderModule mVertexShaders[Noesis::Shader::Vertex::Count];
 		VkShaderModule mPixelShaders[Noesis::Shader::Count];
@@ -290,6 +292,8 @@ namespace Expectre
 		uint32_t mCachedConstantHash[4];
 		VkBuffer mCachedIndexBuffer;
 		VkPipeline mCachedPipeline;
+
+		VmaAllocator mAllocator;
 
 		PFN_vkCmdSetDepthTestEnableEXT vkCmdSetDepthTestEnableEXT = nullptr;
 		PFN_vkCmdSetStencilTestEnableEXT vkCmdSetStencilTestEnableEXT = nullptr;

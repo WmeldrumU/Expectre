@@ -1,5 +1,5 @@
 # Expectre
-C++20/Vulkan/SDL2 based renderer
+C++20/Vulkan/SDL3 based renderer
 
 
 ## Build
@@ -28,13 +28,18 @@ arch=x86_64
 build_type=Debug
 compiler=clang
 compiler.version=19
-compiler.cppstd=gnu20
+compiler.cppstd=20
 compiler.runtime=dynamic
 compiler.runtime_type=Debug
-compiler.runtime_version=v143
+compiler.runtime_version=v144
 
 [conf]
 tools.cmake.cmaketoolchain:generator=Visual Studio 17
+tools.build:compiler_executables = {"c": "clang-cl", "cpp": "clang-cl"}
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.compilation:verbosity=verbose
+[tool_requires]
+ninja/[*]
 ```
 
 Build commands
@@ -45,7 +50,6 @@ cmake --build build --config Debug
 ```
 
 TODOS
-- runtime shader compilation
 - noesis integration
 - zoom to fit
 - Create separate VkQueue for layout transitions so graphic's queue isn't blocked by resource loading
