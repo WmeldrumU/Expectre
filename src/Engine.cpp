@@ -5,12 +5,7 @@
 #include <spdlog/spdlog.h>
 #include "Time.h"
 
-//#include <NsGui/IntegrationAPI.h>
-//#include <NsGui/IRenderer.h>
-//#include <NsGui/IView.h>
-//#include <NsGui/Grid.h>
-//#include <NsGui/Uri.h>
-// Renderer macros
+#include <NsGui/IntegrationAPI.h>
 #define RESOLUTION_X 1280
 #define RESOLUTION_Y 720
 
@@ -20,20 +15,7 @@ namespace Expectre
 {
 	Engine::Engine()
 	{
-		//Noesis::SetLogHandler([](const char *, uint32_t, uint32_t level, const char *, const char *msg)
-		//					  {
-  //     // [TRACE] [DEBUG] [INFO] [WARNING] [ERROR]
-  //     const char* prefixes[] = { "T", "D", "I", "W", "E" };
-  //     printf("[NOESIS/%s] %s\n", prefixes[level], msg); });
 
-		//Noesis::GUI::Init();
-
-		//using namespace Noesis;
-
-		//Ptr<FrameworkElement> xaml = Noesis::GUI::LoadXaml<FrameworkElement>("Reflections.xaml");
-		//Ptr<IView> view = Noesis::GUI::CreateView(xaml);
-		//view->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
-		//view->SetSize(1024, 768);
 		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
 		{
 			SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
@@ -93,7 +75,7 @@ namespace Expectre
 			Time::Instance().Update();
 		}
 
-		// SDL cleanup
+				// SDL cleanup
 		SDL_DestroyWindow(m_window);
 		//SDL_Vulkan_UnloadLibrary();
 		SDL_Quit();

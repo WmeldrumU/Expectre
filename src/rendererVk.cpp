@@ -26,7 +26,10 @@
 #include "Model.h"
 #include "ShaderFileWatcher.h"
 #include "UIRendererVkNoesis.h"
-
+#include "Time.h"
+#include <NsRender/Texture.h>
+#include <NsRender/RenderTarget.h>
+#include <NsCore/Log.h>
 struct UBO
 {
 	glm::mat4 model;
@@ -58,9 +61,8 @@ namespace Expectre
 		create_pipeline();
 		create_command_pool();
 		create_framebuffers();
-		//std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-		create_texture_image();
-		create_texture_image_view();
+		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+		m_texture = TextureVk::create_texture_from_file(m_allocator, WORKSPACE_DIR + std::string("assest/teapot/brick/png"));
 		create_texture_sampler();
 		load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj"));
 		load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj"));
@@ -68,7 +70,7 @@ namespace Expectre
 		create_uniform_buffers();
 		create_descriptor_pool_and_sets();
 		create_command_buffers();
-		create_ui_renderer();
+		// create_ui_renderer();
 
 		// Synchronization
 		create_sync_objects();
@@ -78,38 +80,41 @@ namespace Expectre
 		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 	}
 
-	void RendererVk::load_model(std::string dir) {
-		const Model& model = tools::import_model(dir, m_all_vertices, m_all_indices);
+	void RendererVk::load_model(std::string dir)
+	{
+		const Model& model = ToolsVk::import_model(dir, m_all_vertices, m_all_indices);
 		m_models.push_back(model);
 	}
 
-	void RendererVk::cleanup_swapchain() {
+	void RendererVk::cleanup_swapchain()
+	{
 		// Destroy depth buffer
 		vkDestroyImageView(m_device, m_depth_image_view, nullptr);
 		vkDestroyImage(m_device, m_depth_image, nullptr);
 		vkFreeMemory(m_device, m_depth_image_memory, nullptr);
 
-		for (auto framebuffer : m_swapchain_framebuffers) {
+		for (auto framebuffer : m_swapchain_framebuffers)
+		{
 			vkDestroyFramebuffer(m_device, framebuffer, nullptr);
 		}
 
-		for (auto imageView : m_swapchain_image_views) {
+		for (auto imageView : m_swapchain_image_views)
+		{
 			vkDestroyImageView(m_device, imageView, nullptr);
 		}
 
 		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-
 	}
 
 	RendererVk::~RendererVk()
 	{
 		vkDeviceWaitIdle(m_device);
 
-		m_ui_renderer.reset();
-
+		// m_ui_renderer.reset();
 
 		// Destroy synchronization objects
-		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
+		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
+		{
 			vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
 			vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
 			vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
@@ -120,7 +125,8 @@ namespace Expectre
 		vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
 
 		// Destroy uniform buffers
-		for (auto& ub : m_uniform_buffers) {
+		for (auto& ub : m_uniform_buffers)
+		{
 			vkDestroyBuffer(m_device, ub.allocated_buffer.buffer, nullptr);
 			vmaUnmapMemory(m_allocator, ub.allocated_buffer.allocation);
 			vmaFreeMemory(m_allocator, ub.allocated_buffer.allocation);
@@ -136,12 +142,13 @@ namespace Expectre
 		vkDestroyPipeline(m_device, m_pipeline, nullptr);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 
 		// Destroy texture resources
 		vkDestroySampler(m_device, m_texture_sampler, nullptr);
-		vkDestroyImageView(m_device, m_texture_image_view, nullptr);
-		vkDestroyImage(m_device, m_texture_image, nullptr);
-		vmaFreeMemory(m_allocator, m_texture_image_allocation);
+		vkDestroyImageView(m_device, m_texture.image_view, nullptr);
+		vkDestroyImage(m_device, m_texture.image, nullptr);
+		vmaFreeMemory(m_allocator, m_texture.allocation);
 
 		// Destroy command pool
 		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
@@ -162,7 +169,7 @@ namespace Expectre
 
 	void RendererVk::create_instance()
 	{
-		auto instance_extensions = tools::get_required_instance_extensions(m_enable_validation_layers);
+		auto instance_extensions = ToolsVk::get_required_instance_extensions(m_enable_validation_layers);
 
 		// Check for validation layer support
 		VkApplicationInfo app_info = {};
@@ -181,15 +188,15 @@ namespace Expectre
 
 		VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
 
-		if (m_enable_validation_layers) {
-			tools::populate_debug_messenger_create_info(debug_create_info);
+		if (m_enable_validation_layers)
+		{
+			ToolsVk::populate_debug_messenger_create_info(debug_create_info);
 			create_info.enabledLayerCount = m_validation_layers.size();
 			create_info.ppEnabledLayerNames = m_validation_layers.data();
 			create_info.pNext = &debug_create_info;
 		}
 
 		VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
-
 	}
 
 	void RendererVk::create_surface()
@@ -212,8 +219,8 @@ namespace Expectre
 		gpus.resize(gpu_count);
 		vkEnumeratePhysicalDevices(m_instance, &gpu_count, gpus.data());
 
-		for (auto& gpu : gpus) {
-
+		for (auto& gpu : gpus)
+		{
 
 			VkPhysicalDeviceProperties phys_properties{};
 			vkGetPhysicalDeviceProperties(gpu, &phys_properties);
@@ -235,7 +242,6 @@ namespace Expectre
 				std::cout << heap.size << std::endl;
 				std::cout << "flags: " << heap.flags << std::endl;
 			}
-
 
 			if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
 				m_chosen_phys_device == VK_NULL_HANDLE)
@@ -305,7 +311,6 @@ namespace Expectre
 		requiredFeatures.samplerAnisotropy = VK_TRUE;
 		requiredFeatures.fillModeNonSolid = VK_TRUE;
 
-
 		std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 		VkDeviceCreateInfo device_create_info{};
@@ -371,16 +376,14 @@ namespace Expectre
 		return selected_type;
 	}
 
-
-
 	void RendererVk::create_swapchain()
 	{
-		tools::SwapChainSupportDetails swapchain_support_details = tools::query_swap_chain_support(m_chosen_phys_device, m_surface);
+		ToolsVk::SwapChainSupportDetails swapchain_support_details = ToolsVk::query_swap_chain_support(m_chosen_phys_device, m_surface);
 
-		m_surface_format = tools::choose_swap_surface_format(swapchain_support_details.formats);
-		//VkExtent2D extent = tools::choose_swap_extent(swapchain_support_details.capabilities, m_window);
+		m_surface_format = ToolsVk::choose_swap_surface_format(swapchain_support_details.formats);
+		// VkExtent2D extent = tools::choose_swap_extent(swapchain_support_details.capabilities, m_window);
 
-		//uint32_t image_count = swapchain_support_details.capabilities.minImageCount + 1;
+		// uint32_t image_count = swapchain_support_details.capabilities.minImageCount + 1;
 		uint32_t image_count = MAX_CONCURRENT_FRAMES;
 		if (swapchain_support_details.capabilities.maxImageCount > 0 &&
 			image_count > swapchain_support_details.capabilities.maxImageCount)
@@ -398,16 +401,17 @@ namespace Expectre
 		create_info.imageArrayLayers = 1;
 		create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-
-		tools::QueueFamilyIndices indices = tools::findQueueFamilies(m_chosen_phys_device, m_surface);
+		ToolsVk::QueueFamilyIndices indices = ToolsVk::findQueueFamilies(m_chosen_phys_device, m_surface);
 		uint32_t queue_family_indices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
-		if (indices.graphicsFamily != indices.presentFamily) {
+		if (indices.graphicsFamily != indices.presentFamily)
+		{
 			create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 			create_info.queueFamilyIndexCount = 2;
 			create_info.pQueueFamilyIndices = queue_family_indices;
 		}
-		else {
+		else
+		{
 			create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		}
 
@@ -416,7 +420,8 @@ namespace Expectre
 		create_info.presentMode = PRESENT_MODE;
 		create_info.clipped = VK_TRUE;
 
-		if (vkCreateSwapchainKHR(m_device, &create_info, nullptr, &m_swapchain) != VK_SUCCESS) {
+		if (vkCreateSwapchainKHR(m_device, &create_info, nullptr, &m_swapchain) != VK_SUCCESS)
+		{
 			throw std::runtime_error("failed to create swap chain!");
 		}
 
@@ -426,28 +431,28 @@ namespace Expectre
 
 		m_swapchain_image_format = m_surface_format.format;
 		m_extent = m_extent;
-
 	}
 
-	void RendererVk::create_swapchain_image_views() {
+	void RendererVk::create_swapchain_image_views()
+	{
 		m_swapchain_image_views.resize(m_swapchain_images.size());
 
-		for (auto i = 0; i < m_swapchain_images.size(); i++) {
-			m_swapchain_image_views[i] = tools::create_image_view(m_device, m_swapchain_images[i],
+		for (auto i = 0; i < m_swapchain_images.size(); i++)
+		{
+			m_swapchain_image_views[i] = ToolsVk::create_image_view(m_device, m_swapchain_images[i],
 				m_swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	}
 
-
-
-	void RendererVk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-		VkCommandBuffer commandBuffer = begin_single_time_commands();
+	void RendererVk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+	{
+		VkCommandBuffer commandBuffer = ToolsVk::begin_single_time_commands(m_device, m_cmd_pool);
 
 		VkBufferCopy copyRegion{};
 		copyRegion.size = size;
 		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-		end_single_time_commands(commandBuffer);
+		ToolsVk::end_single_time_commands(m_device, m_cmd_pool, commandBuffer, m_graphics_queue);
 	}
 
 	void RendererVk::create_geometry_buffer()
@@ -460,7 +465,7 @@ namespace Expectre
 
 		// === STAGING BUFFERS ===
 
-		AllocatedBuffer vertex_staging = create_buffer(vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		AllocatedBuffer vertex_staging = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY);
 
 		VmaAllocationCreateInfo staging_alloc_info = {};
@@ -471,7 +476,7 @@ namespace Expectre
 		memcpy(data, m_all_vertices.data(), static_cast<size_t>(vertex_buffer_size));
 		vmaUnmapMemory(m_allocator, vertex_staging.allocation);
 
-		AllocatedBuffer index_staging = create_buffer(index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		AllocatedBuffer index_staging = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY);
 
 		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
@@ -483,10 +488,10 @@ namespace Expectre
 		device_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
 		// Vertex buffer (device-local)
-		m_geometry_buffer.vertices = create_buffer(vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		m_geometry_buffer.vertices = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VMA_MEMORY_USAGE_GPU_ONLY);
 		// Index buffer (device-local)
-		m_geometry_buffer.indices = create_buffer(index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		m_geometry_buffer.indices = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VMA_MEMORY_USAGE_GPU_ONLY);
 		// === COPY ===
 		copy_buffer(vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
@@ -499,15 +504,14 @@ namespace Expectre
 
 	void RendererVk::create_depth_stencil()
 	{
-		m_depth_format = tools::find_depth_format(m_chosen_phys_device);
+		m_depth_format = ToolsVk::find_depth_format(m_chosen_phys_device);
 
 		create_image(m_extent.width, m_extent.height, m_depth_format,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			m_depth_image, m_depth_image_memory);
-		m_depth_image_view = tools::create_image_view(m_device, m_depth_image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
-
+		m_depth_image_view = ToolsVk::create_image_view(m_device, m_depth_image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	void RendererVk::create_renderpass()
@@ -532,11 +536,11 @@ namespace Expectre
 		// attachments[1].flags = 0;
 		attachments[1].format = m_depth_format;
 		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;                           // Clear depth at start of first subpass
-		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;                     // We don't need depth after render pass has finished (DONT_CARE may result in better performance)
-		attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;                // No stencil
-		attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;              // No Stencil
-		attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;                      // Layout at render pass start. Initial doesn't matter, so we use undefined
+		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;						   // Clear depth at start of first subpass
+		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;					   // We don't need depth after render pass has finished (DONT_CARE may result in better performance)
+		attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;				   // No stencil
+		attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;			   // No Stencil
+		attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;					   // Layout at render pass start. Initial doesn't matter, so we use undefined
 		attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL; // Transition to depth/stencil attachment
 
 		VkAttachmentReference color_ref = {};
@@ -559,21 +563,17 @@ namespace Expectre
 		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependencies[0].dstSubpass = 0;
 		dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-			| VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-		dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 		dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 		// 2) Subpass 0 -> External: sync store + final transition
 		dependencies[1].srcSubpass = 0;
 		dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 		dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
 		dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -587,16 +587,18 @@ namespace Expectre
 		render_pass_info.pDependencies = dependencies.data();
 
 		VkResult err;
+
 		err = vkCreateRenderPass(m_device, &render_pass_info, nullptr, &m_render_pass);
 		assert(!err);
+
 		VK_CHECK_RESULT(err);
 	}
 
 	void RendererVk::create_pipeline()
 	{
 
-		VkShaderModule vert_shader_module = tools::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
-		VkShaderModule frag_shader_module = tools::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/frag.spv")));
+		VkShaderModule vert_shader_module = ToolsVk::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
+		VkShaderModule frag_shader_module = ToolsVk::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/frag.spv")));
 
 		VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
 		vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -611,7 +613,7 @@ namespace Expectre
 		frag_shader_stage_info.pName = "main";
 
 		VkPipelineShaderStageCreateInfo shader_stages[] = { vert_shader_stage_info,
-								   frag_shader_stage_info };
+														   frag_shader_stage_info };
 
 		VkVertexInputBindingDescription binding_description{};
 		binding_description.binding = 0;
@@ -688,8 +690,8 @@ namespace Expectre
 		color_blend_info.blendConstants[3] = 0.0f;
 
 		std::vector<VkDynamicState> dynamic_states = {
-		  VK_DYNAMIC_STATE_VIEWPORT,
-		  VK_DYNAMIC_STATE_SCISSOR };
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR };
 		VkPipelineDynamicStateCreateInfo dynamic_state{};
 		dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamic_state.dynamicStateCount = static_cast<uint32_t>(dynamic_states.size());
@@ -734,7 +736,6 @@ namespace Expectre
 		pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		pool_info.queueFamilyIndex = m_graphics_queue_family_index;
 
-
 		VK_CHECK_RESULT(vkCreateCommandPool(m_device, &pool_info, nullptr, &m_cmd_pool));
 	}
 
@@ -747,7 +748,6 @@ namespace Expectre
 		cmd_buf_info.commandPool = m_cmd_pool;
 		cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cmd_buf_info.commandBufferCount = static_cast<uint32_t>(m_cmd_buffers.size());
-
 
 		VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &cmd_buf_info, m_cmd_buffers.data()));
 	}
@@ -794,7 +794,7 @@ namespace Expectre
 
 			VkDescriptorImageInfo image_info{};
 			image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_info.imageView = m_texture_image_view;
+			image_info.imageView = m_texture.image_view;
 			image_info.sampler = m_texture_sampler;
 
 			std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
@@ -826,7 +826,7 @@ namespace Expectre
 		for (auto i = 0; i < m_swapchain_image_views.size(); i++)
 		{
 			std::array<VkImageView, 2> attachments{
-			  m_swapchain_image_views[i], m_depth_image_view };
+				m_swapchain_image_views[i], m_depth_image_view };
 
 			// All framebuffers use same renderpass setup
 			VkFramebufferCreateInfo framebuffer_info{};
@@ -945,9 +945,14 @@ namespace Expectre
 
 		vkCmdEndRenderPass(command_buffer);
 
-		
-		//m_ui_renderer->Draw(m_current_frame);
-		
+		if (m_ui_renderer)
+		{
+			auto* ui_renderer = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
+			ui_renderer->Draw(command_buffer, m_swapchain_images[image_index]);
+		}
+
+		// m_ui_renderer->Draw(m_current_frame);
+
 		VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 	}
 
@@ -1073,10 +1078,10 @@ namespace Expectre
 		glm::vec3 end{ 0.0f, 3.0f, -5.0f };
 		float t = sin(time / 4.0f * glm::pi<float>()) * 0.5f + 0.5f;
 
-		//glm::vec3 camera_pos = (1.0f - t) * start + t * end;
+		// glm::vec3 camera_pos = (1.0f - t) * start + t * end;
 
 		UBO ubo{};
-		//ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		// ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.model = glm::mat4(1.0f);
 		ubo.view = glm::lookAt(m_camera.pos, m_camera.forward_dir, glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(m_extent.width) / m_extent.height, 0.1f, 1000.0f);
@@ -1086,212 +1091,10 @@ namespace Expectre
 		memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(ubo));
 	}
 
-	const TextureVk RendererVk::create_texture_from_file(std::string dir)
-	{
-		VkImage image;
-		VkImageView image_view;
-		VmaAllocation image_allocation;
-
-		int tex_width, tex_height, tex_channels;
-		stbi_uc* pixels = stbi_load(dir.c_str(),
-			&tex_width, &tex_height,
-			&tex_channels, 0);
-
-		if (!pixels)
-		{
-			spdlog::error("Failed to load texture!");
-			std::terminate();
-		}
-
-		VkDeviceSize image_size = tex_width * tex_height * tex_channels;
-
-		// 1. Create staging buffer (host-visible)
-		AllocatedBuffer staging = create_buffer(
-			image_size,
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_MEMORY_USAGE_CPU_ONLY);
-
-		// 2. Upload image data to the staging buffer
-		void* data;
-		VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging.allocation, &data));
-		memcpy(data, pixels, static_cast<size_t>(image_size));
-		vmaUnmapMemory(m_allocator, staging.allocation);
-
-		stbi_image_free(pixels);
-
-		// 3. Create GPU texture image (device-local)
-		VkImageCreateInfo image_info = {};
-		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.extent.width = static_cast<uint32_t>(tex_width);
-		image_info.extent.height = static_cast<uint32_t>(tex_height);
-		image_info.extent.depth = 1;
-		image_info.mipLevels = 1;
-		image_info.arrayLayers = 1;
-		image_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-		image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		image_info.flags = 0;
-
-		VmaAllocationCreateInfo image_alloc_info = {};
-		image_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-		VK_CHECK_RESULT(vmaCreateImage(m_allocator,
-			&image_info,
-			&image_alloc_info,
-			&image,
-			&image_allocation,
-			nullptr));
-
-		// 4. Transfer layout and copy data
-		transition_image_layout(image, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		copy_buffer_to_image(staging.buffer, image,
-			static_cast<uint32_t>(tex_width),
-			static_cast<uint32_t>(tex_height));
-
-		transition_image_layout(image, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-		// 5. Cleanup staging buffer
-		vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
-
-		// 6. Create image view
-		VkImageViewCreateInfo view_info{};
-		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view_info.image = image;
-		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		view_info.subresourceRange.baseMipLevel = 0;
-		view_info.subresourceRange.levelCount = 1;
-		view_info.subresourceRange.baseArrayLayer = 0;
-		view_info.subresourceRange.layerCount = 1;
-
-		VK_CHECK_RESULT(vkCreateImageView(m_device,
-			&view_info,
-			nullptr, &image_view));
-
-		// Package the texure data 
-		return TextureVk{
-			.image = image,
-			.image_view = image_view,
-			.allocation = image_allocation,
-			.image_create_info = image_info,
-			.image_view_info = view_info,
-		};
-	}
-
-	void RendererVk::create_texture_image()
-	{
-		int tex_width, tex_height, tex_channels;
-		std::string dir = WORKSPACE_DIR + std::string("/assets/teapot/brick.png");
-		stbi_uc* pixels = stbi_load(dir.c_str(),
-			&tex_width, &tex_height,
-			&tex_channels, STBI_rgb_alpha);
-
-		if (!pixels)
-		{
-			spdlog::error("Failed to load texture!");
-			std::terminate();
-		}
-
-		VkDeviceSize size_on_vkdevice = tex_width * tex_height * STBI_rgb_alpha;
-
-		// 1. Create staging buffer (host-visible)
-		VkBuffer staging_buffer;
-		VmaAllocation staging_alloc;
-
-		VkBufferCreateInfo buffer_info = {};
-		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_info.size = size_on_vkdevice;
-		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VmaAllocationCreateInfo buffer_alloc_info = {};
-		buffer_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator,
-			&buffer_info,
-			&buffer_alloc_info,
-			&staging_buffer,
-			&staging_alloc,
-			nullptr));
-
-		// 2. Upload image data to the staging buffer
-		void* data;
-		VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging_alloc, &data));
-		memcpy(data, pixels, static_cast<size_t>(size_on_vkdevice));
-		vmaUnmapMemory(m_allocator, staging_alloc);
-
-		stbi_image_free(pixels);
-
-		// 3. Create GPU texture image (device-local)
-		VkImageCreateInfo image_info = {};
-		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.extent.width = static_cast<uint32_t>(tex_width);
-		image_info.extent.height = static_cast<uint32_t>(tex_height);
-		image_info.extent.depth = 1;
-		image_info.mipLevels = 1;
-		image_info.arrayLayers = 1;
-		image_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-		image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		image_info.flags = 0;
-
-		VmaAllocationCreateInfo image_alloc_info = {};
-		image_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-		VK_CHECK_RESULT(vmaCreateImage(m_allocator,
-			&image_info,
-			&image_alloc_info,
-			&m_texture_image,
-			&m_texture_image_allocation,
-			nullptr));
-
-		// 4. Transfer layout and copy data
-		transition_image_layout(m_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		copy_buffer_to_image(staging_buffer, m_texture_image,
-			static_cast<uint32_t>(tex_width),
-			static_cast<uint32_t>(tex_height));
-
-		transition_image_layout(m_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-		// 5. Cleanup staging buffer
-		vmaDestroyBuffer(m_allocator, staging_buffer, staging_alloc);
-	}
-
 
 	bool RendererVk::isReady() { return m_ready; };
 
-	AllocatedBuffer RendererVk::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage) {
-		VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-		buffer_info.size = size;
-		buffer_info.usage = usage;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		VmaAllocationCreateInfo alloc_info = {};
-		alloc_info.usage = memory_usage;
-
-		AllocatedBuffer result{};
-		VK_CHECK_RESULT(vmaCreateBuffer(m_allocator, &buffer_info, &alloc_info, &result.buffer, &result.allocation, nullptr));
-		return result;
-	}
 
 	void RendererVk::create_image(uint32_t width, uint32_t height,
 		VkFormat format, VkImageTiling tiling,
@@ -1323,7 +1126,7 @@ namespace Expectre
 		VkMemoryAllocateInfo alloc_info{};
 		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		alloc_info.allocationSize = mem_reqs.size;
-		bool found = tools::find_matching_memory(mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes,
+		bool found = ToolsVk::find_matching_memory(mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes,
 			properties, &alloc_info.memoryTypeIndex);
 		assert(found);
 		VK_CHECK_RESULT(vkAllocateMemory(m_device, &alloc_info, nullptr, &image_memory));
@@ -1331,133 +1134,7 @@ namespace Expectre
 		vkBindImageMemory(m_device, image, image_memory, 0);
 	}
 
-	void RendererVk::copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
-	{
-		VkCommandBuffer cmd_buffer = begin_single_time_commands();
 
-		VkBufferImageCopy region{};
-		region.bufferOffset = 0;
-		region.bufferRowLength = 0;
-		region.bufferImageHeight = 0;
-		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		region.imageSubresource.mipLevel = 0;
-		region.imageSubresource.baseArrayLayer = 0;
-		region.imageSubresource.layerCount = 1;
-		region.imageOffset = { 0, 0, 0 };
-		region.imageExtent = {
-		  width,
-		  height,
-		  1 };
-
-		vkCmdCopyBufferToImage(cmd_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-		end_single_time_commands(cmd_buffer);
-	}
-
-	VkCommandBuffer RendererVk::begin_single_time_commands()
-	{
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = m_cmd_pool;
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(m_device, &allocInfo, &commandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-		return commandBuffer;
-	}
-
-	void RendererVk::end_single_time_commands(VkCommandBuffer cmd_buffer)
-	{
-		VK_CHECK_RESULT(vkEndCommandBuffer(cmd_buffer));
-
-		VkSubmitInfo submit_info{};
-		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit_info.commandBufferCount = 1;
-		submit_info.pCommandBuffers = &cmd_buffer;
-
-		vkQueueSubmit(m_graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-		vkQueueWaitIdle(m_graphics_queue);
-
-		vkFreeCommandBuffers(m_device, m_cmd_pool, 1, &cmd_buffer);
-	}
-
-	void RendererVk::transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
-	{
-		VkCommandBuffer cmd_buffer = begin_single_time_commands();
-
-		VkImageMemoryBarrier barrier{};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.oldLayout = old_layout;
-		barrier.newLayout = new_layout;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = image;
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = 1;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-
-		VkPipelineStageFlags source_stage;
-		VkPipelineStageFlags dest_stage;
-
-		if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-		{
-			barrier.srcAccessMask = 0;
-			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-			source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-			dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		}
-		else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		{
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-			source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-			dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		}
-		else
-		{
-			throw std::invalid_argument("unsupported layout transition!");
-		}
-
-		vkCmdPipelineBarrier(
-			cmd_buffer,
-			source_stage, dest_stage,
-			0,
-			0, nullptr,
-			0, nullptr,
-			1, &barrier);
-
-		end_single_time_commands(cmd_buffer);
-	}
-
-	void RendererVk::create_texture_image_view()
-	{
-		VkImageViewCreateInfo view_info{};
-		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view_info.image = m_texture_image;
-		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
-		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		view_info.subresourceRange.baseMipLevel = 0;
-		view_info.subresourceRange.levelCount = 1;
-		view_info.subresourceRange.baseArrayLayer = 0;
-		view_info.subresourceRange.layerCount = 1;
-
-		VK_CHECK_RESULT(vkCreateImageView(m_device,
-			&view_info,
-			nullptr, &m_texture_image_view));
-	}
 
 	void RendererVk::create_texture_sampler()
 	{
@@ -1507,10 +1184,14 @@ namespace Expectre
 		// Check if shader files have changed
 		const bool frag_shader_changed = m_frag_shader_watcher->check_for_changes();
 		const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
-		if (frag_shader_changed || vert_shader_changed) {
+		if (frag_shader_changed || vert_shader_changed)
+		{
 			create_pipeline();
 		}
 
+		// if (m_ui_renderer) {
+		//	m_ui_renderer->Update(Time::Instance().RunningTimeSeconds());
+		// }
 	}
 	void RendererVk::on_input_event(const SDL_Event& event)
 	{
@@ -1556,8 +1237,8 @@ namespace Expectre
 		}
 	}
 
-
-	void RendererVk::create_memory_allocator() {
+	void RendererVk::create_memory_allocator()
+	{
 		VmaAllocatorCreateInfo allocatorCreateInfo = {};
 		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
@@ -1568,16 +1249,177 @@ namespace Expectre
 		vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 	}
 
-	void RendererVk::create_ui_renderer() {
+	void RendererVk::create_ui_renderer()
+	{
 		RendererInfoVk renderer_info{};
 		renderer_info.instance = m_instance;
 		renderer_info.phys_device = m_chosen_phys_device;
 		renderer_info.device = m_device;
 		renderer_info.command_bufffers = m_cmd_buffers;
 		renderer_info.current_frame = m_current_frame;
-		renderer_info.queue_submit_function = [this](VkCommandBuffer cmd) {
-			end_single_time_commands(cmd);
-			};
+		renderer_info.command_buffer = m_cmd_buffers[m_current_frame];
+		/*	renderer_info.queue_submit_function = [this](VkCommandBuffer cmd)
+			{
+				ToolsVk::end_single_time_commands(cmd);
+			};*/
 		m_ui_renderer = std::make_unique<UIRendererVkNoesis>(renderer_info);
+		if (m_ui_renderer)
+		{
+			auto* ui_renderer_noesis = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
+			ui_renderer_noesis->WarmUpRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);
+
+			/*ui_renderer_noesis->CreateRend
+			ui_renderer_noesis->SetRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);
+			ui_renderer_noesis->WarmUpRenderPass(nullptr, VK_SAMPLE_COUNT_1_BIT);*/
+		}
+	}
+
+#define VK_NAME(obj, type, ...)                                           \
+	NS_MACRO_BEGIN                                                        \
+	NS_ASSERT(mDevice != nullptr);                                        \
+	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
+	{                                                                     \
+		char name[128];                                                   \
+		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+		VkDebugMarkerObjectNameInfoEXT info{};                            \
+		info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
+		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
+		info.object = (uint64_t)obj;                                      \
+		info.pObjectName = name;                                          \
+		V(vkDebugMarkerSetObjectNameEXT(mDevice, &info));                 \
+	}                                                                     \
+	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
+	{                                                                     \
+		char name[128];                                                   \
+		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+		VkDebugUtilsObjectNameInfoEXT info{};                             \
+		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;  \
+		info.objectType = VK_OBJECT_TYPE_##type;                          \
+		info.objectHandle = (uint64_t)obj;                                \
+		info.pObjectName = name;                                          \
+		V(vkSetDebugUtilsObjectNameEXT(mDevice, &info));                  \
+	}                                                                     \
+	NS_MACRO_END
+#define VK_BEGIN_EVENT(...) NS_NOOP
+#define VK_END_EVENT() NS_NOOP
+#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
+
+	const Noesis::DeviceCaps& RendererVk::GetCaps() const
+	{
+		static Noesis::DeviceCaps caps = {};
+
+		// linearRendering: true if swapchain is SRGB format
+		caps.linearRendering = (m_swapchain_image_format == VK_FORMAT_R8G8B8A8_SRGB ||
+			m_swapchain_image_format == VK_FORMAT_B8G8R8A8_SRGB);
+		caps.clipSpaceYInverted = false;
+		caps.centerPixelOffset = 0.0;
+
+		return caps;
+	}
+
+
+	Noesis::Ptr<::Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
+	{
+		//Noesis::Ptr<VKRenderTarget> surface = Noesis::MakePtr<VKRenderTarget>();
+		//surface->samples = VK_SAMPLE_COUNT_1_BIT;
+
+		//// EnsureTransferCommands();
+
+		//Noesis::Vector<VkImageView, 3> attachments;
+
+		//if (needsStencil)
+		//{
+		//	surface->stencil = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+		//															  Noesis::TextureFormat::RGBA8, surface->samples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_STENCIL_BIT));
+		//	attachments.PushBack(surface->stencil->view);
+		//	ChangeLayout(mTransferCommands, surface->stencil, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		//}
+
+		//// XamlTester needs VK_IMAGE_USAGE_TRANSFER_SRC_BIT for grabbing screenshots
+		//surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
+		//														mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+		//														VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
+		//attachments.PushBack(surface->color->view);
+		//ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		//uint32_t index = Index(surface->samples);
+		//uint32_t stencilCount = needsStencil ? 1 : 0;
+		//NS_ASSERT(index < NS_COUNTOF(mRenderPasses));
+
+		//if (NS_UNLIKELY(mRenderPasses[index][stencilCount] == VK_NULL_HANDLE))
+		//{
+		//	VkRenderPass renderPass = CreateRenderPass(surface->samples, needsStencil);
+		//	CreatePipelines(renderPass, surface->samples);
+		//	mRenderPasses[index][stencilCount] = renderPass;
+		//}
+
+		//surface->renderPass = mRenderPasses[index][stencilCount];
+
+		//VkFramebufferCreateInfo framebufferInfo{};
+		//framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		//framebufferInfo.renderPass = surface->renderPass;
+		//framebufferInfo.attachmentCount = attachments.Size();
+		//framebufferInfo.pAttachments = attachments.Data();
+		//framebufferInfo.width = width;
+		//framebufferInfo.height = height;
+		//framebufferInfo.layers = 1;
+
+		//VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
+		//VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
+		//return surface;
+		return nullptr;
+	}
+
+	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface)
+	{
+		return Noesis::Ptr<Noesis::RenderTarget>();
+	}
+	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height, uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
+	{
+		return Noesis::Ptr<Noesis::Texture>();
+	}
+	void RendererVk::UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
+	{
+	}
+	void RendererVk::BeginOffscreenRender()
+	{
+	}
+	void RendererVk::EndOffscreenRender()
+	{
+	}
+	void RendererVk::BeginOnscreenRender()
+	{
+	}
+	void RendererVk::EndOnscreenRender()
+	{
+	}
+	void RendererVk::SetRenderTarget(Noesis::RenderTarget* surface)
+	{
+	}
+	void RendererVk::BeginTile(Noesis::RenderTarget* surface, const Noesis::Tile& tile)
+	{
+	}
+	void RendererVk::EndTile(Noesis::RenderTarget* surface)
+	{
+	}
+	void RendererVk::ResolveRenderTarget(Noesis::RenderTarget* surface, const Noesis::Tile* tiles, uint32_t numTiles)
+	{
+	}
+	void* RendererVk::MapVertices(uint32_t bytes)
+	{
+		return nullptr;
+	}
+	void RendererVk::UnmapVertices()
+	{
+	}
+	void* RendererVk::MapIndices(uint32_t bytes)
+	{
+		return nullptr;
+	}
+	void RendererVk::UnmapIndices()
+	{
+	}
+	void RendererVk::DrawBatch(const Noesis::Batch& batch)
+	{
 	}
 }

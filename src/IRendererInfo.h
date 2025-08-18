@@ -20,8 +20,11 @@ namespace Expectre
 		std::vector<VkCommandBuffer> command_bufffers = std::vector<VkCommandBuffer>();
 		uint32_t current_frame{};
 		uint32_t queue_family_index{};
-		VkPipelineCache m_pipeline_cache{};
 		std::function<void(VkCommandBuffer)> queue_submit_function = nullptr;
+		VkFormat render_target_format;
+		VkExtent2D extent;
+		VkCommandPool command_pool;
+		VkCommandBuffer command_buffer;
 	};
 }
 #endif
