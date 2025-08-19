@@ -10,6 +10,10 @@
 #include <iostream>
 #include <vector>
 #include <optional>
+#include <SDL3/SDL.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp> // Include this header for glm::pi<float>()
+#include <glm/gtc/matrix_transform.hpp> // Add this include to ensure glm::perspective is available
 
 
 #include <assimp/Importer.hpp>
@@ -20,7 +24,7 @@
 #include <vulkan/vulkan_core.h>
 #include <spdlog/spdlog.h>
 
-#include "Model.h"
+#include "model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                         \
 	{                                                                                                                                              \
 		VkResult res = (f);                                                                                                                        \
@@ -47,7 +51,7 @@ namespace Expectre {
 	namespace ToolsVk
 	{
 
-		std::string errorString(VkResult errorCode)
+		static std::string errorString(VkResult errorCode)
 		{
 			switch (errorCode)
 			{
@@ -89,7 +93,7 @@ namespace Expectre {
 		// This is necessary as implementations can offer an arbitrary number of memory types with different
 		// memory properties.
 		// You can check https://vulkan.gpuinfo.org/ for details on different memory configurations
-		bool find_matching_memory(uint32_t type_bits, VkMemoryType* memory_types,
+		inline bool find_matching_memory(uint32_t type_bits, VkMemoryType* memory_types,
 			VkFlags requirements, uint32_t* mem_index)
 		{
 
@@ -111,7 +115,7 @@ namespace Expectre {
 			return false;
 		}
 
-		VkShaderModule createShaderModule(const VkDevice& device, const std::string& filename)
+		static VkShaderModule createShaderModule(const VkDevice& device, const std::string& filename)
 		{
 			std::ifstream file(filename, std::ios::ate | std::ios::binary);
 			if (!file.is_open())
@@ -139,7 +143,7 @@ namespace Expectre {
 			return shaderModule;
 		}
 
-		void printMatrix(const glm::mat4& matrix)
+		static void printMatrix(const glm::mat4& matrix)
 		{
 			for (int i = 0; i < 4; ++i)
 			{
@@ -152,7 +156,7 @@ namespace Expectre {
 			std::cout << std::endl;
 		}
 
-		glm::mat4 to_glm(const aiMatrix4x4& m)
+		static glm::mat4 to_glm(const aiMatrix4x4& m)
 		{
 			return glm::mat4(
 				m.a1, m.b1, m.c1, m.d1,
@@ -161,87 +165,8 @@ namespace Expectre {
 				m.a4, m.b4, m.c4, m.d4);
 		}
 
-		Expectre::Model import_model(const std::string& file_path, std::vector<Expectre::Vertex>& vertices, std::vector<uint32_t>& indices)
-		{
-			Assimp::Importer importer;
-			const aiScene* scene = importer.ReadFile(file_path,
-				aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
 
-			if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-			{
-				std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
-				return {};
-			}
-
-			const aiNode* root = scene->mRootNode;
-			glm::mat4 model_transform = to_glm(root->mTransformation);
-
-			Expectre::Model model{
-				.transform = model_transform };
-
-			uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());
-			uint32_t running_index_offset = static_cast<uint32_t>(indices.size());
-
-			// Iterate through each mesh
-			for (unsigned int i = 0; i < scene->mNumMeshes; i++)
-			{
-				aiMesh* ai_mesh = scene->mMeshes[i];
-				Expectre::Mesh mesh = {};
-
-				mesh.vertex_offset = static_cast<uint32_t>(vertices.size());
-				mesh.index_offset = static_cast<uint32_t>(indices.size());
-
-				// Iterate through each vertex of the mesh
-				for (unsigned int j = 0; j < ai_mesh->mNumVertices; j++)
-				{
-					Expectre::Vertex vertex;
-
-					// Positions
-					vertex.pos.x = ai_mesh->mVertices[j].x;
-					vertex.pos.y = ai_mesh->mVertices[j].y;
-					vertex.pos.z = ai_mesh->mVertices[j].z;
-
-					// Normals
-					if (ai_mesh->HasNormals())
-					{
-						vertex.normal.x = ai_mesh->mNormals[j].x;
-						vertex.normal.y = ai_mesh->mNormals[j].y;
-						vertex.normal.z = ai_mesh->mNormals[j].z;
-					}
-
-					// Texture Coordinates
-					if (ai_mesh->mTextureCoords[0])
-					{ // Check if the mesh contains texture coordinates
-						vertex.tex_coord.x = ai_mesh->mTextureCoords[0][j].x;
-						vertex.tex_coord.y = ai_mesh->mTextureCoords[0][j].y;
-					}
-					else
-					{
-						vertex.tex_coord = glm::vec2(0.0f, 0.0f);
-					}
-
-					vertices.push_back(vertex);
-				}
-
-				// Indices
-				for (auto j = 0; j < ai_mesh->mNumFaces; j++)
-				{
-					aiFace& face = ai_mesh->mFaces[j];
-					for (auto k = 0; k < face.mNumIndices; k++)
-					{
-						indices.push_back(face.mIndices[k] + mesh.vertex_offset);
-					}
-				}
-				mesh.index_offset = static_cast<uint32_t>(indices.size()) - mesh.index_offset;
-				mesh.name = std::string(ai_mesh->mName.C_Str());
-				model.meshes.push_back(mesh);
-				model.vertex_count += static_cast<uint32_t>(vertices.size());
-				model.index_count += static_cast<uint32_t>(indices.size());
-			}
-			return model;
-		}
-
-		VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window)
+		static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window)
 		{
 			if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
 			{
@@ -262,7 +187,7 @@ namespace Expectre {
 			}
 		}
 
-		VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+		static VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>& availableFormats)
 		{
 			for (const auto& availableFormat : availableFormats)
 			{
@@ -282,7 +207,7 @@ namespace Expectre {
 			std::vector<VkPresentModeKHR> present_modes;
 		};
 
-		SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice phys_device, VkSurfaceKHR surface)
+		static SwapChainSupportDetails query_swap_chain_support(VkPhysicalDevice phys_device, VkSurfaceKHR surface)
 		{
 			SwapChainSupportDetails details;
 
@@ -320,7 +245,7 @@ namespace Expectre {
 			}
 		};
 
-		QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface)
+		static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface)
 		{
 			QueueFamilyIndices indices;
 
@@ -357,7 +282,7 @@ namespace Expectre {
 			return indices;
 		}
 
-		VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
+		static VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 		{
 			VkImageViewCreateInfo view_info{};
 			view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -404,7 +329,7 @@ namespace Expectre {
 			return VK_FALSE;
 		}
 
-		void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& create_info)
+		static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& create_info)
 		{
 			create_info = {};
 			create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -413,7 +338,7 @@ namespace Expectre {
 			create_info.pfnUserCallback = debug_callback;
 		}
 
-		std::vector<const char*> get_required_instance_extensions(bool enable_validation_layers)
+		static std::vector<const char*> get_required_instance_extensions(bool enable_validation_layers)
 		{
 			uint32_t num_extensions = 0;
 
@@ -436,7 +361,7 @@ namespace Expectre {
 			return extensions;
 		}
 
-		VkFormat find_supported_format(VkPhysicalDevice phys_device, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+		static VkFormat find_supported_format(VkPhysicalDevice phys_device, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
 		{
 			for (VkFormat format : candidates)
 			{
@@ -456,7 +381,7 @@ namespace Expectre {
 			throw std::runtime_error("failed to find supported format!");
 		}
 
-		VkFormat find_depth_format(VkPhysicalDevice phys_device)
+		static VkFormat find_depth_format(VkPhysicalDevice phys_device)
 		{
 			return find_supported_format(phys_device,
 				{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -464,7 +389,7 @@ namespace Expectre {
 				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 		}
 
-		VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool command_pool)
+		static VkCommandBuffer begin_single_time_commands(VkDevice device, VkCommandPool command_pool)
 		{
 			VkCommandBufferAllocateInfo allocInfo{};
 			allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -484,7 +409,7 @@ namespace Expectre {
 			return commandBuffer;
 		}
 
-		void end_single_time_commands(VkDevice device, VkCommandPool cmd_pool, VkCommandBuffer cmd_buffer, VkQueue graphics_queue)
+		static void end_single_time_commands(VkDevice device, VkCommandPool cmd_pool, VkCommandBuffer cmd_buffer, VkQueue graphics_queue)
 		{
 			VK_CHECK_RESULT(vkEndCommandBuffer(cmd_buffer));
 
@@ -499,7 +424,7 @@ namespace Expectre {
 			vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buffer);
 		}
 
-		AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage)
+		static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage)
 		{
 			VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			buffer_info.size = size;
@@ -512,6 +437,57 @@ namespace Expectre {
 			AllocatedBuffer result{};
 			VK_CHECK_RESULT(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &result.buffer, &result.allocation, nullptr));
 			return result;
+		}
+
+		static void copy_buffer(VkDevice device, VkCommandPool command_pool, VkQueue graphics_queue, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+		{
+			VkCommandBuffer commandBuffer = ToolsVk::begin_single_time_commands(device, command_pool);
+
+			VkBufferCopy copyRegion{};
+			copyRegion.size = size;
+			vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+			ToolsVk::end_single_time_commands(device, command_pool, commandBuffer, graphics_queue);
+		}
+
+
+		static void copy_buffer_to_image(VkDevice device, VkCommandPool cmd_pool, VkQueue graphics_queue, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+			VkCommandBuffer command_buffer = begin_single_time_commands(device, cmd_pool);
+
+			VkBufferImageCopy region{};
+			region.bufferOffset = 0;
+			region.bufferRowLength = 0;
+			region.bufferImageHeight = 0;
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.mipLevel = 0;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageOffset = { 0, 0, 0 };
+			region.imageExtent = {
+				width,
+				height,
+				1
+			};
+
+			vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+			end_single_time_commands(device, cmd_pool, command_buffer, graphics_queue);
+		}
+
+
+		static void set_object_name(VkDevice device, uint64_t objectHandle, VkObjectType objectType, const char* name) {
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+			nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			nameInfo.objectType = objectType;
+			nameInfo.objectHandle = objectHandle;
+			nameInfo.pObjectName = name;
+
+			// Function pointer must be loaded at runtime:
+			auto func = (PFN_vkSetDebugUtilsObjectNameEXT)
+				vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
+
+			if (func) {
+				func(device, &nameInfo);
+			}
 		}
 
 	} // namespace tools

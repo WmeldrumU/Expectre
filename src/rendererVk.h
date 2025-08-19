@@ -24,6 +24,7 @@
 #include "model.h"
 #include "ShaderFileWatcher.h"
 #include "IUIRenderer.h"
+#include "TextureVk.h"
 #include "VkTools.h"
 
 #define MAX_CONCURRENT_FRAMES 2
@@ -54,13 +55,6 @@ namespace Expectre
 		uint8_t* mapped{ nullptr };
 	};
 
-	struct TextureVk {
-		VkImage image;
-		VkImageView image_view;
-		VmaAllocation allocation;
-		VkImageCreateInfo image_create_info;
-		VkImageViewCreateInfo image_view_info;
-	};
 
 	class RendererVk : public IRenderer, public InputObserver, public ::Noesis::RenderDevice
 	{

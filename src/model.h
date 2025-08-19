@@ -3,8 +3,8 @@
 #include <vector>
 #include <string>
 #include <vulkan/vulkan.h> // Make sure you include Vulkan header
-#include <glm/vec3.hpp>    // For glm::vec3
-#include <glm/vec2.hpp>    // For glm::vec2
+#include "VkTools.h"
+#include "VkTools.h"
 
 namespace Expectre
 {
@@ -53,6 +53,87 @@ namespace Expectre
 		//glm::vec3 max_bounds{ 0.0f, 0.0f, 0.0f };
 		//glm::vec3 center{ 0.0f, 0.0f, 0.0f };
 		//float radius{ 1.0f };
+
+		static Model import_model(const std::string& file_path, std::vector<Expectre::Vertex>& vertices, std::vector<uint32_t>& indices)
+		{
+			Assimp::Importer importer;
+			const aiScene* scene = importer.ReadFile(file_path,
+				aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
+
+			if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+			{
+				std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+				return {};
+			}
+
+			const aiNode* root = scene->mRootNode;
+			glm::mat4 model_transform = ToolsVk::to_glm(root->mTransformation);
+
+			Expectre::Model model{};
+			model.transform = model_transform;
+
+			uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());
+			uint32_t running_index_offset = static_cast<uint32_t>(indices.size());
+
+			// Iterate through each mesh
+			for (unsigned int i = 0; i < scene->mNumMeshes; i++)
+			{
+				aiMesh* ai_mesh = scene->mMeshes[i];
+				Expectre::Mesh mesh = {};
+
+				mesh.vertex_offset = static_cast<uint32_t>(vertices.size());
+				mesh.index_offset = static_cast<uint32_t>(indices.size());
+
+				// Iterate through each vertex of the mesh
+				for (unsigned int j = 0; j < ai_mesh->mNumVertices; j++)
+				{
+					Expectre::Vertex vertex;
+
+					// Positions
+					vertex.pos.x = ai_mesh->mVertices[j].x;
+					vertex.pos.y = ai_mesh->mVertices[j].y;
+					vertex.pos.z = ai_mesh->mVertices[j].z;
+
+					// Normals
+					if (ai_mesh->HasNormals())
+					{
+						vertex.normal.x = ai_mesh->mNormals[j].x;
+						vertex.normal.y = ai_mesh->mNormals[j].y;
+						vertex.normal.z = ai_mesh->mNormals[j].z;
+					}
+
+					// Texture Coordinates
+					if (ai_mesh->mTextureCoords[0])
+					{ // Check if the mesh contains texture coordinates
+						vertex.tex_coord.x = ai_mesh->mTextureCoords[0][j].x;
+						vertex.tex_coord.y = ai_mesh->mTextureCoords[0][j].y;
+					}
+					else
+					{
+						vertex.tex_coord = glm::vec2(0.0f, 0.0f);
+					}
+
+					vertices.push_back(vertex);
+				}
+
+				// Indices
+				for (auto j = 0; j < ai_mesh->mNumFaces; j++)
+				{
+					aiFace& face = ai_mesh->mFaces[j];
+					for (auto k = 0; k < face.mNumIndices; k++)
+					{
+						indices.push_back(face.mIndices[k] + mesh.vertex_offset);
+					}
+				}
+				mesh.index_offset = static_cast<uint32_t>(indices.size()) - mesh.index_offset;
+				mesh.name = std::string(ai_mesh->mName.C_Str());
+				model.meshes.push_back(mesh);
+				model.vertex_count += static_cast<uint32_t>(vertices.size());
+				model.index_count += static_cast<uint32_t>(indices.size());
+			}
+			return model;
+		}
+
 	};
 
 }
