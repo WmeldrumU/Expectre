@@ -282,6 +282,7 @@ namespace Expectre {
 			return indices;
 		}
 
+
 		static VkImageView create_image_view(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 		{
 			VkImageViewCreateInfo view_info{};
@@ -489,6 +490,128 @@ namespace Expectre {
 				func(device, &nameInfo);
 			}
 		}
+
+		// Return pair: VkImage + VmaAllocation
+		struct ImageAlloc {
+			VkImage image = VK_NULL_HANDLE;
+			VmaAllocation allocation = VK_NULL_HANDLE;
+		};
+
+		inline ImageAlloc CreateImage2D(
+			VmaAllocator allocator,
+			uint32_t width, uint32_t height,
+			VkFormat format,
+			uint32_t mipLevels,
+			VkImageUsageFlags usage,                               // e.g. VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+			VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
+			VkImageCreateFlags flags = 0                           // e.g. VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT if needed
+		) {
+			ImageAlloc out{};
+
+			VkImageCreateInfo ici{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+			ici.flags = flags;
+			ici.imageType = VK_IMAGE_TYPE_2D;
+			ici.format = format;
+			ici.extent = { width, height, 1 };
+			ici.mipLevels = mipLevels;
+			ici.arrayLayers = 1;
+			ici.samples = samples;
+			ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+			ici.usage = usage;
+			ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+			VmaAllocationCreateInfo aci{};
+			aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+			VkResult res = vmaCreateImage(allocator, &ici, &aci, &out.image, &out.allocation, nullptr);
+			if (res != VK_SUCCESS) {
+				// Handle error as you prefer; return nulls so caller can check
+				out.image = VK_NULL_HANDLE;
+				out.allocation = VK_NULL_HANDLE;
+			}
+			return out;
+		}
+
+
+		static VkSampler create_texture_sampler(VkPhysicalDevice physical_device, VkDevice device)
+		{
+			VkSampler sampler;
+
+			VkSamplerCreateInfo sampler_info{};
+			sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sampler_info.magFilter = VK_FILTER_LINEAR;
+			sampler_info.minFilter = VK_FILTER_LINEAR;
+			sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.anisotropyEnable = VK_TRUE;
+
+			VkPhysicalDeviceProperties properties{};
+			vkGetPhysicalDeviceProperties(physical_device, &properties);
+			sampler_info.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+			sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+			sampler_info.unnormalizedCoordinates = VK_FALSE; // Sample with [0, 1] range
+			sampler_info.compareEnable = VK_FALSE;
+			sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+			sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			sampler_info.mipLodBias = 0.0f;
+			sampler_info.minLod = 0.0f;
+			sampler_info.maxLod = 0.0f;
+
+			VK_CHECK_RESULT(vkCreateSampler(device, &sampler_info, nullptr, &sampler));
+			return sampler;
+		}
+
+		//uint32_t choose_heap_from_flags(VkPhysicalDevice phys_device, const VkMemoryRequirements& memoryRequirements,
+		//	VkMemoryPropertyFlags requiredFlags,
+		//	VkMemoryPropertyFlags preferredFlags)
+		//{
+		//	VkPhysicalDeviceMemoryProperties device_memory_properties;
+
+		//	vkGetPhysicalDeviceMemoryProperties(phys_device, &device_memory_properties);
+
+		//	uint32_t selected_type = ~0u; // All 1's
+		//	uint32_t memory_type;
+
+		//	for (memory_type = 0; memory_type < 32; memory_type++)
+		//	{
+
+		//		if (memoryRequirements.memoryTypeBits & (1 << memory_type))
+		//		{
+		//			const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
+
+		//			// If type has all our preferred flags
+		//			if ((type.propertyFlags & preferredFlags) == preferredFlags)
+		//			{
+		//				selected_type = memory_type;
+		//				break;
+		//			}
+		//		}
+		//	}
+
+		//	if (selected_type != ~0u)
+		//	{
+		//		for (memory_type = 0; memory_type < 32; memory_type++)
+		//		{
+
+		//			if (memoryRequirements.memoryTypeBits & (1 << memory_type))
+		//			{
+		//				const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
+
+		//				// If type has all our required flags
+		//				if ((type.propertyFlags & requiredFlags) == requiredFlags)
+		//				{
+		//					selected_type = memory_type;
+		//					break;
+		//				}
+		//			}
+		//		}
+		//	}
+		//	return selected_type;
+		//}
+
+
 
 	} // namespace tools
 } // namespace Expectre

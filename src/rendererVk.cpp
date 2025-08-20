@@ -60,9 +60,9 @@ namespace Expectre
 		create_framebuffers();
 		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		m_texture = TextureVk::create_texture_from_file(m_device, m_cmd_pool, m_graphics_queue, m_allocator, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-		create_texture_sampler();
-		load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj"));
-		load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj"));
+		m_texture_sampler = ToolsVk::create_texture_sampler(m_chosen_phys_device, m_device);
+		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj")));
+		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
 		create_geometry_buffer();
 		create_uniform_buffers();
 		create_descriptor_pool_and_sets();
@@ -78,18 +78,18 @@ namespace Expectre
 		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 	}
 
-	void RendererVk::load_model(std::string dir)
+	std::unique_ptr<Model> RendererVk::load_model(std::string dir)
 	{
-		const Model& model = Model::import_model(dir, m_all_vertices, m_all_indices);
-		m_models.push_back(model);
+		std::unique_ptr<Model> model = Model::import_model(dir, m_all_vertices, m_all_indices);
+		return model;
 	}
 
 	void RendererVk::cleanup_swapchain()
 	{
 		// Destroy depth buffer
 		vkDestroyImageView(m_device, m_depth_image_view, nullptr);
-		vkDestroyImage(m_device, m_depth_image, nullptr);
-		vkFreeMemory(m_device, m_depth_image_memory, nullptr);
+		vkDestroyImage(m_device, m_depth_image.image, nullptr);
+		vmaFreeMemory(m_allocator, m_depth_image.allocation);
 
 		for (auto framebuffer : m_swapchain_framebuffers)
 		{
@@ -325,54 +325,6 @@ namespace Expectre
 		vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
 	}
 
-	uint32_t RendererVk::choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
-		VkMemoryPropertyFlags requiredFlags,
-		VkMemoryPropertyFlags preferredFlags)
-	{
-		VkPhysicalDeviceMemoryProperties device_memory_properties;
-
-		vkGetPhysicalDeviceMemoryProperties(m_chosen_phys_device, &device_memory_properties);
-
-		uint32_t selected_type = ~0u; // All 1's
-		uint32_t memory_type;
-
-		for (memory_type = 0; memory_type < 32; memory_type++)
-		{
-
-			if (memoryRequirements.memoryTypeBits & (1 << memory_type))
-			{
-				const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
-
-				// If type has all our preferred flags
-				if ((type.propertyFlags & preferredFlags) == preferredFlags)
-				{
-					selected_type = memory_type;
-					break;
-				}
-			}
-		}
-
-		if (selected_type != ~0u)
-		{
-			for (memory_type = 0; memory_type < 32; memory_type++)
-			{
-
-				if (memoryRequirements.memoryTypeBits & (1 << memory_type))
-				{
-					const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
-
-					// If type has all our required flags
-					if ((type.propertyFlags & requiredFlags) == requiredFlags)
-					{
-						selected_type = memory_type;
-						break;
-					}
-				}
-			}
-		}
-		return selected_type;
-	}
-
 	void RendererVk::create_swapchain()
 	{
 		ToolsVk::SwapChainSupportDetails swapchain_support_details = ToolsVk::query_swap_chain_support(m_chosen_phys_device, m_surface);
@@ -417,10 +369,7 @@ namespace Expectre
 		create_info.presentMode = PRESENT_MODE;
 		create_info.clipped = VK_TRUE;
 
-		if (vkCreateSwapchainKHR(m_device, &create_info, nullptr, &m_swapchain) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to create swap chain!");
-		}
+		VK_CHECK_RESULT(vkCreateSwapchainKHR(m_device, &create_info, nullptr, &m_swapchain));
 
 		vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, nullptr);
 		m_swapchain_images.resize(image_count);
@@ -492,12 +441,13 @@ namespace Expectre
 	{
 		m_depth_format = ToolsVk::find_depth_format(m_chosen_phys_device);
 
-		create_image(m_extent.width, m_extent.height, m_depth_format,
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			m_depth_image, m_depth_image_memory);
-		m_depth_image_view = ToolsVk::create_image_view(m_device, m_depth_image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+		m_depth_image = ToolsVk::CreateImage2D(m_allocator, m_extent.width,
+			m_extent.height, m_depth_format, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			VK_SAMPLE_COUNT_1_BIT);
+
+
+		m_depth_image_view = ToolsVk::create_image_view(m_device, m_depth_image.image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	void RendererVk::create_renderpass()
@@ -872,7 +822,7 @@ namespace Expectre
 		}
 	}
 
-	void RendererVk::record_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index)
+	void RendererVk::record_draw_commands(VkCommandBuffer command_buffer, uint32_t image_index)
 	{
 		VkCommandBufferBeginInfo begin_info{};
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -957,7 +907,7 @@ namespace Expectre
 		update_uniform_buffer();
 		vkResetFences(m_device, 1, &m_in_flight_fences[m_current_frame]);
 		vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
-		record_command_buffer(m_cmd_buffers[m_current_frame], image_index);
+		record_draw_commands(m_cmd_buffers[m_current_frame], image_index);
 
 		VkSubmitInfo submit_info{};
 		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1082,73 +1032,6 @@ namespace Expectre
 
 	bool RendererVk::isReady() { return m_ready; };
 
-
-
-	void RendererVk::create_image(uint32_t width, uint32_t height,
-		VkFormat format, VkImageTiling tiling,
-		VkImageUsageFlags usage,
-		VkMemoryPropertyFlags properties,
-		VkImage& image,
-		VkDeviceMemory& image_memory)
-	{
-		VkImageCreateInfo image_info{};
-		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.extent.width = width;
-		image_info.extent.height = height;
-		image_info.extent.depth = 1;
-		image_info.mipLevels = 1;
-		image_info.arrayLayers = 1;
-		image_info.format = format;
-		image_info.tiling = tiling;
-		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image_info.usage = usage;
-		image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VK_CHECK_RESULT(vkCreateImage(m_device, &image_info, nullptr, &image));
-
-		VkMemoryRequirements mem_reqs;
-		vkGetImageMemoryRequirements(m_device, image, &mem_reqs);
-
-		VkMemoryAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = mem_reqs.size;
-		bool found = ToolsVk::find_matching_memory(mem_reqs.memoryTypeBits, m_phys_memory_properties.memoryTypes,
-			properties, &alloc_info.memoryTypeIndex);
-		assert(found);
-		VK_CHECK_RESULT(vkAllocateMemory(m_device, &alloc_info, nullptr, &image_memory));
-
-		vkBindImageMemory(m_device, image, image_memory, 0);
-	}
-
-
-
-	void RendererVk::create_texture_sampler()
-	{
-		VkSamplerCreateInfo sampler_info{};
-		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		sampler_info.magFilter = VK_FILTER_LINEAR;
-		sampler_info.minFilter = VK_FILTER_LINEAR;
-		sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.anisotropyEnable = VK_TRUE;
-
-		VkPhysicalDeviceProperties properties{};
-		vkGetPhysicalDeviceProperties(m_chosen_phys_device, &properties);
-		sampler_info.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-		sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		sampler_info.unnormalizedCoordinates = VK_FALSE; // Sample with [0, 1] range
-		sampler_info.compareEnable = VK_FALSE;
-		sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
-		sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		sampler_info.mipLodBias = 0.0f;
-		sampler_info.minLod = 0.0f;
-		sampler_info.maxLod = 0.0f;
-
-		VK_CHECK_RESULT(vkCreateSampler(m_device, &sampler_info, nullptr, &m_texture_sampler));
-	}
 
 	void RendererVk::update(uint64_t delta_t)
 	{
@@ -1305,58 +1188,83 @@ namespace Expectre
 		return caps;
 	}
 
+	class VKTexture : public TextureVk, public Noesis::Texture
+	{
+	public:
+		VKTexture() {}
+
+		~VKTexture()
+		{
+
+		}
+
+		uint32_t GetWidth() const override { return image_info.extent.width; }
+		uint32_t GetHeight() const override { return image_info.extent.height; }
+		bool HasMipMaps() const override { return image_info.mipLevels > 1; }
+		bool IsInverted() const override { return false; }
+		bool HasAlpha() const override { return true; }
+
+
+		//VKRenderDevice* device = VK_NULL_HANDLE;
+
+		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	};
+
+	//Noesis::Ptr<Noesis::Texture> RendererVk::WrapTexture(VkImage image, uint32_t width, uint32_t height,
+	//	uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha)
+	//{
+	//	Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>();
+
+	//	texture->image = image;
+	//	texture->format = format;
+	//	texture->layout = layout;
+	//	texture->image_info.extent = { width, height, 1 };
+	//	texture->image_info.mipLevels = levels;
+	//	return texture;
+	//}
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
 	{
-		//Noesis::Ptr<Noesis::RenderTarget> surface = Noesis::MakePtr<Noesis::RenderTarget>();
+
+		//VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB; // Or SRGB if needed
+		//VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		//// If you want to be able to resolve (for MSAA), add:
+		//if (sampleCount > 1) {
+		//	usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		//}
+
+		//// Create the image (use your TextureVk::create_texture, passing nullptr for pixel data)
+		//auto texture = TextureVk::create_texture(
+		//	m_device,
+		//	m_cmd_pool,
+		//	m_graphics_queue,
+		//	m_allocator,
+		//	nullptr,                    // No initial data
+		//	width,
+		//	height
+		//);
+
+		//// If stencil is needed, you'd also create a VkImage for the stencil attachment (not shown here).
+
+		//// You now have texture.image and texture.view
+
+		//// You need to wrap this in something that satisfies Noesis's RenderTarget interface.
+		//// You can use a custom class derived from Noesis::RenderTarget, or use Noesis's helpers.
+		////
+		//// If using Noesis helpers (from VKRenderDevice):
+		////   static Ptr<RenderTarget> WrapRenderTarget(VkImage image, VkImageView view, ...)
+
+		//// For simplicity, let's use Noesis's Texture as the RenderTarget:
+		//Noesis::Ptr<Noesis::Texture> noesisTexture = WrapTexture(
+		//	texture.image, width, height, 1, colorFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			///*isInverted=*/false, /*hasAlpha=*/true);
+
+		//// You need to implement TextureVkWrapper or use Noesis's Texture subclass that wraps Vulkan images.
+
 		return nullptr;
-		//surface->samples = VK_SAMPLE_COUNT_1_BIT;
-		//TextureVk texture = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, nullptr, 
-		//// EnsureTransferCommands();
-
-		//Noesis::Vector<VkImageView, 3> attachments;
-
-		//if (needsStencil)
-		//{
-		//	surface->stencil = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-		//															  Noesis::TextureFormat::RGBA8, surface->samples, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, VK_IMAGE_ASPECT_STENCIL_BIT));
-		//	attachments.PushBack(surface->stencil->view);
-		//	ChangeLayout(mTransferCommands, surface->stencil, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-		//}
-
-		//// XamlTester needs VK_IMAGE_USAGE_TRANSFER_SRC_BIT for grabbing screenshots
-		//surface->color = StaticPtrCast<VKTexture>(CreateTexture(label, width, height, 1,
-		//														mBackBufferFormat, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-		//														VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT));
-		//attachments.PushBack(surface->color->view);
-		//ChangeLayout(mTransferCommands, surface->color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-		//uint32_t index = Index(surface->samples);
-		//uint32_t stencilCount = needsStencil ? 1 : 0;
-		//NS_ASSERT(index < NS_COUNTOF(mRenderPasses));
-
-		//if (NS_UNLIKELY(mRenderPasses[index][stencilCount] == VK_NULL_HANDLE))
-		//{
-		//	VkRenderPass renderPass = CreateRenderPass(surface->samples, needsStencil);
-		//	CreatePipelines(renderPass, surface->samples);
-		//	mRenderPasses[index][stencilCount] = renderPass;
-		//}
-
-		//surface->renderPass = mRenderPasses[index][stencilCount];
-
-		//VkFramebufferCreateInfo framebufferInfo{};
-		//framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		//framebufferInfo.renderPass = surface->renderPass;
-		//framebufferInfo.attachmentCount = attachments.Size();
-		//framebufferInfo.pAttachments = attachments.Data();
-		//framebufferInfo.width = width;
-		//framebufferInfo.height = height;
-		//framebufferInfo.layers = 1;
-
-		//VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
-		//VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
-		//return surface;
-		//return nullptr;
 	}
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface)
@@ -1365,7 +1273,68 @@ namespace Expectre
 	}
 	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height, uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
 	{
-		return Noesis::Ptr<Noesis::Texture>();
+		//Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>(0);
+
+		return nullptr;
+		//auto texture = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, nullptr, width, height);
+		//texture->format = VK_FORMAT_R8G8B8A8_SRGB;
+
+
+		//// Create image
+		//VkImageCreateInfo createInfo{};
+		//createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		//createInfo.imageType = VK_IMAGE_TYPE_2D;
+		//createInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		//createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		//createInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		//createInfo.extent.width = width;
+		//createInfo.extent.height = height;
+		//createInfo.mipLevels = numLevels;
+		//createInfo.extent.depth = 1;
+		//createInfo.arrayLayers = 1;
+		//createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		//createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		//texture->image_info = createInfo;
+
+		//VK_CHECK_RESULT(vkCreateImage(m_device, &createInfo, nullptr, &texture->image));
+		//static int texture_num = 0;
+		//ToolsVk::set_object_name(m_device, (uint64_t)texture->image, VK_OBJECT_TYPE_IMAGE, (std::string("texture image ") + std::to_string(texture_num)).c_str());
+
+		//// Allocate memory
+		//VkMemoryRequirements memoryRequirements;
+		//vkGetImageMemoryRequirements(m_device, texture->image, &memoryRequirements);
+
+		//VkMemoryAllocateInfo allocInfo{};
+		//allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//allocInfo.allocationSize = memoryRequirements.size;
+		//int mem_index = 0;
+		//bool found = ToolsVk::find_matching_memory(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_phys_memory_properties.memoryTypes, memFlags, &mem_index);
+		//assert(found);
+
+		//allocInfo.memoryTypeIndex = mem_index;
+		//VK_CHECK_RESULT(vkAllocateMemory(m_device, &allocInfo, nullptr, &texture->memory));
+		//VK_CHECK_RESULT(vkBindImageMemory(m_device, texture->image, texture->memory, 0));
+		//VK_NAME(texture->memory, DEVICE_MEMORY, "Noesis_%s%s_Mem", label, suffix);
+
+		//NS_LOG_TRACE("Texture '%s' created (%zu KB) (Type %02d)", label,
+		//	(size_t)allocInfo.allocationSize / 1024, allocInfo.memoryTypeIndex);
+
+		//// Create View
+		//VkImageViewCreateInfo viewInfo{};
+		//viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		//viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		//viewInfo.format = format;
+		//viewInfo.image = texture->image;
+		//viewInfo.subresourceRange.aspectMask = aspect;
+		//viewInfo.subresourceRange.levelCount = levels;
+		//viewInfo.subresourceRange.layerCount = 1;
+
+		//V(vkCreateImageView(mDevice, &viewInfo, nullptr, &texture->view));
+		//ToolsVk::set_object_name(m_device, (uint64_t)texture->view, VK_OBJECT_TYPE_IMAGE_VIEW, (std::string("texture view ") + std::to_string(texture_num)).c_str());
+
+		//texture_num++;
+		//return texture;
+
 	}
 	void RendererVk::UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
 	{

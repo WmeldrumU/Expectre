@@ -15,7 +15,7 @@ namespace Expectre
 {
 
 
-	class TextureVk
+	class TextureVk /*: public Noesis::Texture*/
 	{
 	public:
 		VkImage image;
@@ -23,6 +23,13 @@ namespace Expectre
 		VmaAllocation allocation;
 		VkImageCreateInfo image_info;
 		VkImageViewCreateInfo view_info;
+
+		/*uint32_t GetWidth() const override { return image_info.extent.width; }
+		uint32_t GetHeight() const override { return image_info.extent.height; }
+		bool HasMipMaps() const override { return image_info.mipLevels > 1; }
+		bool IsInverted() const override { return false; }
+		bool HasAlpha() const override { return true; }*/
+
 
 		static void transition_image_layout(VkDevice device, VkCommandPool cmd_pool, VkQueue graphics_queue,
 			VkImage image, VkFormat format,
@@ -84,7 +91,6 @@ namespace Expectre
 			VkQueue graphics_queue,
 			VmaAllocator allocator,
 			const void* pixelData,
-			size_t imageSize,
 			uint32_t tex_width,
 			uint32_t tex_height
 		) {
@@ -121,11 +127,11 @@ namespace Expectre
 				&image_allocation,
 				nullptr));
 
+			size_t imageSize = tex_width * tex_height * 4;
 			// --- Always upload (real data, or zeros if none provided) ---
 			const void* src_data = pixelData;
 			std::vector<uint8_t> zeroData;
-			if (pixelData == nullptr || imageSize == 0) {
-				imageSize = tex_width * tex_height * 4;
+			if (pixelData == nullptr) {
 				zeroData.resize(imageSize, 0);
 				src_data = zeroData.data();
 			}
@@ -200,8 +206,7 @@ namespace Expectre
 				spdlog::error("Failed to load texture from '{}'", dir);
 				std::terminate();
 			}
-			VkDeviceSize image_size = tex_width * tex_height * 4;
-			TextureVk tex = create_texture(device, cmd_pool, graphics_queue, allocator, pixels, image_size, tex_width, tex_height);
+			TextureVk tex = create_texture(device, cmd_pool, graphics_queue, allocator, pixels, tex_width, tex_height);
 			stbi_image_free(pixels);
 			return tex;
 		}
