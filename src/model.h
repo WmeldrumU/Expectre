@@ -3,8 +3,7 @@
 #include <vector>
 #include <string>
 #include <vulkan/vulkan.h> // Make sure you include Vulkan header
-#include "VkTools.h"
-#include "VkTools.h"
+#include "ToolsVk.h"
 
 namespace Expectre
 {
@@ -69,7 +68,7 @@ namespace Expectre
 			const aiNode* root = scene->mRootNode;
 			glm::mat4 model_transform = ToolsVk::to_glm(root->mTransformation);
 
-			std::unique_ptr<Expectre::Model >model =  std::make_unique<Expectre::Model>();
+			std::unique_ptr<Expectre::Model> model = std::make_unique<Expectre::Model>();
 			model->transform = model_transform;
 
 			uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());

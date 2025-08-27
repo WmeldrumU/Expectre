@@ -19,7 +19,7 @@
 #include <spdlog/spdlog.h>
 
 #include "shared.h"
-#include "VkTools.h"
+#include "ToolsVk.h"
 #include "Model.h"
 #include "ShaderFileWatcher.h"
 #include "UIRendererVkNoesis.h"
@@ -51,13 +51,22 @@ namespace Expectre
 
 		// Command buffers and swapchain
 		create_swapchain();
-		create_swapchain_image_views();
+
+		m_swapchain_image_views.resize(m_swapchain_images.size());
+		for (auto i = 0; i < m_swapchain_images.size(); i++) {
+			m_swapchain_image_views[i] = create_swapchain_image_views(m_device, m_swapchain_images[i],
+				m_swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
+		}
 		create_depth_stencil();
-		create_renderpass();
+		m_render_pass = create_renderpass(m_device, m_swapchain_image_format, m_depth_format);
 		create_descriptor_set_layout();
 		create_pipeline();
 		create_command_pool();
-		create_framebuffers();
+		m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
+		for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
+			VkImageView view = m_swapchain_image_views[i];
+			m_swapchain_framebuffers[i] = create_framebuffer(m_device, m_swapchain_image_views[i], m_depth_image_view);
+		}
 		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		m_texture = TextureVk::create_texture_from_file(m_device, m_cmd_pool, m_graphics_queue, m_allocator, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		m_texture_sampler = ToolsVk::create_texture_sampler(m_chosen_phys_device, m_device);
@@ -110,6 +119,10 @@ namespace Expectre
 
 		// m_ui_renderer.reset();
 
+
+		for (auto& allocation : m_allocated_buffers) {
+			vmaDestroyBuffer(m_allocator, allocation.buffer, allocation.allocation);
+		}
 		// Destroy synchronization objects
 		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
 		{
@@ -379,15 +392,14 @@ namespace Expectre
 		m_extent = m_extent;
 	}
 
-	void RendererVk::create_swapchain_image_views()
+	VkImageView RendererVk::create_swapchain_image_views(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags flags)
 	{
-		m_swapchain_image_views.resize(m_swapchain_images.size());
+		VkImageView image_view;
 
-		for (auto i = 0; i < m_swapchain_images.size(); i++)
-		{
-			m_swapchain_image_views[i] = ToolsVk::create_image_view(m_device, m_swapchain_images[i],
-				m_swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
-		}
+		image_view = ToolsVk::create_image_view(m_device, image,
+			m_swapchain_image_format, flags);
+
+		return image_view;
 	}
 
 	void RendererVk::create_geometry_buffer()
@@ -450,7 +462,7 @@ namespace Expectre
 		m_depth_image_view = ToolsVk::create_image_view(m_device, m_depth_image.image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
-	void RendererVk::create_renderpass()
+	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format)
 	{
 
 		// This function will prepare a single render pass with one subpass
@@ -459,7 +471,7 @@ namespace Expectre
 		std::array<VkAttachmentDescription, 2> attachments{};
 		// Color attachment
 		// attachments[0].flags = 0,
-		attachments[0].format = m_swapchain_image_format;
+		attachments[0].format = color_format;
 		attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -470,7 +482,7 @@ namespace Expectre
 		// Depth attachment
 
 		// attachments[1].flags = 0;
-		attachments[1].format = m_depth_format;
+		attachments[1].format = depth_format;
 		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;						   // Clear depth at start of first subpass
 		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;					   // We don't need depth after render pass has finished (DONT_CARE may result in better performance)
@@ -523,20 +535,20 @@ namespace Expectre
 		render_pass_info.pDependencies = dependencies.data();
 
 		VkResult err;
-
-		err = vkCreateRenderPass(m_device, &render_pass_info, nullptr, &m_render_pass);
+		VkRenderPass render_pass;
+		err = vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass);
 		assert(!err);
 
 		VK_CHECK_RESULT(err);
-		ToolsVk::set_object_name(m_device, (uint64_t)m_render_pass, VK_OBJECT_TYPE_RENDER_PASS, "MainRenderPass");
-
+		ToolsVk::set_object_name(device, (uint64_t)render_pass, VK_OBJECT_TYPE_RENDER_PASS, "MainRenderPass");
+		return render_pass;
 	}
 
-	void RendererVk::create_pipeline()
+	VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout)
 	{
-
-		VkShaderModule vert_shader_module = ToolsVk::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
-		VkShaderModule frag_shader_module = ToolsVk::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/frag.spv")));
+		//TODO - this isn't correct yet
+		VkShaderModule vert_shader_module = ToolsVk::createShaderModule(device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
+		VkShaderModule frag_shader_module = ToolsVk::createShaderModule(device, (WORKSPACE_DIR + std::string("/shaders/frag.spv")));
 
 		VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
 		vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -655,15 +667,18 @@ namespace Expectre
 		pipeline_info.pMultisampleState = &multi_sample_info;
 		pipeline_info.pColorBlendState = &color_blend_info;
 		pipeline_info.pDynamicState = &dynamic_state;
-		pipeline_info.layout = m_pipeline_layout;
-		pipeline_info.renderPass = m_render_pass;
+		pipeline_info.layout = pipeline_layout;
+		pipeline_info.renderPass = renderpass;
 		pipeline_info.subpass = 0;
 		pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
 
-		VK_CHECK_RESULT(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &m_pipeline));
+		VkPipeline pipeline;
+		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &pipeline));
 
-		vkDestroyShaderModule(m_device, frag_shader_module, nullptr);
-		vkDestroyShaderModule(m_device, vert_shader_module, nullptr);
+		vkDestroyShaderModule(device, frag_shader_module, nullptr);
+		vkDestroyShaderModule(device, vert_shader_module, nullptr);
+
+		return pipeline;
 	}
 
 	void RendererVk::create_command_pool()
@@ -756,30 +771,29 @@ namespace Expectre
 		}
 	}
 
-	void RendererVk::create_framebuffers()
+	VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkImageView view, VkImageView depth_view)
 	{
 		VkResult err;
+		VkFramebuffer framebuffer;
+		std::vector<VkImageView> attachments{ view };
 
-		m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
-		for (auto i = 0; i < m_swapchain_image_views.size(); i++)
-		{
-			std::array<VkImageView, 2> attachments{
-				m_swapchain_image_views[i], m_depth_image_view };
-
-			// All framebuffers use same renderpass setup
-			VkFramebufferCreateInfo framebuffer_info{};
-			framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebuffer_info.renderPass = m_render_pass;
-			framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
-			framebuffer_info.pAttachments = attachments.data();
-			framebuffer_info.width = m_extent.width;
-			framebuffer_info.height = m_extent.height;
-			framebuffer_info.layers = 1;
-
-			// Create framebuffer
-			err = vkCreateFramebuffer(m_device, &framebuffer_info, nullptr, &m_swapchain_framebuffers[i]);
-			VK_CHECK_RESULT(err);
+		if (depth_view != VK_NULL_HANDLE) {
+			attachments.push_back(depth_view);
 		}
+
+		// All framebuffers use same renderpass setup
+		VkFramebufferCreateInfo framebuffer_info{};
+		framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebuffer_info.renderPass = m_render_pass;
+		framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+		framebuffer_info.pAttachments = attachments.data();
+		framebuffer_info.width = m_extent.width;
+		framebuffer_info.height = m_extent.height;
+		framebuffer_info.layers = 1;
+
+		// Create framebuffer
+		VK_CHECK_RESULT(vkCreateFramebuffer(device, &framebuffer_info, nullptr, &framebuffer));
+		return framebuffer;
 	}
 
 	void RendererVk::create_sync_objects()
@@ -1188,9 +1202,15 @@ namespace Expectre
 		return caps;
 	}
 
-	class VKTexture : public TextureVk, public Noesis::Texture
+	class VKTexture : public Noesis::Texture
 	{
 	public:
+		VkImage image;
+		VkImageView view;
+		VmaAllocation allocation;
+		VkImageCreateInfo image_info;
+		VkImageViewCreateInfo view_info;
+		VkImageLayout layout;
 		VKTexture() {}
 
 		~VKTexture()
@@ -1207,8 +1227,8 @@ namespace Expectre
 
 		//VKRenderDevice* device = VK_NULL_HANDLE;
 
-		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		//VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+		//VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	};
 
@@ -1225,120 +1245,135 @@ namespace Expectre
 	//	return texture;
 	//}
 
-	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
+
+	class VKRenderTarget final : public Noesis::RenderTarget
 	{
+	public:
+		~VKRenderTarget()
+		{
+		}
 
-		//VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB; // Or SRGB if needed
-		//VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		Noesis::Texture* GetTexture() override { return color; }
 
-		//// If you want to be able to resolve (for MSAA), add:
-		//if (sampleCount > 1) {
-		//	usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-		//}
+		Noesis::Ptr<VKTexture> color;
+		Noesis::Ptr<VKTexture> colorAA;
+		Noesis::Ptr<VKTexture> stencil;
 
-		//// Create the image (use your TextureVk::create_texture, passing nullptr for pixel data)
-		//auto texture = TextureVk::create_texture(
-		//	m_device,
-		//	m_cmd_pool,
-		//	m_graphics_queue,
-		//	m_allocator,
-		//	nullptr,                    // No initial data
-		//	width,
-		//	height
-		//);
+		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+		VkRenderPass renderPass = VK_NULL_HANDLE;
+		VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+	};
 
-		//// If stencil is needed, you'd also create a VkImage for the stencil attachment (not shown here).
 
-		//// You now have texture.image and texture.view
+	//Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
+	//{
 
-		//// You need to wrap this in something that satisfies Noesis's RenderTarget interface.
-		//// You can use a custom class derived from Noesis::RenderTarget, or use Noesis's helpers.
-		////
-		//// If using Noesis helpers (from VKRenderDevice):
-		////   static Ptr<RenderTarget> WrapRenderTarget(VkImage image, VkImageView view, ...)
+	//	Noesis::Ptr<VKRenderTarget> render_target = Noesis::MakePtr<VKRenderTarget>();
 
-		//// For simplicity, let's use Noesis's Texture as the RenderTarget:
-		//Noesis::Ptr<Noesis::Texture> noesisTexture = WrapTexture(
-		//	texture.image, width, height, 1, colorFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			///*isInverted=*/false, /*hasAlpha=*/true);
 
-		//// You need to implement TextureVkWrapper or use Noesis's Texture subclass that wraps Vulkan images.
+	//	if (m_ui_render_pass == VK_NULL_HANDLE)
+	//	{
+	//		VkRenderPass renderPass = create_renderpass(m_device, m_swapchain_image_format, m_depth_format);
+	//		CreatePipelines(renderPass, surface->samples);
+	//		m_ui_render_pass = renderPass;
+	//	}
+	//	// assign a render pass to render target
+	//	render_target->renderPass = m_ui_render_pass;
 
-		return nullptr;
-	}
+	//	// create framebuffer and assign to rendertarget
+	//	VkFramebufferCreateInfo framebufferInfo{};
+	//	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	//	framebufferInfo.renderPass = render_target->renderPass;
+	//	framebufferInfo.attachmentCount = attachments.Size();
+	//	framebufferInfo.pAttachments = attachments.Data();
+	//	framebufferInfo.width = width;
+	//	framebufferInfo.height = height;
+	//	framebufferInfo.layers = 1;
+
+	//	VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
+	//	VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
+
+	//	return nullptr;
+	//}
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface)
 	{
 		return Noesis::Ptr<Noesis::RenderTarget>();
 	}
-	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height, uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
+
+
+	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height,
+		uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
 	{
 		//Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>(0);
 
+		// covert noesis format to vulkan foramt
+		/*VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+		switch (format) {
+		case Noesis::TextureFormat::R8:
+			vk_format = VK_FORMAT_R8_UNORM;
+			break;
+		case Noesis::TextureFormat::RGBA8:
+			vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+			break;
+		default:
+			assert(false);
+			break;
+		}
+
+		TextureVk tex = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, data, width, height, numLevels);
+		Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>(0);
+		texture->image = tex.image;
+		texture->image_info = tex.image_info;
+		texture->allocation = tex.allocation;
+		texture->view = tex.view;
+		texture->view_info = tex.view_info;
+		return texture;*/
 		return nullptr;
-		//auto texture = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, nullptr, width, height);
-		//texture->format = VK_FORMAT_R8G8B8A8_SRGB;
-
-
-		//// Create image
-		//VkImageCreateInfo createInfo{};
-		//createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		//createInfo.imageType = VK_IMAGE_TYPE_2D;
-		//createInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-		//createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		//createInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-		//createInfo.extent.width = width;
-		//createInfo.extent.height = height;
-		//createInfo.mipLevels = numLevels;
-		//createInfo.extent.depth = 1;
-		//createInfo.arrayLayers = 1;
-		//createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		//createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		//texture->image_info = createInfo;
-
-		//VK_CHECK_RESULT(vkCreateImage(m_device, &createInfo, nullptr, &texture->image));
-		//static int texture_num = 0;
-		//ToolsVk::set_object_name(m_device, (uint64_t)texture->image, VK_OBJECT_TYPE_IMAGE, (std::string("texture image ") + std::to_string(texture_num)).c_str());
-
-		//// Allocate memory
-		//VkMemoryRequirements memoryRequirements;
-		//vkGetImageMemoryRequirements(m_device, texture->image, &memoryRequirements);
-
-		//VkMemoryAllocateInfo allocInfo{};
-		//allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		//allocInfo.allocationSize = memoryRequirements.size;
-		//int mem_index = 0;
-		//bool found = ToolsVk::find_matching_memory(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_phys_memory_properties.memoryTypes, memFlags, &mem_index);
-		//assert(found);
-
-		//allocInfo.memoryTypeIndex = mem_index;
-		//VK_CHECK_RESULT(vkAllocateMemory(m_device, &allocInfo, nullptr, &texture->memory));
-		//VK_CHECK_RESULT(vkBindImageMemory(m_device, texture->image, texture->memory, 0));
-		//VK_NAME(texture->memory, DEVICE_MEMORY, "Noesis_%s%s_Mem", label, suffix);
-
-		//NS_LOG_TRACE("Texture '%s' created (%zu KB) (Type %02d)", label,
-		//	(size_t)allocInfo.allocationSize / 1024, allocInfo.memoryTypeIndex);
-
-		//// Create View
-		//VkImageViewCreateInfo viewInfo{};
-		//viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		//viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		//viewInfo.format = format;
-		//viewInfo.image = texture->image;
-		//viewInfo.subresourceRange.aspectMask = aspect;
-		//viewInfo.subresourceRange.levelCount = levels;
-		//viewInfo.subresourceRange.layerCount = 1;
-
-		//V(vkCreateImageView(mDevice, &viewInfo, nullptr, &texture->view));
-		//ToolsVk::set_object_name(m_device, (uint64_t)texture->view, VK_OBJECT_TYPE_IMAGE_VIEW, (std::string("texture view ") + std::to_string(texture_num)).c_str());
-
-		//texture_num++;
-		//return texture;
-
 	}
-	void RendererVk::UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
+	void RendererVk::UpdateTexture(Noesis::Texture* texture_, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
 	{
+
+		VKTexture* texture = (VKTexture*)texture_;
+
+		uint32_t texel_size = texture->image_info.format == VK_FORMAT_R8_UNORM ? 1 : 4;
+		uint32_t size = width * height * texel_size;
+		AllocatedBuffer staging_buffer = ToolsVk::create_buffer(m_allocator, size,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
+
+		// Copy data into staging buffer
+		void* mapped;
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging_buffer.allocation, &mapped));
+		memcpy(mapped, data, static_cast<size_t>(size));
+		vmaUnmapMemory(m_allocator, staging_buffer.allocation);
+
+		TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue, texture->image, texture->image_info.format, texture->layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		VkBufferImageCopy region{};
+		region.imageOffset.x = x;
+		region.imageOffset.y = y;
+		region.imageExtent.width = width;
+		region.imageExtent.height = height;
+		region.imageExtent.depth = 1;
+		region.imageSubresource.mipLevel = level;
+		region.bufferOffset = 0;
+		region.imageSubresource.layerCount = 1;
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+		VkCommandBuffer cmd = ToolsVk::begin_single_time_commands(m_device, m_cmd_pool);
+		vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		ToolsVk::end_single_time_commands(m_device, m_cmd_pool, cmd, m_graphics_queue);
+
+		// Transition back for shader access
+		TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
+			texture->image, texture->image_info.format,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			texture->layout);
+
+		vmaDestroyBuffer(m_allocator, staging_buffer.buffer, staging_buffer.allocation);
 	}
+
 	void RendererVk::BeginOffscreenRender()
 	{
 	}
@@ -1365,14 +1400,30 @@ namespace Expectre
 	}
 	void* RendererVk::MapVertices(uint32_t bytes)
 	{
-		return nullptr;
+		// allocate memory
+		AllocatedBuffer vertex_staging = ToolsVk::create_buffer(m_allocator, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
+
+		// map memory
+		void* data;
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging.allocation, &data));
+		m_allocated_buffers.push_back(vertex_staging);
+		return data;
 	}
 	void RendererVk::UnmapVertices()
 	{
 	}
 	void* RendererVk::MapIndices(uint32_t bytes)
 	{
-		return nullptr;
+		// allocate memory
+		AllocatedBuffer index_staging = ToolsVk::create_buffer(m_allocator, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_CPU_ONLY);
+
+		// map memory
+		void* data;
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
+		m_allocated_buffers.push_back(index_staging);
+		return data;
 	}
 	void RendererVk::UnmapIndices()
 	{

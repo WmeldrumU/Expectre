@@ -14,6 +14,8 @@
 #include <glm/glm.hpp>
 #include <stdio.h>
 
+
+
 #include <vma/vk_mem_alloc.h>
 
 #include "NsRender/RenderDevice.h"
@@ -25,7 +27,7 @@
 #include "ShaderFileWatcher.h"
 #include "IUIRenderer.h"
 #include "TextureVk.h"
-#include "VkTools.h"
+#include "ToolsVk.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -86,19 +88,19 @@ namespace Expectre
 
 		void create_geometry_buffer();
 
-		void create_swapchain_image_views();
+		VkImageView create_swapchain_image_views(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags flags);
 
 		void create_command_pool();
 
 		void create_depth_stencil();
 
-		void create_renderpass();
+		VkRenderPass create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 
 		void create_pipeline();
 
 		void create_descriptor_pool_and_sets();
 
-		void create_framebuffers();
+		VkFramebuffer create_framebuffer(VkDevice device, VkImageView view, VkImageView depth_view = VK_NULL_HANDLE);
 
 		void create_sync_objects();
 
@@ -137,6 +139,7 @@ namespace Expectre
 
 
 		VkRenderPass m_render_pass{};
+		VkRenderPass m_ui_render_pass{};
 		VkPipelineLayout m_pipeline_layout{};
 		VkPipelineLayout m_ui_pipeline_layout{};
 		VkPipeline m_pipeline{};
@@ -232,6 +235,8 @@ namespace Expectre
 
 		Noesis::Ptr<Noesis::Texture> WrapTexture(VkImage image, uint32_t width, uint32_t height,
 			uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha);
+
+		std::vector<AllocatedBuffer> m_allocated_buffers{};
 
 	};
 }

@@ -22,6 +22,8 @@
  // #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
+#include <vma/vk_mem_alloc.h>
+
 #include <spdlog/spdlog.h>
 
 #include "model.h"
@@ -434,7 +436,7 @@ namespace Expectre {
 
 			VmaAllocationCreateInfo alloc_info = {};
 			alloc_info.usage = memory_usage;
-
+			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; 
 			AllocatedBuffer result{};
 			VK_CHECK_RESULT(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &result.buffer, &result.allocation, nullptr));
 			return result;
