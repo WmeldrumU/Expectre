@@ -57,15 +57,30 @@ namespace Expectre
 			m_swapchain_image_views[i] = create_swapchain_image_views(m_device, m_swapchain_images[i],
 				m_swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
-		create_depth_stencil();
-		m_render_pass = create_renderpass(m_device, m_swapchain_image_format, m_depth_format);
-		create_descriptor_set_layout();
-		create_pipeline();
-		create_command_pool();
+		m_cmd_pool = create_command_pool(m_device, m_graphics_queue_family_index);
+		m_depth_stencil = TextureVk::create_depth_stencil(m_chosen_phys_device, m_device, m_cmd_pool, m_graphics_queue, m_allocator, m_extent);
+		m_render_pass = create_renderpass(m_device, m_swapchain_image_format, m_depth_stencil.image_info.format);
+		VkDescriptorSetLayoutBinding ubo_layout_binding{};
+		ubo_layout_binding.binding = 0;
+		ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		ubo_layout_binding.descriptorCount = 1;
+		ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		ubo_layout_binding.pImmutableSamplers = nullptr;
+
+		VkDescriptorSetLayoutBinding sampler_layout_binding{};
+		sampler_layout_binding.binding = 1;
+		sampler_layout_binding.descriptorCount = 1;
+		sampler_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		sampler_layout_binding.pImmutableSamplers = nullptr;
+		sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		m_descriptor_set_layout = create_descriptor_set_layout({ ubo_layout_binding, sampler_layout_binding });
+		m_pipeline_layout = create_pipeline_layout(m_device, m_descriptor_set_layout);
+		m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
 		m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
 		for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
 			VkImageView view = m_swapchain_image_views[i];
-			m_swapchain_framebuffers[i] = create_framebuffer(m_device, m_swapchain_image_views[i], m_depth_image_view);
+			m_swapchain_framebuffers[i] = create_framebuffer(m_device, m_swapchain_image_views[i], m_depth_stencil.view);
 		}
 		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		m_texture = TextureVk::create_texture_from_file(m_device, m_cmd_pool, m_graphics_queue, m_allocator, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
@@ -74,7 +89,12 @@ namespace Expectre
 		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
 		create_geometry_buffer();
 		create_uniform_buffers();
-		create_descriptor_pool_and_sets();
+		m_descriptor_pool = create_descriptor_pool(m_device);
+		for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
+			m_uniform_buffers[i].descriptorSet =
+				create_descriptor_set(m_device, m_descriptor_pool, m_descriptor_set_layout, m_uniform_buffers[i].allocated_buffer.buffer, m_texture.view, m_texture_sampler);
+		}
+
 		create_command_buffers();
 
 		// create_ui_renderer();
@@ -96,9 +116,8 @@ namespace Expectre
 	void RendererVk::cleanup_swapchain()
 	{
 		// Destroy depth buffer
-		vkDestroyImageView(m_device, m_depth_image_view, nullptr);
-		vkDestroyImage(m_device, m_depth_image.image, nullptr);
-		vmaFreeMemory(m_allocator, m_depth_image.allocation);
+		vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
+		vmaDestroyImage(m_allocator, m_depth_stencil.image, m_depth_stencil.allocation);
 
 		for (auto framebuffer : m_swapchain_framebuffers)
 		{
@@ -389,7 +408,6 @@ namespace Expectre
 		vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, m_swapchain_images.data());
 
 		m_swapchain_image_format = m_surface_format.format;
-		m_extent = m_extent;
 	}
 
 	VkImageView RendererVk::create_swapchain_image_views(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags flags)
@@ -447,19 +465,6 @@ namespace Expectre
 		// Cleanup staging
 		vmaDestroyBuffer(m_allocator, vertex_staging.buffer, vertex_staging.allocation);
 		vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
-	}
-
-	void RendererVk::create_depth_stencil()
-	{
-		m_depth_format = ToolsVk::find_depth_format(m_chosen_phys_device);
-
-
-		m_depth_image = ToolsVk::CreateImage2D(m_allocator, m_extent.width,
-			m_extent.height, m_depth_format, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			VK_SAMPLE_COUNT_1_BIT);
-
-
-		m_depth_image_view = ToolsVk::create_image_view(m_device, m_depth_image.image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format)
@@ -544,9 +549,8 @@ namespace Expectre
 		return render_pass;
 	}
 
-	VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout)
+	VkPipeline RendererVk::create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout)
 	{
-		//TODO - this isn't correct yet
 		VkShaderModule vert_shader_module = ToolsVk::createShaderModule(device, (WORKSPACE_DIR + std::string("/shaders/vert.spv")));
 		VkShaderModule frag_shader_module = ToolsVk::createShaderModule(device, (WORKSPACE_DIR + std::string("/shaders/frag.spv")));
 
@@ -681,15 +685,17 @@ namespace Expectre
 		return pipeline;
 	}
 
-	void RendererVk::create_command_pool()
+	VkCommandPool RendererVk::create_command_pool(VkDevice device, uint32_t graphics_queue_family_index)
 	{
 
 		VkCommandPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		pool_info.queueFamilyIndex = m_graphics_queue_family_index;
+		pool_info.queueFamilyIndex = graphics_queue_family_index;
 
-		VK_CHECK_RESULT(vkCreateCommandPool(m_device, &pool_info, nullptr, &m_cmd_pool));
+		VkCommandPool command_pool{};
+		VK_CHECK_RESULT(vkCreateCommandPool(device, &pool_info, nullptr, &command_pool));
+		return command_pool;
 	}
 
 	void RendererVk::create_command_buffers()
@@ -705,10 +711,8 @@ namespace Expectre
 		VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &cmd_buf_info, m_cmd_buffers.data()));
 	}
 
-	void RendererVk::create_descriptor_pool_and_sets()
-	{
+	VkDescriptorPool RendererVk::create_descriptor_pool(VkDevice device) {
 
-		// pool
 		std::array<VkDescriptorPoolSize, 2> pool_sizes{};
 		pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		pool_sizes[0].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
@@ -722,53 +726,60 @@ namespace Expectre
 		pool_info.pPoolSizes = pool_sizes.data();
 		pool_info.maxSets = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
 
-		VK_CHECK_RESULT(vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_descriptor_pool));
+		VkDescriptorPool pool;
+		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool));
+		return pool;
 
-		// sets
-		// std::vector<VkDescriptorSetLayout> layouts(MAX_CONCURRENT_FRAMES, m_descriptor_set_layout);
+	}
 
-		for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
-		{
-			VkDescriptorSetAllocateInfo alloc_info{};
-			alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			alloc_info.descriptorPool = m_descriptor_pool;
-			alloc_info.descriptorSetCount = 1;
-			alloc_info.pSetLayouts = &m_descriptor_set_layout;
+	VkDescriptorSet RendererVk::create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
+		VkDescriptorSetLayout descriptor_set_layout, VkBuffer buffer, VkImageView image_view,
+		VkSampler sampler)
+	{
 
-			// m_descriptor_sets.resize(MAX_CONCURRENT_FRAMES);
-			VK_CHECK_RESULT(vkAllocateDescriptorSets(m_device,
-				&alloc_info,
-				&m_uniform_buffers[i].descriptorSet));
+		VkDescriptorSet descriptor_set;
 
-			VkDescriptorBufferInfo buffer_info{};
-			buffer_info.buffer = m_uniform_buffers[i].allocated_buffer.buffer;
-			buffer_info.offset = 0;
-			buffer_info.range = sizeof(UBO);
+		VkDescriptorSetAllocateInfo alloc_info{};
+		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info.descriptorPool = descriptor_pool;
+		alloc_info.descriptorSetCount = 1;
+		alloc_info.pSetLayouts = &descriptor_set_layout;
 
-			VkDescriptorImageInfo image_info{};
-			image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_info.imageView = m_texture.view;
-			image_info.sampler = m_texture_sampler;
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device,
+			&alloc_info,
+			&descriptor_set));
 
-			std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
-			descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptor_writes[0].dstSet = m_uniform_buffers[i].descriptorSet;
-			descriptor_writes[0].dstBinding = 0;
-			descriptor_writes[0].dstArrayElement = 0;
-			descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptor_writes[0].descriptorCount = 1;
-			descriptor_writes[0].pBufferInfo = &buffer_info;
+		VkDescriptorBufferInfo buffer_info{};
+		buffer_info.buffer = buffer;
+		buffer_info.offset = 0;
+		buffer_info.range = sizeof(UBO);
 
-			descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptor_writes[1].dstSet = m_uniform_buffers[i].descriptorSet;
-			descriptor_writes[1].dstBinding = 1;
-			descriptor_writes[1].dstArrayElement = 0;
-			descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			descriptor_writes[1].descriptorCount = 1;
-			descriptor_writes[1].pImageInfo = &image_info;
+		VkDescriptorImageInfo image_info{};
+		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		image_info.imageView = image_view;
+		image_info.sampler = sampler;
 
-			vkUpdateDescriptorSets(m_device, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
-		}
+		// VkWriteDescriptorSet - Represents a descriptor set write operation 
+		std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
+		descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[0].dstSet = descriptor_set;
+		descriptor_writes[0].dstBinding = 0;
+		descriptor_writes[0].dstArrayElement = 0;
+		descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptor_writes[0].descriptorCount = 1;
+		descriptor_writes[0].pBufferInfo = &buffer_info;
+
+		descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[1].dstSet = descriptor_set;
+		descriptor_writes[1].dstBinding = 1;
+		descriptor_writes[1].dstArrayElement = 0;
+		descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptor_writes[1].descriptorCount = 1;
+		descriptor_writes[1].pImageInfo = &image_info;
+
+		vkUpdateDescriptorSets(device, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
+
+		return descriptor_set;
 	}
 
 	VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkImageView view, VkImageView depth_view)
@@ -899,8 +910,8 @@ namespace Expectre
 
 		if (m_ui_renderer)
 		{
-			auto* ui_renderer = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
-			ui_renderer->Draw(command_buffer, m_swapchain_images[image_index]);
+			/*auto* ui_renderer = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
+			ui_renderer->Draw(command_buffer, m_swapchain_images[image_index]);*/
 		}
 
 		// m_ui_renderer->Draw(m_current_frame);
@@ -959,38 +970,29 @@ namespace Expectre
 		m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
 	}
 
-	void RendererVk::create_descriptor_set_layout()
+	VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings)
 	{
-		VkDescriptorSetLayoutBinding ubo_layout_binding{};
-		ubo_layout_binding.binding = 0;
-		ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		ubo_layout_binding.descriptorCount = 1;
-		ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		ubo_layout_binding.pImmutableSamplers = nullptr;
 
-		VkDescriptorSetLayoutBinding sampler_layout_binding{};
-		sampler_layout_binding.binding = 1;
-		sampler_layout_binding.descriptorCount = 1;
-		sampler_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		sampler_layout_binding.pImmutableSamplers = nullptr;
-		sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		std::array<VkDescriptorSetLayoutBinding, 2> bindings = { ubo_layout_binding, sampler_layout_binding };
 		VkDescriptorSetLayoutCreateInfo layout_info{};
 		layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layout_info.bindingCount = static_cast<uint32_t>(bindings.size());
-		layout_info.pBindings = bindings.data();
+		layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
+		layout_info.pBindings = layout_bindings.data();
+		VkDescriptorSetLayout layout;
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &layout));
+		return layout;
+	}
 
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &m_descriptor_set_layout));
-
+	VkPipelineLayout RendererVk::create_pipeline_layout(VkDevice device, VkDescriptorSetLayout descriptor_set_layout) {
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipeline_layout_info.pNext = nullptr;
 		pipeline_layout_info.setLayoutCount = 1;
 		// pipeline_layout_info.pushConstantRangeCount = 0;
-		pipeline_layout_info.pSetLayouts = &m_descriptor_set_layout;
+		pipeline_layout_info.pSetLayouts = &descriptor_set_layout;
 
-		VK_CHECK_RESULT(vkCreatePipelineLayout(m_device, &pipeline_layout_info, nullptr, &m_pipeline_layout));
+		VkPipelineLayout pipeline_layout{};
+		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr, &pipeline_layout));
+		return pipeline_layout;
 	}
 
 	void RendererVk::create_uniform_buffers()
@@ -1071,7 +1073,7 @@ namespace Expectre
 		const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
 		if (frag_shader_changed || vert_shader_changed)
 		{
-			create_pipeline();
+			m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
 		}
 
 		// if (m_ui_renderer) {
@@ -1147,11 +1149,11 @@ namespace Expectre
 			{
 				ToolsVk::end_single_time_commands(cmd);
 			};*/
-		m_ui_renderer = std::make_unique<UIRendererVkNoesis>(renderer_info);
+		//m_ui_renderer = std::make_unique<UIRendererVkNoesis>(renderer_info);
 		if (m_ui_renderer)
 		{
-			auto* ui_renderer_noesis = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
-			ui_renderer_noesis->WarmUpRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);
+		/*	auto* ui_renderer_noesis = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
+			ui_renderer_noesis->WarmUpRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);*/
 
 			/*ui_renderer_noesis->CreateRend
 			ui_renderer_noesis->SetRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);
@@ -1161,7 +1163,7 @@ namespace Expectre
 
 #define VK_NAME(obj, type, ...)                                           \
 	NS_MACRO_BEGIN                                                        \
-	NS_ASSERT(mDevice != nullptr);                                        \
+	NS_ASSERT(m_device != nullptr);                                        \
 	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
 	{                                                                     \
 		char name[128];                                                   \
@@ -1171,7 +1173,7 @@ namespace Expectre
 		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
 		info.object = (uint64_t)obj;                                      \
 		info.pObjectName = name;                                          \
-		V(vkDebugMarkerSetObjectNameEXT(mDevice, &info));                 \
+		V(vkDebugMarkerSetObjectNameEXT(m_device, &info));                 \
 	}                                                                     \
 	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
 	{                                                                     \
@@ -1182,7 +1184,7 @@ namespace Expectre
 		info.objectType = VK_OBJECT_TYPE_##type;                          \
 		info.objectHandle = (uint64_t)obj;                                \
 		info.pObjectName = name;                                          \
-		V(vkSetDebugUtilsObjectNameEXT(mDevice, &info));                  \
+		V(vkSetDebugUtilsObjectNameEXT(m_device, &info));                  \
 	}                                                                     \
 	NS_MACRO_END
 #define VK_BEGIN_EVENT(...) NS_NOOP
@@ -1265,50 +1267,192 @@ namespace Expectre
 	};
 
 
-	//Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
-	//{
-
-	//	Noesis::Ptr<VKRenderTarget> render_target = Noesis::MakePtr<VKRenderTarget>();
-
-
-	//	if (m_ui_render_pass == VK_NULL_HANDLE)
-	//	{
-	//		VkRenderPass renderPass = create_renderpass(m_device, m_swapchain_image_format, m_depth_format);
-	//		CreatePipelines(renderPass, surface->samples);
-	//		m_ui_render_pass = renderPass;
-	//	}
-	//	// assign a render pass to render target
-	//	render_target->renderPass = m_ui_render_pass;
-
-	//	// create framebuffer and assign to rendertarget
-	//	VkFramebufferCreateInfo framebufferInfo{};
-	//	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	//	framebufferInfo.renderPass = render_target->renderPass;
-	//	framebufferInfo.attachmentCount = attachments.Size();
-	//	framebufferInfo.pAttachments = attachments.Data();
-	//	framebufferInfo.width = width;
-	//	framebufferInfo.height = height;
-	//	framebufferInfo.layers = 1;
-
-	//	VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
-	//	VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
-
-	//	return nullptr;
-	//}
-
-	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface)
+	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
 	{
-		return Noesis::Ptr<Noesis::RenderTarget>();
+
+		using Noesis::MakePtr;
+
+		auto surface = MakePtr<VKRenderTarget>();
+		surface->samples = VK_SAMPLE_COUNT_1_BIT;
+
+		const VkFormat colorFmt = m_swapchain_image_format;
+
+		// 1) Single-sample color (attachment + sampled)
+		auto colorTex = TextureVk::create_texture(
+			m_device, m_cmd_pool, m_graphics_queue, m_allocator,
+			/*pixelData*/ nullptr,
+			width, height,
+			/*mip_levels*/ 1,
+			/*format*/ colorFmt,
+			/*aspect*/ VK_IMAGE_ASPECT_COLOR_BIT,
+			/*extra_usage*/ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			/*final_layout*/ VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		auto color = Noesis::MakePtr<VKTexture>();
+		color->image = colorTex.image;
+		color->view = colorTex.view;
+		color->allocation = colorTex.allocation;
+		color->image_info = colorTex.image_info;
+		color->view_info = colorTex.view_info;
+		color->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		color->image_info.extent = { width, height };
+		surface->color = color;  // This is the one Noesis will sample
+
+		// 2) Optional depth/stencil
+		std::vector<VkImageView> atts;
+		atts.reserve(2);
+		atts.push_back(surface->color->view);
+
+		VkFormat dsFmt = VK_FORMAT_UNDEFINED;
+		if (needsStencil) {
+			dsFmt = ToolsVk::find_supported_format(
+				m_chosen_phys_device,
+				{ VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT },
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+			auto dsTex = TextureVk::create_texture(
+				m_device, m_cmd_pool, m_graphics_queue, m_allocator,
+				/*pixelData*/ nullptr,
+				width, height,
+				/*mip_levels*/ 1,
+				/*format*/ dsFmt,
+				/*aspect*/ VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+				/*extra_usage*/ VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+				/*final_layout*/ VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+			auto ds = Noesis::MakePtr<VKTexture>();
+			ds->image = dsTex.image;
+			ds->view = dsTex.view;
+			ds->allocation = dsTex.allocation;
+			ds->image_info = dsTex.image_info;
+			ds->view_info = dsTex.view_info;
+			ds->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			ds->image_info.extent = { width, height };
+			surface->stencil = ds;
+
+			atts.push_back(surface->stencil->view);
+		}
+
+		// 3) Render pass (single-sample, no resolve)
+		VkAttachmentDescription colorAtt{};
+		colorAtt.format = colorFmt;
+		colorAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAtt.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colorAtt.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAtt.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAtt.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAtt.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		VkAttachmentDescription dsAtt{};
+		if (needsStencil) {
+			dsAtt.format = dsFmt;
+			dsAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+			dsAtt.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			dsAtt.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			dsAtt.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			dsAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			dsAtt.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			dsAtt.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		}
+
+		VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+		VkAttachmentReference dsRef{};
+		if (needsStencil) {
+			dsRef.attachment = 1;
+			dsRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		}
+
+		VkSubpassDescription sub{};
+		sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		sub.colorAttachmentCount = 1;
+		sub.pColorAttachments = &colorRef;
+		sub.pDepthStencilAttachment = needsStencil ? &dsRef : nullptr;
+
+		VkSubpassDependency dep{};
+		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dep.dstSubpass = 0;
+		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.srcAccessMask = 0;
+		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		VkAttachmentDescription attachments[2];
+		uint32_t attachmentCount = 1;
+		attachments[0] = colorAtt;
+		if (needsStencil) {
+			attachments[1] = dsAtt;
+			attachmentCount = 2;
+		}
+
+		VkRenderPassCreateInfo rpci{ VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+		rpci.attachmentCount = attachmentCount;
+		rpci.pAttachments = attachments;
+		rpci.subpassCount = 1;
+		rpci.pSubpasses = &sub;
+		rpci.dependencyCount = 1;
+		rpci.pDependencies = &dep;
+
+		VK_CHECK_RESULT(vkCreateRenderPass(m_device, &rpci, nullptr, &surface->renderPass));
+
+		// 4) Framebuffer
+		VkFramebufferCreateInfo fbci{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+		fbci.renderPass = surface->renderPass;
+		fbci.attachmentCount = static_cast<uint32_t>(atts.size());
+		fbci.pAttachments = atts.data();
+		fbci.width = width;
+		fbci.height = height;
+		fbci.layers = 1;
+		VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &fbci, nullptr, &surface->framebuffer));
+
+		return surface;
+
+	}
+
+	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface_)
+	{
+		using namespace Noesis;
+
+		VKRenderTarget* src = (VKRenderTarget*)surface_;
+
+		uint32_t width = src->color->GetWidth();
+		uint32_t height = src->color->GetHeight();
+
+		Ptr<VKRenderTarget> surface = MakePtr<VKRenderTarget>();
+		surface->renderPass = src->renderPass;
+		surface->samples = src->samples;
+		surface->colorAA = src->colorAA;
+		surface->stencil = src->stencil;
+
+		Vector<VkImageView, 3> attachments;
+		if (surface->stencil)
+		{
+			attachments.PushBack(surface->stencil->view);
+		}
+
+		//EnsureTransferCommands();
+
+		VkFramebufferCreateInfo framebufferInfo{};
+		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebufferInfo.renderPass = surface->renderPass;
+		framebufferInfo.attachmentCount = attachments.Size();
+		framebufferInfo.pAttachments = attachments.Data();
+		framebufferInfo.width = width;
+		framebufferInfo.height = height;
+		framebufferInfo.layers = 1;
+
+		VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
+		VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
+		return surface;
 	}
 
 
 	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height,
 		uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
 	{
-		//Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>(0);
-
 		// covert noesis format to vulkan foramt
-		/*VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+		VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
 		switch (format) {
 		case Noesis::TextureFormat::R8:
 			vk_format = VK_FORMAT_R8_UNORM;
@@ -1322,15 +1466,15 @@ namespace Expectre
 		}
 
 		TextureVk tex = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, data, width, height, numLevels);
-		Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>(0);
+		Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>();
 		texture->image = tex.image;
 		texture->image_info = tex.image_info;
 		texture->allocation = tex.allocation;
 		texture->view = tex.view;
 		texture->view_info = tex.view_info;
-		return texture;*/
-		return nullptr;
+		return texture;
 	}
+
 	void RendererVk::UpdateTexture(Noesis::Texture* texture_, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
 	{
 
@@ -1376,15 +1520,19 @@ namespace Expectre
 
 	void RendererVk::BeginOffscreenRender()
 	{
+		// NA
 	}
 	void RendererVk::EndOffscreenRender()
 	{
+		// NA
 	}
 	void RendererVk::BeginOnscreenRender()
 	{
+		// NA
 	}
 	void RendererVk::EndOnscreenRender()
 	{
+		// NA
 	}
 	void RendererVk::SetRenderTarget(Noesis::RenderTarget* surface)
 	{
@@ -1397,6 +1545,8 @@ namespace Expectre
 	}
 	void RendererVk::ResolveRenderTarget(Noesis::RenderTarget* surface, const Noesis::Tile* tiles, uint32_t numTiles)
 	{
+		// Not supporting msaa yet
+		// NA
 	}
 	void* RendererVk::MapVertices(uint32_t bytes)
 	{
@@ -1428,7 +1578,51 @@ namespace Expectre
 	void RendererVk::UnmapIndices()
 	{
 	}
+
 	void RendererVk::DrawBatch(const Noesis::Batch& batch)
 	{
+		//UtilsNs::LayoutNs layout;
+
+		//if (batch.pixelShader == 0)
+		//{
+		//	NS_ASSERT(batch.shader.v < NS_COUNTOF(m_layouts_ns));
+		//	layout = m_layouts_ns[batch.shader.v];
+		//}
+		//else
+		//{
+		//	// not using custom shaders
+		//	/*NS_ASSERT((uintptr_t)batch.pixelShader <= mCustomShaders.Size());
+		//	layout = mCustomShaders[(int)(uintptr_t)batch.pixelShader - 1].layout;*/
+		//}
+
+
+		//// 2) Skip if batch needs resources we didn't provide
+		//if (NS_UNLIKELY((layout.signature & UtilsNs::GetSignature(batch)) != layout.signature)) {
+		//	return;
+		//}
+
+		//// 3) Bind the geometry buffers filled via Map*/Unmap*
+		//VkCommandBuffer cmd = m_cmd_buffers[m_current_frame];
+
+		//// vertices: tightly packed, starting at 0 each frame (see MapVertices below)
+		//const VkBuffer vbs[] = { m_noesis.vbo.buffer };
+		//const VkDeviceSize offs[] = { 0 };
+		//vkCmdBindVertexBuffers(cmd, 0, 1, vbs, offs);
+
+		//// indices: 16-bit, tightly packed from 0 each frame (see MapIndices below)
+		//vkCmdBindIndexBuffer(cmd, m_noesis.ibo.buffer, 0, VK_INDEX_TYPE_UINT16);
+
+		//// 4) Bind descriptors / pipeline that correspond to 'layout'
+		////    (You likely call your existing helpers here.)
+		////    BindDescriptors(batch, layout);
+		////    BindPipeline(batch);
+		////    SetStencilRef(batch.stencilRef);
+
+		//// 5) Compute the first index exactly like Noesis:
+		////    m_noesis.indexBase16 is set when UnmapIndices() is called.
+		//const uint32_t firstIndex = batch.startIndex + m_noesis.indexBase16;
+
+		//// 6) Draw (Noesis uses 2 instances for single-pass stereo; we skip that here)
+		//vkCmdDrawIndexed(cmd, batch.numIndices, 1, firstIndex, 0, 0);
 	}
 }

@@ -28,6 +28,7 @@
 #include "IUIRenderer.h"
 #include "TextureVk.h"
 #include "ToolsVk.h"
+#include "UtilsNs.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -50,8 +51,7 @@ namespace Expectre
 	struct UniformBuffer
 	{
 		AllocatedBuffer allocated_buffer{};
-		// The descriptor set stores the resources bound to the binding points in a shader
-		// It connects the binding points of the different shaders with the buffers and images used for those bindings
+		// A descriptor set in Vulkan is a GPU-side object that binds your shader to actual resources
 		VkDescriptorSet descriptorSet{};
 		// We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
 		uint8_t* mapped{ nullptr };
@@ -90,15 +90,16 @@ namespace Expectre
 
 		VkImageView create_swapchain_image_views(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags flags);
 
-		void create_command_pool();
-
-		void create_depth_stencil();
+		VkCommandPool create_command_pool(VkDevice device, uint32_t graphics_queue_family_index);
 
 		VkRenderPass create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 
-		void create_pipeline();
+		VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout);
 
-		void create_descriptor_pool_and_sets();
+		VkDescriptorPool create_descriptor_pool(VkDevice device);
+
+		VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout descriptor_layout, VkBuffer buffer, VkImageView image_view,
+			VkSampler sampler);
 
 		VkFramebuffer create_framebuffer(VkDevice device, VkImageView view, VkImageView depth_view = VK_NULL_HANDLE);
 
@@ -106,7 +107,11 @@ namespace Expectre
 
 		void record_draw_commands(VkCommandBuffer command_buffer, uint32_t image_index);
 
-		void create_descriptor_set_layout();
+
+		VkPipelineLayout create_pipeline_layout(VkDevice device, VkDescriptorSetLayout descriptor_set_layout);
+
+
+		VkDescriptorSetLayout create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings);
 
 		void create_uniform_buffers();
 
@@ -145,7 +150,6 @@ namespace Expectre
 		VkPipeline m_pipeline{};
 		VkPipeline m_ui_pipeline{};
 		VkDescriptorPool m_descriptor_pool{};
-		// std::vector<VkDescriptorSet> m_descriptor_sets{};
 		VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_descriptor_set_layout{ VK_NULL_HANDLE };
 		std::vector<const char*> m_validation_layers{ "VK_LAYER_KHRONOS_validation" };
@@ -161,9 +165,7 @@ namespace Expectre
 		std::vector<VkCommandBuffer> m_cmd_buffers;
 		bool m_ready = false;
 
-		ToolsVk::ImageAlloc m_depth_image;
-		VkImageView m_depth_image_view{};
-		VkFormat m_depth_format{};
+		TextureVk m_depth_stencil;
 
 		VmaAllocator m_allocator{ VK_NULL_HANDLE };
 
@@ -209,7 +211,7 @@ namespace Expectre
 		/// From RenderDevice
 	//@{
 		const Noesis::DeviceCaps& GetCaps() const override;
-		Noesis::Ptr<::Noesis::RenderTarget> CreateRenderTarget(const char* label, uint32_t width,
+		Noesis::Ptr<Noesis::RenderTarget> CreateRenderTarget(const char* label, uint32_t width,
 			uint32_t height, uint32_t sampleCount, bool needsStencil) override;
 		Noesis::Ptr<Noesis::RenderTarget> CloneRenderTarget(const char* label,
 			Noesis::RenderTarget* surface) override;
@@ -235,6 +237,15 @@ namespace Expectre
 
 		Noesis::Ptr<Noesis::Texture> WrapTexture(VkImage image, uint32_t width, uint32_t height,
 			uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha);
+
+		// State used by Noesis render device
+		UtilsNs::RenderStateNs m_noesis;
+
+
+		VkShaderModule m_vert_shaders_ns[Noesis::Shader::Vertex::Count];
+		VkShaderModule m_pix_shaders_ns[Noesis::Shader::Count];
+		UtilsNs::LayoutNs m_layouts_ns[Noesis::Shader::Count];
+
 
 		std::vector<AllocatedBuffer> m_allocated_buffers{};
 
