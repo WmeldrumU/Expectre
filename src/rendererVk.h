@@ -84,7 +84,7 @@ namespace Expectre
 
 		void create_swapchain();
 
-		void create_command_buffers();
+		VkCommandBuffer create_command_buffer(VkDevice device, VkCommandPool command_pool);
 
 		void create_geometry_buffer();
 
@@ -92,11 +92,11 @@ namespace Expectre
 
 		VkCommandPool create_command_pool(VkDevice device, uint32_t graphics_queue_family_index);
 
-		VkRenderPass create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format);
+		VkRenderPass create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format, bool is_presenting_pass);
 
 		VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout);
 
-		VkDescriptorPool create_descriptor_pool(VkDevice device);
+		VkDescriptorPool create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes);
 
 		VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout descriptor_layout, VkBuffer buffer, VkImageView image_view,
 			VkSampler sampler);
@@ -113,7 +113,7 @@ namespace Expectre
 
 		VkDescriptorSetLayout create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings);
 
-		void create_uniform_buffers();
+		UniformBuffer create_uniform_buffer(VmaAllocator allocator, VkDeviceSize buffer_size);
 
 		void update_uniform_buffer();
 
@@ -162,7 +162,7 @@ namespace Expectre
 		VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
 		VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
 		// VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> m_cmd_buffers;
+		std::array<VkCommandBuffer, MAX_CONCURRENT_FRAMES> m_cmd_buffers;
 		bool m_ready = false;
 
 		TextureVk m_depth_stencil;

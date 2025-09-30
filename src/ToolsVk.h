@@ -427,7 +427,7 @@ namespace Expectre {
 			vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buffer);
 		}
 
-		static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage)
+		static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage, VkMemoryPropertyFlags memory_properties)
 		{
 			VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			buffer_info.size = size;
@@ -436,7 +436,7 @@ namespace Expectre {
 
 			VmaAllocationCreateInfo alloc_info = {};
 			alloc_info.usage = memory_usage;
-			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; 
+			alloc_info.requiredFlags = memory_properties;
 			AllocatedBuffer result{};
 			VK_CHECK_RESULT(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &result.buffer, &result.allocation, nullptr));
 			return result;
