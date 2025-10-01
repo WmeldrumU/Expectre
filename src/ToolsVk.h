@@ -36,6 +36,39 @@
 			assert(res == VK_SUCCESS);                                                                                                             \
 		}                                                                                                                                          \
 	}
+
+
+#define VK_NAME(obj, type, ...)                                           \
+	NS_MACRO_BEGIN                                                        \
+	NS_ASSERT(m_device != nullptr);                                        \
+	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
+	{                                                                     \
+		char name[128];                                                   \
+		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+		VkDebugMarkerObjectNameInfoEXT info{};                            \
+		info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
+		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
+		info.object = (uint64_t)obj;                                      \
+		info.pObjectName = name;                                          \
+		V(vkDebugMarkerSetObjectNameEXT(m_device, &info));                 \
+	}                                                                     \
+	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
+	{                                                                     \
+		char name[128];                                                   \
+		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+		VkDebugUtilsObjectNameInfoEXT info{};                             \
+		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;  \
+		info.objectType = VK_OBJECT_TYPE_##type;                          \
+		info.objectHandle = (uint64_t)obj;                                \
+		info.pObjectName = name;                                          \
+		V(vkSetDebugUtilsObjectNameEXT(m_device, &info));                  \
+	}                                                                     \
+	NS_MACRO_END
+#define VK_BEGIN_EVENT(...) NS_NOOP
+#define VK_END_EVENT() NS_NOOP
+#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
+
+
 namespace Expectre {
 	// Vertex buffer and attributes
 	struct AllocatedBuffer

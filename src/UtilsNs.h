@@ -1990,6 +1990,85 @@ namespace Expectre {
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pl, nullptr, &render_state.pipelineLayout));
 		}
 
+		static VkRenderPass CreateRenderPass(VkDevice device, VkSampleCountFlagBits samples, bool needsStencil, VkFormat color_format, VkFormat stencil_format)
+		{
+			Vector<VkAttachmentDescription, 3> attachments;
+
+			VkAttachmentReference stencilRef{};
+			VkAttachmentReference colorRef{};
+			VkAttachmentReference resolveRef{};
+
+			VkSubpassDescription subpass{};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = 1;
+
+			VkSubpassDependency dependencies[2]{};
+			dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[0].dstSubpass = 0;
+			dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+			dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			dependencies[1].srcSubpass = 0;
+			dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+			dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			if (needsStencil)
+			{
+				// Stencil: Don't care -> Don't care
+				VkAttachmentDescription stencil{};
+				stencil.samples = samples;
+				stencil.format = stencil_format;
+				stencil.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				stencil.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				stencil.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				stencil.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				stencil.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				stencil.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+				stencilRef.attachment = attachments.Size();
+				stencilRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				subpass.pDepthStencilAttachment = &stencilRef;
+				attachments.PushBack(stencil);
+			}
+
+			// Color: Don't care -> Store
+			VkAttachmentDescription color{};
+			color.format = color_format;
+			color.samples = VK_SAMPLE_COUNT_1_BIT;
+			color.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			color.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			colorRef.attachment = attachments.Size();
+			colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			subpass.pColorAttachments = &colorRef;
+			attachments.PushBack(color);
+
+
+			VkRenderPassCreateInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			renderPassInfo.subpassCount = 1;
+			renderPassInfo.pSubpasses = &subpass;
+			renderPassInfo.attachmentCount = attachments.Size();
+			renderPassInfo.pAttachments = attachments.Data();
+			renderPassInfo.dependencyCount = 2;
+			renderPassInfo.pDependencies = dependencies;
+
+			VkRenderPass renderPass;
+			VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
+			VK_NAME(renderPass, RENDER_PASS, samples > 1 ? "Noesis_RGBA8%s_x%d_RenderPass" : "Noesis_RGBA8%s_RenderPass", needsStencil ? "_S8" : "", samples);
+			return renderPass;
+		}
 
 		static void BindDescriptors(const Batch& batch, const LayoutNs& layout)
 		{
