@@ -6,6 +6,10 @@
 #include <NsCore/Memory.h>
 #include <NsRender/RenderDevice.h>
 #include "UIRendererVkNoesis.cpp"
+#include <NsCore/HashMap.h>
+#include <NsCore/Vector.h>
+#include <NsCore/String.h>
+#include "FastLZ.h"
 namespace Expectre {
 	namespace UtilsNs
 	{
@@ -1855,12 +1859,154 @@ namespace Expectre {
 			131,64,99,64,47,196,91,64,23,228,7,91,66,99,64,55,64,27,68,91,66,3,11,48,0,0,0,253,0,1,0,56,0,1,0
 		};
 
+		// Root signature flags
+		static const uint32_t VS_CB0 = 1;
+		static const uint32_t VS_CB1 = 2;
+		static const uint32_t PS_CB0 = 4;
+		static const uint32_t PS_CB1 = 8;
+		static const uint32_t PS_T0 = 16;
+		static const uint32_t PS_T1 = 32;
+		static const uint32_t PS_T2 = 64;
+		static const uint32_t PS_T3 = 128;
+		static const uint32_t PS_T4 = 256;
+
 		struct ShaderVS
 		{
 			const char* label;
 			uint32_t start;
 			uint32_t size;
 		};
+		// --- Noesis dynamic UBO ring (independent of m_noesis) ---
+		struct NsDynUboFrame {
+			VkBuffer      buf = VK_NULL_HANDLE;
+			VmaAllocation alloc = VK_NULL_HANDLE;
+			uint8_t* mapped = nullptr;
+			VkDeviceSize  size = 0;
+			VkDeviceSize  head = 0;
+		};
+		static constexpr VkDeviceSize kNsUboBytesPerFrame = 256 * 1024; // 256 KB
+
+#ifdef NS_PLATFORM_ANDROID
+#define VSHADER(n)          \
+    case Shader::Vertex::n: \
+        return stereo ? ShaderVS{#n, n##_Multiview_VS_Start, n##_Multiview_VS_Size} : ShaderVS{#n, n##_VS_Start, n##_VS_Size};
+
+#define VSHADER_SRGB(n)     \
+    case Shader::Vertex::n: \
+        return stereo ? (sRGB ? ShaderVS{#n "_sRGB", n##_SRGB_Multiview_VS_Start, n##_SRGB_Multiview_VS_Size} : ShaderVS{#n, n##_Multiview_VS_Start, n##_Multiview_VS_Size}) : (sRGB ? ShaderVS{#n "_sRGB", n##_SRGB_VS_Start, n##_SRGB_VS_Size} : ShaderVS{#n, n##_VS_Start, n##_VS_Size});
+#else
+#define VSHADER(n)          \
+    case Shader::Vertex::n: \
+        return stereo ? ShaderVS{#n, n##_Layer_VS_Start, n##_Layer_VS_Size} : ShaderVS{#n, n##_VS_Start, n##_VS_Size};
+
+#define VSHADER_SRGB(n)     \
+    case Shader::Vertex::n: \
+        return stereo ? (sRGB ? ShaderVS{#n "_sRGB", n##_SRGB_Layer_VS_Start, n##_SRGB_Layer_VS_Size} : ShaderVS{#n, n##_Layer_VS_Start, n##_Layer_VS_Size}) : (sRGB ? ShaderVS{#n "_sRGB", n##_SRGB_VS_Start, n##_SRGB_VS_Size} : ShaderVS{#n, n##_VS_Start, n##_VS_Size});
+#endif
+
+		static auto ShadersVS = [](uint32_t shader, bool sRGB, bool stereo)
+			{
+				switch (shader)
+				{
+					VSHADER(Pos)
+						VSHADER_SRGB(PosColor)
+						VSHADER(PosTex0)
+						VSHADER(PosTex0Rect)
+						VSHADER(PosTex0RectTile)
+						VSHADER_SRGB(PosColorCoverage)
+						VSHADER(PosTex0Coverage)
+						VSHADER(PosTex0CoverageRect)
+						VSHADER(PosTex0CoverageRectTile)
+						VSHADER_SRGB(PosColorTex1_SDF)
+						VSHADER(PosTex0Tex1_SDF)
+						VSHADER(PosTex0Tex1Rect_SDF)
+						VSHADER(PosTex0Tex1RectTile_SDF)
+						VSHADER_SRGB(PosColorTex1)
+						VSHADER(PosTex0Tex1)
+						VSHADER(PosTex0Tex1Rect)
+						VSHADER(PosTex0Tex1RectTile)
+						VSHADER_SRGB(PosColorTex0Tex1)
+						VSHADER(PosTex0Tex1_Downsample)
+						VSHADER_SRGB(PosColorTex1Rect)
+						VSHADER_SRGB(PosColorTex0RectImagePos)
+
+				default:
+					NS_ASSERT_UNREACHABLE;
+				}
+			};
+
+		struct ShaderPS
+		{
+			const char* label;
+			uint32_t start;
+			uint32_t size;
+			uint32_t signature;
+		};
+
+#define PSHADER(n, s) \
+    case Shader::n:   \
+        return ShaderPS{#n, n##_PS_Start, n##_PS_Size, s};
+
+		static auto ShadersPS = [](uint32_t shader)
+			{
+				switch (shader)
+				{
+					PSHADER(RGBA, VS_CB0 | PS_CB0)
+						PSHADER(Mask, VS_CB0)
+						PSHADER(Clear, VS_CB0)
+
+						PSHADER(Path_Solid, VS_CB0)
+						PSHADER(Path_Linear, VS_CB0 | PS_CB0 | PS_T1)
+						PSHADER(Path_Radial, VS_CB0 | PS_CB0 | PS_T1)
+						PSHADER(Path_Pattern, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_Pattern_Clamp, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_Pattern_Repeat, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_Pattern_MirrorU, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_Pattern_MirrorV, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_Pattern_Mirror, VS_CB0 | PS_CB0 | PS_T0)
+
+						PSHADER(Path_AA_Solid, VS_CB0)
+						PSHADER(Path_AA_Linear, VS_CB0 | PS_CB0 | PS_T1)
+						PSHADER(Path_AA_Radial, VS_CB0 | PS_CB0 | PS_T1)
+						PSHADER(Path_AA_Pattern, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_AA_Pattern_Clamp, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_AA_Pattern_Repeat, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_AA_Pattern_MirrorU, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_AA_Pattern_MirrorV, VS_CB0 | PS_CB0 | PS_T0)
+						PSHADER(Path_AA_Pattern_Mirror, VS_CB0 | PS_CB0 | PS_T0)
+
+						PSHADER(SDF_Solid, VS_CB0 | VS_CB1 | PS_T3)
+						PSHADER(SDF_Linear, VS_CB0 | VS_CB1 | PS_CB0 | PS_T1 | PS_T3)
+						PSHADER(SDF_Radial, VS_CB0 | VS_CB1 | PS_CB0 | PS_T1 | PS_T3)
+						PSHADER(SDF_Pattern, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+						PSHADER(SDF_Pattern_Clamp, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+						PSHADER(SDF_Pattern_Repeat, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+						PSHADER(SDF_Pattern_MirrorU, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+						PSHADER(SDF_Pattern_MirrorV, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+						PSHADER(SDF_Pattern_Mirror, VS_CB0 | VS_CB1 | PS_CB0 | PS_T0 | PS_T3)
+
+						PSHADER(Opacity_Solid, VS_CB0 | PS_T2)
+						PSHADER(Opacity_Linear, VS_CB0 | PS_CB0 | PS_T1 | PS_T2)
+						PSHADER(Opacity_Radial, VS_CB0 | PS_CB0 | PS_T1 | PS_T2)
+						PSHADER(Opacity_Pattern, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Opacity_Pattern_Clamp, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Opacity_Pattern_Repeat, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Opacity_Pattern_MirrorU, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Opacity_Pattern_MirrorV, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Opacity_Pattern_Mirror, VS_CB0 | PS_CB0 | PS_T0 | PS_T2)
+
+						PSHADER(Upsample, VS_CB0 | PS_T0 | PS_T2)
+						PSHADER(Downsample, VS_CB0 | PS_T0)
+
+						PSHADER(Shadow, VS_CB0 | PS_CB1 | PS_T2 | PS_T4)
+						PSHADER(Blur, VS_CB0 | PS_CB1 | PS_T2 | PS_T4)
+
+				default:
+					return ShaderPS{};
+				}
+			};
+
+
 
 		static void CreateNsShaders()
 		{
@@ -1904,7 +2050,7 @@ namespace Expectre {
 		{
 			uint32_t signature = 0;
 
-			/*if (batch.pattern)
+			if (batch.pattern)
 				signature |= PS_T0;
 			if (batch.ramps)
 				signature |= PS_T1;
@@ -1921,27 +2067,10 @@ namespace Expectre {
 			if (batch.pixelUniforms[0].values)
 				signature |= PS_CB0;
 			if (batch.pixelUniforms[1].values)
-				signature |= PS_CB1;*/
+				signature |= PS_CB1;
 
 			return signature;
 		}
-
-		struct RenderStateNs {
-			VkRenderPass   rp = VK_NULL_HANDLE;
-			VkFramebuffer  fb = VK_NULL_HANDLE;
-			VkExtent2D     extent{};
-			uint32_t       samples = 1;
-			// device-local ring buffers for Noesis geometry:
-			AllocatedBuffer vbo{};
-			AllocatedBuffer ibo{};
-			VkDeviceSize    vboWriteOffset = 0;
-			VkDeviceSize    iboWriteOffset = 0;
-			// descriptor pools/layouts for Noesis draws
-			VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-			VkPipelineLayout      pipelineLayout = VK_NULL_HANDLE;
-			// pipelines keyed by (shader kind, blend, stencil, samples)
-			// use unordered_map<key, VkPipeline> cache
-		};
 
 		struct LayoutNs
 		{
@@ -1950,45 +2079,184 @@ namespace Expectre {
 			VkPipelineLayout pipelineLayout;
 		};
 
-		static void CreateNoesisDescriptorLayout(VkDevice device, RenderStateNs& render_state)
+		struct PipeKey { VkRenderPass rp; uint32_t vs; uint32_t ps; uint32_t samples; uint32_t sig; };
+		struct PipeKeyHash {
+			size_t operator()(const PipeKey& k) const {
+				size_t h = 1469598103934665603ull;
+				auto mix = [&](uint64_t v) { h ^= v; h *= 1099511628211ull; };
+				mix((uint64_t)k.rp); mix(k.vs); mix(k.ps); mix(k.samples); mix(k.sig); return h;
+			}
+		};
+		struct PipeKeyEq {
+			bool operator()(const PipeKey& a, const PipeKey& b) const {
+				return a.rp == b.rp && a.vs == b.vs && a.ps == b.ps && a.samples == b.samples && a.sig == b.sig;
+			}
+		};
+
+		struct RenderStateNs {
+			Noesis::Ptr<Noesis::IView> view;
+
+			VkRenderPass   rp = VK_NULL_HANDLE;
+			VkFramebuffer  fb = VK_NULL_HANDLE;
+			VkExtent2D     extent{};
+			uint32_t       samples = 1;
+			// device-local ring buffers for Noesis geometry:
+			VkDeviceSize    vertex_buffer_offset = 0;
+			VkDeviceSize    index_buffer_offset = 0;
+
+			VkShaderModule vert_shaders[Noesis::Shader::Vertex::Count];
+			VkShaderModule pix_shaders[Noesis::Shader::Count];
+
+			// pipelines keyed by (shader kind, blend, stencil, samples)
+			// use unordered_map<key, VkPipeline> cache
+			LayoutNs  layouts[Noesis::Shader::Count];
+			Noesis::HashMap<uint32_t, LayoutNs, 16> layoutMap;
+			Noesis::HashMap<VkRenderPass, VkSampleCountFlagBits> cachedPipelineRenderPasses;
+			//Noesis::HashMap<uint32_t, uint32_t> pipelineMap;
+			//Noesis::Vector<VkPipeline> pipelines;
+			// Currently bound Noesis render target (SetRenderTarget() sets it)
+			Noesis::RenderTarget* active_rt{ nullptr };
+
+			AllocatedBuffer vertex_buffer;
+			AllocatedBuffer index_buffer;
+			AllocatedBuffer vertexCB0;
+			AllocatedBuffer vertexCB1;
+			AllocatedBuffer pixelCB0;
+			AllocatedBuffer pixelCB1;
+			AllocatedBuffer texUpload;
+
+			std::unordered_map<PipeKey, VkPipeline, PipeKeyHash, PipeKeyEq> pipes;
+
+			//NsDynUboFrame nsUboFrames[2	]{};
+			//VkDeviceSize  nsUboAlign = 256; // will query from device limits
+			VkSampler sampler = VK_NULL_HANDLE;
+		};
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void FillLayoutBindings(uint32_t buffersVS, uint32_t buffersPS, uint32_t textures,
+			BaseVector<VkDescriptorSetLayoutBinding>& v)
 		{
-			if (render_state.descriptorSetLayout != VK_NULL_HANDLE) return;
+			NS_ASSERT(buffersVS + buffersPS <= 4);
+			NS_ASSERT(textures <= 3);
 
-			// set 0 layout: [0]=UBO, [1]=main image, [2]=aux image (pattern/glyph/etc)
-			VkDescriptorSetLayoutBinding ubo{};
-			ubo.binding = 0;
-			ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // or UNIFORM_BUFFER_DYNAMIC if you use offsets
-			ubo.descriptorCount = 1;
-			ubo.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+			uint32_t binding = 0;
 
-			VkDescriptorSetLayoutBinding mainTex{};
-			mainTex.binding = 1;
-			mainTex.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			mainTex.descriptorCount = 1;
-			mainTex.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			for (uint32_t i = 0; i < buffersVS; i++)
+			{
+				VkDescriptorSetLayoutBinding layoutBinding{};
+				layoutBinding.descriptorCount = 1;
+				layoutBinding.binding = binding++;
+				layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+				layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
-			VkDescriptorSetLayoutBinding auxTex{};
-			auxTex.binding = 2;
-			auxTex.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			auxTex.descriptorCount = 1;
-			auxTex.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+				v.PushBack(layoutBinding);
+			}
 
-			std::array<VkDescriptorSetLayoutBinding, 3> b{ ubo, mainTex, auxTex };
+			for (uint32_t i = 0; i < buffersPS; i++)
+			{
+				VkDescriptorSetLayoutBinding layoutBinding{};
+				layoutBinding.descriptorCount = 1;
+				layoutBinding.binding = binding++;
+				layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+				layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
-			VkDescriptorSetLayoutCreateInfo ci{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-			ci.bindingCount = static_cast<uint32_t>(b.size());
-			ci.pBindings = b.data();
+				v.PushBack(layoutBinding);
+			}
 
-			VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &ci, nullptr, &render_state.descriptorSetLayout));
+			for (uint32_t i = 0; i < textures; i++)
+			{
+				VkDescriptorSetLayoutBinding layoutBinding{};
+				layoutBinding.descriptorCount = 1;
+				layoutBinding.binding = binding++;
+				layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+				layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
-			// pipeline layout using this set
-			VkPipelineLayoutCreateInfo pl{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-			pl.setLayoutCount = 1;
-			pl.pSetLayouts = &render_state.descriptorSetLayout;
-			// (optional) push constants here
-
-			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pl, nullptr, &render_state.pipelineLayout));
+				v.PushBack(layoutBinding);
+			}
 		}
+
+
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void CreateLayout(VkDevice device, uint32_t signature, Noesis::HashMap<uint32_t, LayoutNs, 16>& layout_map, LayoutNs& layout)
+		{
+			uint32_t buffersVS = 0;
+			uint32_t buffersPS = 0;
+			uint32_t textures = 0;
+
+			if (signature & VS_CB0)
+				buffersVS++;
+			if (signature & VS_CB1)
+				buffersVS++;
+			if (signature & PS_CB0)
+				buffersPS++;
+			if (signature & PS_CB1)
+				buffersPS++;
+			if (signature & PS_T0)
+				textures++;
+			if (signature & PS_T1)
+				textures++;
+			if (signature & PS_T2)
+				textures++;
+			if (signature & PS_T3)
+				textures++;
+			if (signature & PS_T4)
+				textures++;
+
+			uint32_t hash = buffersVS | (buffersPS << 8) | (textures << 16);
+			auto r = layout_map.Insert(hash, layout);
+			NS_ASSERT(layout_map.IsSmall());
+
+			VkDescriptorSetLayout& setLayout = r.first->value.setLayout;
+			VkPipelineLayout& pipelineLayout = r.first->value.pipelineLayout;
+
+			if (r.second)
+			{
+				// VkDescriptorSetLayout
+				Vector<VkDescriptorSetLayoutBinding, 16> layoutBindings;
+				FillLayoutBindings(buffersVS, buffersPS, textures, layoutBindings);
+				NS_ASSERT(layoutBindings.IsSmall());
+
+				VkDescriptorSetLayoutCreateInfo layoutInfo{};
+				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layoutInfo.bindingCount = layoutBindings.Size();
+				layoutInfo.pBindings = layoutBindings.Data();
+
+				VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &setLayout));
+				VK_NAME(setLayout, DESCRIPTOR_SET_LAYOUT, "Noesis_SetLayout_B%d_B%d_T%d",
+					buffersVS, buffersPS, textures);
+
+				// VkPipelineLayout
+				VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+				pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+				pipelineLayoutInfo.setLayoutCount = 1;
+				pipelineLayoutInfo.pSetLayouts = &setLayout;
+
+				VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout));
+				VK_NAME(pipelineLayout, PIPELINE_LAYOUT, "Noesis_PipelineLayout_B%d_B%d_T%d",
+					buffersVS, buffersPS, textures);
+			}
+
+			layout.setLayout = setLayout;
+			layout.pipelineLayout = pipelineLayout;
+			layout.signature = signature;
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void CreateLayouts(VkDevice device, RenderStateNs& state)
+		{
+			for (uint32_t i = 0; i < Shader::Count; i++)
+			{
+				const ShaderPS& pShader = ShadersPS(i);
+				CreateLayout(device, pShader.signature, state.layoutMap, state.layouts[i]);
+				ToolsVk::set_object_name(device, (uint64_t)state.layouts[i].pipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+					(std::string("ns pipeline layout - ") + std::to_string(i)).c_str());
+				ToolsVk::set_object_name(device, (uint64_t)state.layouts[i].setLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+					(std::string("ns descriptor set layout - ") + std::to_string(i)).c_str());
+			}
+		}
+
+
 
 		static VkRenderPass CreateRenderPass(VkDevice device, VkSampleCountFlagBits samples, bool needsStencil, VkFormat color_format, VkFormat stencil_format)
 		{
@@ -2177,6 +2445,44 @@ namespace Expectre {
 
 			//vkCmdBindDescriptorSets(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, layout.pipelineLayout,
 			//	0, 1, &it->value, offsets.Size(), offsets.Data());
+		}
+
+		// Build VkShaderModules for all Noesis shaders from the packed Shaders[] blob
+		static void CreateNoesisShaderModules(VkDevice device, RenderStateNs& state, bool sRGB, bool stereo)
+		{
+
+			// Decompress the embedded blob once
+			uint8_t* decompressed = (uint8_t*)Alloc(FastLZ::DecompressBufferSize(Shaders));
+			FastLZ::Decompress(Shaders, sizeof(Shaders), decompressed);
+
+			// Vertex shaders
+			for (uint32_t i = 0; i < Shader::Vertex::Count; ++i)
+			{
+				auto vs = ShadersVS(i, sRGB, stereo);
+				VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+				ci.pCode = reinterpret_cast<const uint32_t*>(decompressed + vs.start);
+				ci.codeSize = vs.size;
+				VK_CHECK_RESULT(vkCreateShaderModule(device, &ci, nullptr, &state.vert_shaders[i]));
+				VK_NAME(state.vert_shaders[i], SHADER_MODULE, "Noesis_VS_%s", vs.label);
+			}
+
+			// Pixel shaders
+			for (uint32_t i = 0; i < Shader::Count; ++i)
+			{
+				auto ps = ShadersPS(i);
+				state.pix_shaders[i] = VK_NULL_HANDLE;
+
+				if (ps.label != nullptr)
+				{
+					VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+					ci.pCode = reinterpret_cast<const uint32_t*>(decompressed + ps.start);
+					ci.codeSize = ps.size;
+					VK_CHECK_RESULT(vkCreateShaderModule(device, &ci, nullptr, &state.pix_shaders[i]));
+					VK_NAME(state.pix_shaders[i], SHADER_MODULE, "Noesis_PS_%s", ps.label);
+				}
+			}
+
+			Dealloc(decompressed);
 		}
 
 	} // namespace UtilsNs

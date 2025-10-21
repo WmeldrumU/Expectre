@@ -100,7 +100,7 @@ namespace Expectre
 		pool_sizes[0].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
 		pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		pool_sizes[1].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
-		m_descriptor_pool = create_descriptor_pool(m_device, pool_sizes);
+		m_descriptor_pool = create_descriptor_pool(m_device, pool_sizes, MAX_CONCURRENT_FRAMES);
 
 		for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
 			auto& uniform_buffer = m_uniform_buffers[i];
@@ -120,16 +120,73 @@ namespace Expectre
 		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 
 		// noesis init
+		m_noesis.rp = UtilsNs::CreateRenderPass(m_device, VK_SAMPLE_COUNT_1_BIT, true, m_swapchain_image_format, m_depth_stencil.image_info.format);
 
-		m_render_pass_ns = UtilsNs::CreateRenderPass(m_device, VK_SAMPLE_COUNT_1_BIT, true, m_swapchain_image_format, m_depth_stencil.image_info.format);
+		//CreateBuffers();
+
+
+#define DYNAMIC_VB_SIZE_NS 512 * 1024
+
+		m_noesis.vertex_buffer = ToolsVk::create_buffer(m_allocator, DYNAMIC_VB_SIZE_NS, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.vertex_buffer.buffer, VK_OBJECT_TYPE_BUFFER, "vertex_buffer");
+
+
+		m_noesis.index_buffer = ToolsVk::create_buffer(m_allocator, DYNAMIC_VB_SIZE_NS, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.index_buffer.buffer, VK_OBJECT_TYPE_BUFFER, "index_buffer");
+
+#define CBUFFER_SIZE_NS 16 * 1024
+
+		m_noesis.vertexCB0 = ToolsVk::create_buffer(m_allocator, CBUFFER_SIZE_NS, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.vertexCB0.buffer, VK_OBJECT_TYPE_BUFFER, "VertexCB0");
+
+		m_noesis.vertexCB1 = ToolsVk::create_buffer(m_allocator, CBUFFER_SIZE_NS, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.vertexCB1.buffer, VK_OBJECT_TYPE_BUFFER, "VertexCB1");
+
+		m_noesis.pixelCB0 = ToolsVk::create_buffer(m_allocator, CBUFFER_SIZE_NS, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.pixelCB0.buffer, VK_OBJECT_TYPE_BUFFER, "pixelCB0");
+
+		m_noesis.pixelCB1 = ToolsVk::create_buffer(m_allocator, CBUFFER_SIZE_NS, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.pixelCB1.buffer, VK_OBJECT_TYPE_BUFFER, "pixelCB1");
+
+		m_noesis.texUpload = ToolsVk::create_buffer(m_allocator, DYNAMIC_TEX_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_noesis.pixelCB1.buffer, VK_OBJECT_TYPE_BUFFER, "texUpload");
+
+		//CreateLayouts();
 #define NS_DESCRIPTOR_POOL_MAX_SETS 128
-		UtilsNs::CreateNoesisDescriptorLayout(m_device, m_noesis);
+		UtilsNs::CreateLayouts(m_device, m_noesis);
 		std::vector<VkDescriptorPoolSize>pool_sizes_ns =
 		{
 			{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, NS_DESCRIPTOR_POOL_MAX_SETS * 4},
 			{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, NS_DESCRIPTOR_POOL_MAX_SETS * 3} };
+		VkPhysicalDeviceProperties props{};
 
-		m_descriptor_pool_ns = create_descriptor_pool(m_device, pool_sizes_ns);
+
+		//CreateShaders();
+		UtilsNs::CreateNsShaders();
+		//CreateSamplers();
+		//CreateTransferCommandPool();
+		//CreateDescriptorPool();
+		// 
+		// Build Noesis shader modules & descriptor layouts
+		Expectre::UtilsNs::CreateNoesisShaderModules(m_device, m_noesis,
+			/*sRGB*/ true, /*stereo*/ false);
+
+
+		//vkGetPhysicalDeviceProperties(m_chosen_phys_device, &props);
+		//m_noesis.nsUboAlign = props.limits.minUniformBufferOffsetAlignment;
 
 		Noesis::SetLogHandler([](const char*, uint32_t, uint32_t level, const char*, const char* msg)
 			{
@@ -153,13 +210,14 @@ namespace Expectre
 
 		// You need a view to render the user interface and interact with it. A view holds a tree of
 	// elements. The easiest way to construct a tree is from a XAML file
-		m_view_ns = Noesis::GUI::CreateView(root);
-		m_view_ns->SetSize(720, 480);
+		m_noesis.view = Noesis::GUI::CreateView(root);
+		m_noesis.view->SetSize(720, 480);
 
 		// As we are not using MSAA in this sample, we enable PPAA here. PPAA is a cheap antialising
 		// technique that extrudes the contours of the geometry smoothing them
-		m_view_ns->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
-		m_view_ns->GetRenderer()->Init(this);
+		m_noesis.view->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
+		m_noesis.view->GetRenderer()->Init(this);
+
 
 		m_ready = true;
 	}
@@ -191,11 +249,32 @@ namespace Expectre
 
 	RendererVk::~RendererVk()
 	{
+
+
+
 		vkDeviceWaitIdle(m_device);
 
-		vkDestroyPipelineLayout(m_device, m_noesis.pipelineLayout, nullptr);
-		vkDestroyDescriptorSetLayout(m_device, m_noesis.descriptorSetLayout, nullptr);
-		vkDestroyDescriptorPool(m_device, m_descriptor_pool_ns, nullptr);
+
+		// Noesis
+		vmaDestroyBuffer(m_allocator, m_noesis.vertex_buffer.buffer, m_noesis.vertex_buffer.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.index_buffer.buffer, m_noesis.index_buffer.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.vertexCB0.buffer, m_noesis.vertexCB0.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.vertexCB1.buffer, m_noesis.vertexCB1.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.pixelCB0.buffer, m_noesis.pixelCB0.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.pixelCB1.buffer, m_noesis.pixelCB1.allocation);
+		vmaDestroyBuffer(m_allocator, m_noesis.texUpload.buffer, m_noesis.texUpload.allocation);
+
+
+		for (auto i = 0; i < UtilsNs::Shader::Count; i++) {
+			if (m_noesis.layouts[i].pipelineLayout != VK_NULL_HANDLE) {
+				vkDestroyPipelineLayout(m_device, m_noesis.layouts[i].pipelineLayout, nullptr);
+			}
+			if (m_noesis.layouts[i].pipelineLayout != VK_NULL_HANDLE) {
+
+				vkDestroyDescriptorSetLayout(m_device, m_noesis.layouts[i].setLayout, nullptr);
+			}
+		}
+		//  \Noesis
 
 		// Destroy synchronization objects
 		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
@@ -331,7 +410,6 @@ namespace Expectre
 				m_chosen_phys_device == VK_NULL_HANDLE)
 			{
 				m_chosen_phys_device = gpu;
-				m_phys_memory_properties = m_phys_memory_properties;
 				spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
 			}
 		}
@@ -524,91 +602,46 @@ namespace Expectre
 
 	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format, bool is_presenting_pass)
 	{
+		VkAttachmentDescription color{};
+		color.format = color_format;
+		color.samples = VK_SAMPLE_COUNT_1_BIT;
+		color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		color.finalLayout = is_presenting_pass ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+			: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-		// This function will prepare a single render pass with one subpass
+		VkAttachmentDescription depth{};
+		depth.format = depth_format;
+		depth.samples = VK_SAMPLE_COUNT_1_BIT;
+		depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		// Descriptors for render pass attachments
-		// Color attachment
-		// attachments[0].flags = 0,
-		VkAttachmentDescription depth_attachment_desc{};
-		depth_attachment_desc.format = color_format;
-		depth_attachment_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-		depth_attachment_desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depth_attachment_desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		depth_attachment_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		depth_attachment_desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depth_attachment_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		depth_attachment_desc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		if (is_presenting_pass) {
-			depth_attachment_desc.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		}
-		// Depth attachment
+		VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+		VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
-		// attachments[1].flags = 0;
-		VkAttachmentDescription color_attach_desc{};
+		VkSubpassDescription sub{};
+		sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		sub.colorAttachmentCount = 1;
+		sub.pColorAttachments = &colorRef;
+		sub.pDepthStencilAttachment = (depth_format != VK_FORMAT_UNDEFINED) ? &depthRef : nullptr;
 
-		color_attach_desc.format = depth_format;
-		color_attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
-		color_attach_desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;						   // Clear depth at start of first subpass
-		color_attach_desc.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;					   // We don't need depth after render pass has finished (DONT_CARE may result in better performance)
-		color_attach_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;				   // No stencil
-		color_attach_desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;			   // No Stencil
-		color_attach_desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;					   // Layout at render pass start. Initial doesn't matter, so we use undefined
-		color_attach_desc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL; // Transition to depth/stencil attachment
+		std::vector<VkAttachmentDescription> atts = { color };
+		if (depth_format != VK_FORMAT_UNDEFINED) atts.push_back(depth);
 
-		std::vector<VkAttachmentDescription> attachments{ depth_attachment_desc, color_attach_desc };
-
-
-		VkAttachmentReference color_ref = {};
-		color_ref.attachment = 0;
-		color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-		VkAttachmentReference depth_ref = {};
-		depth_ref.attachment = 1;
-		depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		// Geometry subpass
-		std::array<VkSubpassDescription, 1> subpasses{};
-		subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpasses[0].colorAttachmentCount = 1;
-		subpasses[0].pColorAttachments = &color_ref;
-		subpasses[0].pDepthStencilAttachment = &depth_ref;
-
-		std::array<VkSubpassDependency, 2> dependencies{};
-		// 1) External -> Subpass 0: sync clears (color + depth)
-		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-		dependencies[0].dstSubpass = 0;
-		dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-		dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-		// 2) Subpass 0 -> External: sync store + final transition
-		dependencies[1].srcSubpass = 0;
-		dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-		dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-		VkRenderPassCreateInfo render_pass_info{};
-		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			render_pass_info.attachmentCount = static_cast<uint32_t>(attachments.size());
-		render_pass_info.pAttachments = attachments.data();
-		render_pass_info.subpassCount = static_cast<uint32_t>(subpasses.size());
-		render_pass_info.pSubpasses = subpasses.data();
-		render_pass_info.dependencyCount = static_cast<uint32_t>(dependencies.size());
-		render_pass_info.pDependencies = dependencies.data();
-
-		VkResult err;
 		VkRenderPass render_pass;
-		err = vkCreateRenderPass(device, &render_pass_info, nullptr, &render_pass);
-		assert(!err);
-
-		VK_CHECK_RESULT(err);
-		ToolsVk::set_object_name(device, (uint64_t)render_pass, VK_OBJECT_TYPE_RENDER_PASS, "MainRenderpass");
+		VkRenderPassCreateInfo rpci{ VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+		rpci.attachmentCount = (uint32_t)atts.size();
+		rpci.pAttachments = atts.data();
+		rpci.subpassCount = 1;
+		rpci.pSubpasses = &sub;
+		VK_CHECK_RESULT(vkCreateRenderPass(device, &rpci, nullptr, &render_pass));
 		return render_pass;
 	}
 
@@ -774,14 +807,14 @@ namespace Expectre
 		return command_buffer;
 	}
 
-	VkDescriptorPool RendererVk::create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes) {
+	VkDescriptorPool RendererVk::create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes, uint32_t max_sets) {
 
 		VkDescriptorPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		pool_info.pNext = nullptr;
 		pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
 		pool_info.pPoolSizes = pool_sizes.data();
-		pool_info.maxSets = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
+		pool_info.maxSets = max_sets;
 
 		VkDescriptorPool pool;
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool));
@@ -965,22 +998,10 @@ namespace Expectre
 
 		vkCmdEndRenderPass(command_buffer);
 
-		auto* r = m_view_ns->GetRenderer();
-		r->UpdateRenderTree();
-		r->Render();
-
-		//renderpass_info = {};
-		//renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		//renderpass_info.pNext = nullptr;
-		//renderpass_info.renderPass = m_render_pass_ns;
-		//renderpass_info.framebuffer = m_noesis.fb;
-		//renderpass_info.renderArea.offset.x = 0;
-		//renderpass_info.renderArea.offset.y = 0;
-		//renderpass_info.renderArea.extent.width = m_extent.width;
-		//renderpass_info.renderArea.extent.height = m_extent.height;
-		//renderpass_info.clearValueCount = 2;
-		//clear_col[0] = { 1.0, 1.0, 1.0, 1.0 };
-		//renderpass_info.pClearValues = clear_col.data();
+		//auto* r = m_noesis.view->GetRenderer();
+		//r->UpdateRenderTree();
+		//r->RenderOffscreen();
+		//r->Render();
 
 		VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 	}
@@ -1076,17 +1097,17 @@ namespace Expectre
 
 		uniform_buffer.allocated_buffer = ToolsVk::create_buffer(allocator,
 			buffer_size,
-				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VMA_MEMORY_USAGE_CPU_TO_GPU, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-			// Map once for persistent updates
-			VK_CHECK_RESULT(vmaMapMemory(
+		// Map once for persistent updates
+		VK_CHECK_RESULT(vmaMapMemory(
 			allocator,
 			uniform_buffer.allocated_buffer.allocation,
 			reinterpret_cast<void**>(&uniform_buffer.mapped)));
 
 		return uniform_buffer;
-		}
+	}
 
 	void RendererVk::update_uniform_buffer()
 	{
@@ -1280,7 +1301,7 @@ namespace Expectre
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
 	{
-
+		spdlog::info("CreateRenderTarget()");
 		using Noesis::MakePtr;
 
 		auto surface = MakePtr<VKRenderTarget>();
@@ -1423,6 +1444,8 @@ namespace Expectre
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface_)
 	{
+		spdlog::info("CreateRenderTarget()");
+
 		using namespace Noesis;
 
 		VKRenderTarget* src = (VKRenderTarget*)surface_;
@@ -1462,6 +1485,7 @@ namespace Expectre
 	Noesis::Ptr<Noesis::Texture> RendererVk::CreateTexture(const char* label, uint32_t width, uint32_t height,
 		uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data)
 	{
+		spdlog::info("NS: createtexture()");
 		// covert noesis format to vulkan foramt
 		VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
 		switch (format) {
@@ -1475,7 +1499,6 @@ namespace Expectre
 			assert(false);
 			break;
 		}
-
 		TextureVk tex = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, data, width, height, numLevels);
 		Noesis::Ptr<VKTexture> texture = Noesis::MakePtr<VKTexture>();
 		texture->image = tex.image;
@@ -1483,11 +1506,18 @@ namespace Expectre
 		texture->allocation = tex.allocation;
 		texture->view = tex.view;
 		texture->view_info = tex.view_info;
+
+		static int i = 0;
+		ToolsVk::set_object_name(m_device, (uint64_t)tex.image, VK_OBJECT_TYPE_IMAGE, std::string("ns texture image " + i).c_str());
+		ToolsVk::set_object_name(m_device, (uint64_t)tex.view, VK_OBJECT_TYPE_IMAGE_VIEW, std::string("ns texture image view " + i).c_str());
+		i++;
+
 		return texture;
 	}
 
 	void RendererVk::UpdateTexture(Noesis::Texture* texture_, uint32_t level, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* data)
 	{
+		spdlog::info("NS: updateTexture()");
 
 		VKTexture* texture = (VKTexture*)texture_;
 
@@ -1531,49 +1561,73 @@ namespace Expectre
 
 	void RendererVk::BeginOffscreenRender()
 	{
+		spdlog::info("NS: BeginOffscreenRender()");
+
 		// NA
 	}
 	void RendererVk::EndOffscreenRender()
 	{
+		spdlog::info("NS: EndOffScreenRender()");
+
 		// NA
 	}
 	void RendererVk::BeginOnscreenRender()
 	{
-		// NA
+		spdlog::info("NS: BeginOnscreenRender()");
+
+		if (!m_noesis.active_rt) return;
+		auto* rt = (VKRenderTarget*)m_noesis.active_rt;
+		VkClearValue clears[2]{};
+		clears[0].color = { {0,0,0,0} }; uint32_t n = 1;
+		if (rt->stencil) { clears[1].depthStencil = { 1.f,0 }; n = 2; }
+		VkRenderPassBeginInfo bi{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+		bi.renderPass = rt->renderPass; bi.framebuffer = rt->framebuffer;
+		bi.renderArea = { {0,0},{rt->color->GetWidth(),rt->color->GetHeight()} };
+		bi.clearValueCount = n; bi.pClearValues = clears;
+		vkCmdBeginRenderPass(m_cmd_buffers[m_current_frame], &bi, VK_SUBPASS_CONTENTS_INLINE);
+
 	}
 	void RendererVk::EndOnscreenRender()
 	{
-		// NA
+		spdlog::info("NS: EndOnscreenRender()");
+
+		// Close the Noesis pass if one is open
+		if (!m_noesis.active_rt) return;
+		VkCommandBuffer cmd = m_cmd_buffers[m_current_frame];
+		vkCmdEndRenderPass(cmd);
 	}
 	void RendererVk::SetRenderTarget(Noesis::RenderTarget* surface_)
 	{
-		VKRenderTarget* surface = (VKRenderTarget*)surface_;
-		VK_BEGIN_EVENT("SetRenderTarget");
+		spdlog::info("NS: SetRenderTarget()");
 
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float)surface->color->GetWidth();
-		viewport.height = (float)surface->color->GetHeight();
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
+		auto* rt = (VKRenderTarget*)surface_;
+		m_noesis.active_rt = surface_;
+		VkViewport vp{ 0,0,(float)rt->color->GetWidth(),(float)rt->color->GetHeight(),0.f,1.f };
+		vkCmdSetViewport(m_cmd_buffers[m_current_frame], 0, 1, &vp);
+		VkRect2D sc{ {0,0},{rt->color->GetWidth(),rt->color->GetHeight()} };
+		vkCmdSetScissor(m_cmd_buffers[m_current_frame], 0, 1, &sc);
 
-		vkCmdSetViewport(m_cmd_buffers[m_current_frame], 0, 1, &viewport);
 	}
 
 	void RendererVk::BeginTile(Noesis::RenderTarget* surface, const Noesis::Tile& tile)
 	{
+		spdlog::info("NS: BeginTile()");
 	}
 	void RendererVk::EndTile(Noesis::RenderTarget* surface)
 	{
+		spdlog::info("NS: EndTile()");
+
 	}
 	void RendererVk::ResolveRenderTarget(Noesis::RenderTarget* surface, const Noesis::Tile* tiles, uint32_t numTiles)
 	{
+		spdlog::info("NS: ResolveRenderTarget()");
+
 		// Not supporting msaa yet
 		// NA
 	}
 	void* RendererVk::MapVertices(uint32_t bytes)
 	{
+		spdlog::info("NS: MapVertices()");
 
 		// Toss any previous staging from the last frame
 		if (m_vertex_staging_ns.buffer != VK_NULL_HANDLE) {
@@ -1582,11 +1636,11 @@ namespace Expectre
 		}
 
 		if (bytes == 0) {
-			m_noesis.iboWriteOffset = 0;
+			m_noesis.index_buffer_offset = 0;
 			return nullptr;
 		}
 
-		m_noesis.vboWriteOffset = bytes;
+		m_noesis.vertex_buffer_offset = bytes;
 		// allocate memory
 		m_vertex_staging_ns = ToolsVk::create_buffer(m_allocator, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -1601,36 +1655,39 @@ namespace Expectre
 
 	void RendererVk::UnmapVertices()
 	{
+		spdlog::info("NS: UnmapVertices()");
+
 		if (m_vertex_staging_ns.buffer == VK_NULL_HANDLE) return;
 
 		vmaUnmapMemory(m_allocator, m_vertex_staging_ns.allocation);
 
 		// Recreate a tight device-local VBO sized to the written bytes
-		if (m_noesis.vbo.buffer != VK_NULL_HANDLE) {
-			vmaDestroyBuffer(m_allocator, m_noesis.vbo.buffer, m_noesis.vbo.allocation);
-			m_noesis.vbo = {};
-	}
+		if (m_noesis.vertex_buffer.buffer != VK_NULL_HANDLE) {
+			vmaDestroyBuffer(m_allocator, m_noesis.vertex_buffer.buffer, m_noesis.vertex_buffer.allocation);
+			m_noesis.vertex_buffer = {};
+		}
 
-		if (m_noesis.vboWriteOffset) {
-			m_noesis.vbo = ToolsVk::create_buffer(
+		if (m_noesis.vertex_buffer_offset) {
+			m_noesis.vertex_buffer = ToolsVk::create_buffer(
 				m_allocator,
-				m_noesis.vboWriteOffset,
+				m_noesis.vertex_buffer_offset,
 				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 			ToolsVk::copy_buffer(
 				m_device, m_cmd_pool, m_graphics_queue,
-				m_vertex_staging_ns.buffer, m_noesis.vbo.buffer,
-				m_noesis.vboWriteOffset);
+				m_vertex_staging_ns.buffer, m_noesis.vertex_buffer.buffer,
+				m_noesis.vertex_buffer_offset);
 		}
 
 		vmaDestroyBuffer(m_allocator, m_vertex_staging_ns.buffer, m_vertex_staging_ns.allocation);
 		m_vertex_staging_ns = {};
-		m_noesis.vboWriteOffset = 0;
+		m_noesis.vertex_buffer_offset = 0;
 
 	}
 	void* RendererVk::MapIndices(uint32_t bytes)
 	{
+		spdlog::info("NS: MapIndices()");
 
 		// Toss any previous staging from the last frame
 		if (m_index_staging_ns.buffer != VK_NULL_HANDLE) {
@@ -1640,11 +1697,11 @@ namespace Expectre
 
 
 		if (bytes == 0) {
-			m_noesis.iboWriteOffset = 0;
+			m_noesis.index_buffer_offset = 0;
 			return nullptr;
 		}
 
-		m_noesis.iboWriteOffset = bytes;
+		m_noesis.index_buffer_offset = bytes;
 		// allocate memory
 		m_index_staging_ns = ToolsVk::create_buffer(m_allocator, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
@@ -1658,49 +1715,51 @@ namespace Expectre
 	}
 	void RendererVk::UnmapIndices()
 	{
+		spdlog::info("NS: UnmapIndices()");
+
 		if (m_index_staging_ns.buffer == VK_NULL_HANDLE) return;
 
 		vmaUnmapMemory(m_allocator, m_index_staging_ns.allocation);
 
 		// Recreate a tight device-local IBO sized to the written bytes
-		if (m_noesis.ibo.buffer != VK_NULL_HANDLE) {
-			vmaDestroyBuffer(m_allocator, m_noesis.ibo.buffer, m_noesis.ibo.allocation);
-			m_noesis.ibo = {};
-	}
+		if (m_noesis.index_buffer.buffer != VK_NULL_HANDLE) {
+			vmaDestroyBuffer(m_allocator, m_noesis.index_buffer.buffer, m_noesis.index_buffer.allocation);
+			m_noesis.index_buffer = {};
+		}
 
-		if (m_noesis.iboWriteOffset) {
-			m_noesis.ibo = ToolsVk::create_buffer(
+		if (m_noesis.index_buffer_offset) {
+			m_noesis.index_buffer = ToolsVk::create_buffer(
 				m_allocator,
-				m_noesis.iboWriteOffset,
+				m_noesis.index_buffer_offset,
 				VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 			ToolsVk::copy_buffer(
 				m_device, m_cmd_pool, m_graphics_queue,
-				m_index_staging_ns.buffer, m_noesis.ibo.buffer,
-				m_noesis.iboWriteOffset);
+				m_index_staging_ns.buffer, m_noesis.index_buffer.buffer,
+				m_noesis.index_buffer_offset);
 		}
 
 		vmaDestroyBuffer(m_allocator, m_index_staging_ns.buffer, m_index_staging_ns.allocation);
 		m_index_staging_ns = {};
-		m_noesis.iboWriteOffset = 0;
+		m_noesis.index_buffer_offset = 0;
 	}
 
 	void RendererVk::DrawBatch(const Noesis::Batch& batch)
 	{
 		// If uploads didn't happen yet, skip safely
-		if (m_noesis.vbo.buffer == VK_NULL_HANDLE || m_noesis.ibo.buffer == VK_NULL_HANDLE)
+		if (m_noesis.vertex_buffer.buffer == VK_NULL_HANDLE || m_noesis.index_buffer.buffer == VK_NULL_HANDLE)
 			return;
 
 		VkCommandBuffer cmd = m_cmd_buffers[m_current_frame];
 
 		// Bind VB/IB at offset 0 (we re-created them per Unmap*)
-		const VkBuffer vbs[] = { m_noesis.vbo.buffer };
+		const VkBuffer vbs[] = { m_noesis.vertex_buffer.buffer };
 		const VkDeviceSize vboOffsets[] = { 0 };
 		vkCmdBindVertexBuffers(cmd, 0, 1, vbs, vboOffsets);
 
 		// Noesis indices are 16-bit
-		vkCmdBindIndexBuffer(cmd, m_noesis.ibo.buffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(cmd, m_noesis.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
 		const uint32_t firstIndex = batch.startIndex;   // base is 0 with this simple path
 		const uint32_t indexCount = batch.numIndices;

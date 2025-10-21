@@ -39,37 +39,72 @@
 
 
 #define VK_NAME(obj, type, ...)                                           \
-	NS_MACRO_BEGIN                                                        \
-	NS_ASSERT(m_device != nullptr);                                        \
-	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
-	{                                                                     \
-		char name[128];                                                   \
-		snprintf(name, sizeof(name), __VA_ARGS__);                        \
-		VkDebugMarkerObjectNameInfoEXT info{};                            \
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
-		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
-		info.object = (uint64_t)obj;                                      \
-		info.pObjectName = name;                                          \
-		V(vkDebugMarkerSetObjectNameEXT(m_device, &info));                 \
-	}                                                                     \
-	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
-	{                                                                     \
-		char name[128];                                                   \
-		snprintf(name, sizeof(name), __VA_ARGS__);                        \
-		VkDebugUtilsObjectNameInfoEXT info{};                             \
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;  \
-		info.objectType = VK_OBJECT_TYPE_##type;                          \
-		info.objectHandle = (uint64_t)obj;                                \
-		info.pObjectName = name;                                          \
-		V(vkSetDebugUtilsObjectNameEXT(m_device, &info));                  \
-	}                                                                     \
-	NS_MACRO_END
-#define VK_BEGIN_EVENT(...) NS_NOOP
-#define VK_END_EVENT() NS_NOOP
-#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
+//	NS_MACRO_BEGIN                                                        \
+//	NS_ASSERT(m_device != nullptr);                                        \
+//	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
+//	{                                                                     \
+//		char name[128];                                                   \
+//		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+//		VkDebugMarkerObjectNameInfoEXT info{};                            \
+//		info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
+//		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
+//		info.object = (uint64_t)obj;                                      \
+//		info.pObjectName = name;                                          \
+//		V(vkDebugMarkerSetObjectNameEXT(m_device, &info));                 \
+//	}                                                                     \
+//	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
+//	{                                                                     \
+//		char name[128];                                                   \
+//		snprintf(name, sizeof(name), __VA_ARGS__);                        \
+//		VkDebugUtilsObjectNameInfoEXT info{};                             \
+//		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;  \
+//		info.objectType = VK_OBJECT_TYPE_##type;                          \
+//		info.objectHandle = (uint64_t)obj;                                \
+//		info.pObjectName = name;                                          \
+//		V(vkSetDebugUtilsObjectNameEXT(m_device, &info));                  \
+//	}                                                                     \
+//	NS_MACRO_END
+//#define VK_BEGIN_EVENT(...) NS_NOOP
+//#define VK_END_EVENT() NS_NOOP
+//#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
+
+
+#ifdef _DEBUG
+// Double-macro trick for stringification
+#define VK_STRINGIFY(x) #x
+#define VK_GET_VARIABLE_NAME(x) VK_STRINGIFY(x)
+
+#define VK_SET_DEBUG_NAME(device, handle) \
+    SetDebugName(device, handle, VK_GET_VARIABLE_NAME(handle));
+#else
+#define VK_SET_DEBUG_NAME_AUTO(device, handle) ((void)0)
+#endif
 
 
 namespace Expectre {
+
+	//template <typename T>
+	//VkObjectType GetObjectTypeFromHandle(T handle);
+	//// Specializations for different object types to get the correct VkObjectType
+	//template <> inline VkObjectType GetObjectTypeFromHandle<VkImage>(VkImage) { return VK_OBJECT_TYPE_IMAGE; }
+	//template <> inline VkObjectType GetObjectTypeFromHandle<VkImageView>(VkImageView) { return VK_OBJECT_TYPE_IMAGE_VIEW; }
+	//template <> inline VkObjectType GetObjectTypeFromHandle<VkBuffer>(VkBuffer) { return VK_OBJECT_TYPE_BUFFER; }
+	//template <> inline VkObjectType GetObjectTypeFromHandle<VkCommandBuffer>(VkCommandBuffer) { return VK_OBJECT_TYPE_COMMAND_BUFFER; }
+
+
+	//// Helper function to set debug names, automatically converting handles
+	//template <typename T>
+	//inline void SetDebugName(VkDevice device, T handle, const char* name) {
+	//	if (!handle) return;
+	//	ToolsVk::set_object_name(
+	//		device,
+	//		static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle)),
+	//		GetObjectTypeFromHandle(handle),
+	//		name);
+	//}
+
+
+
 	// Vertex buffer and attributes
 	struct AllocatedBuffer
 	{
@@ -460,7 +495,7 @@ namespace Expectre {
 			vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buffer);
 		}
 
-		static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage, VkMemoryPropertyFlags memory_properties)
+		static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage, VkMemoryPropertyFlags memory_properties, std::string label = "")
 		{
 			VkBufferCreateInfo buffer_info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 			buffer_info.size = size;
