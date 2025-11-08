@@ -36,6 +36,7 @@ build/
 ./build/
 .vscode/
 .vs/
+assets/noesis/*
 
 # Dont ignores
 !lib/**
