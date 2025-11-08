@@ -5,11 +5,7 @@
 #include <spdlog/spdlog.h>
 #include "Time.h"
 
-#include <NsGui/IntegrationAPI.h>
-#define RESOLUTION_X 1280
-#define RESOLUTION_Y 720
-
-#define EXTENT { RESOLUTION_X, RESOLUTION_Y }
+#include "RenderContextVk.h"
 
 namespace Expectre
 {
@@ -40,8 +36,7 @@ namespace Expectre
 #elif defined(USE_DIRECTX)
 		m_renderer = std::make_shared<Renderer_Dx>();
 #else
-		m_renderer =
-			std::make_shared<RendererVk>(m_window, RESOLUTION_X, RESOLUTION_Y);
+		RenderContextVk context{};
 #endif
 		// make a weak ptr for observer input notifications
 		std::weak_ptr<InputObserver> input_observer(m_renderer);

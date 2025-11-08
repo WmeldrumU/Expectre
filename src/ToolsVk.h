@@ -37,73 +37,7 @@
 		}                                                                                                                                          \
 	}
 
-
-#define VK_NAME(obj, type, ...)                                           \
-//	NS_MACRO_BEGIN                                                        \
-//	NS_ASSERT(m_device != nullptr);                                        \
-//	if (vkDebugMarkerSetObjectNameEXT != nullptr)                         \
-//	{                                                                     \
-//		char name[128];                                                   \
-//		snprintf(name, sizeof(name), __VA_ARGS__);                        \
-//		VkDebugMarkerObjectNameInfoEXT info{};                            \
-//		info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; \
-//		info.objectType = VK_DEBUG_REPORT_OBJECT_TYPE_##type##_EXT;       \
-//		info.object = (uint64_t)obj;                                      \
-//		info.pObjectName = name;                                          \
-//		V(vkDebugMarkerSetObjectNameEXT(m_device, &info));                 \
-//	}                                                                     \
-//	else if (vkSetDebugUtilsObjectNameEXT != nullptr)                     \
-//	{                                                                     \
-//		char name[128];                                                   \
-//		snprintf(name, sizeof(name), __VA_ARGS__);                        \
-//		VkDebugUtilsObjectNameInfoEXT info{};                             \
-//		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;  \
-//		info.objectType = VK_OBJECT_TYPE_##type;                          \
-//		info.objectHandle = (uint64_t)obj;                                \
-//		info.pObjectName = name;                                          \
-//		V(vkSetDebugUtilsObjectNameEXT(m_device, &info));                  \
-//	}                                                                     \
-//	NS_MACRO_END
-//#define VK_BEGIN_EVENT(...) NS_NOOP
-//#define VK_END_EVENT() NS_NOOP
-//#define VK_NAME(obj, type, ...) NS_UNUSED(__VA_ARGS__)
-
-
-#ifdef _DEBUG
-// Double-macro trick for stringification
-#define VK_STRINGIFY(x) #x
-#define VK_GET_VARIABLE_NAME(x) VK_STRINGIFY(x)
-
-#define VK_SET_DEBUG_NAME(device, handle) \
-    SetDebugName(device, handle, VK_GET_VARIABLE_NAME(handle));
-#else
-#define VK_SET_DEBUG_NAME_AUTO(device, handle) ((void)0)
-#endif
-
-
 namespace Expectre {
-
-	//template <typename T>
-	//VkObjectType GetObjectTypeFromHandle(T handle);
-	//// Specializations for different object types to get the correct VkObjectType
-	//template <> inline VkObjectType GetObjectTypeFromHandle<VkImage>(VkImage) { return VK_OBJECT_TYPE_IMAGE; }
-	//template <> inline VkObjectType GetObjectTypeFromHandle<VkImageView>(VkImageView) { return VK_OBJECT_TYPE_IMAGE_VIEW; }
-	//template <> inline VkObjectType GetObjectTypeFromHandle<VkBuffer>(VkBuffer) { return VK_OBJECT_TYPE_BUFFER; }
-	//template <> inline VkObjectType GetObjectTypeFromHandle<VkCommandBuffer>(VkCommandBuffer) { return VK_OBJECT_TYPE_COMMAND_BUFFER; }
-
-
-	//// Helper function to set debug names, automatically converting handles
-	//template <typename T>
-	//inline void SetDebugName(VkDevice device, T handle, const char* name) {
-	//	if (!handle) return;
-	//	ToolsVk::set_object_name(
-	//		device,
-	//		static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle)),
-	//		GetObjectTypeFromHandle(handle),
-	//		name);
-	//}
-
-
 
 	// Vertex buffer and attributes
 	struct AllocatedBuffer
@@ -421,12 +355,12 @@ namespace Expectre {
 			{
 				extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 			}
+			
 			// print extensions
+			spdlog::debug("Extensions: \n");
 			for (const char* ext : extensions)
 			{
-				std::printf("%s", ext);
-				std::cout << "\n"
-					<< std::endl;
+				spdlog::debug("- {}", ext);
 			}
 
 			return extensions;
@@ -599,55 +533,53 @@ namespace Expectre {
 			vkCmdDebugMarkerBeginEXT(cmd_buffer, &info);
 		}
 
-		//uint32_t choose_heap_from_flags(VkPhysicalDevice phys_device, const VkMemoryRequirements& memoryRequirements,
-		//	VkMemoryPropertyFlags requiredFlags,
-		//	VkMemoryPropertyFlags preferredFlags)
-		//{
-		//	VkPhysicalDeviceMemoryProperties device_memory_properties;
 
-		//	vkGetPhysicalDeviceMemoryProperties(phys_device, &device_memory_properties);
+		static VkPhysicalDevice select_physical_device(VkInstance instance)
+		{
 
-		//	uint32_t selected_type = ~0u; // All 1's
-		//	uint32_t memory_type;
+			uint32_t gpu_count = 0;
+			std::vector<VkPhysicalDevice> gpus;
+			vkEnumeratePhysicalDevices(instance, &gpu_count, nullptr);
+			gpus.resize(gpu_count);
+			vkEnumeratePhysicalDevices(instance, &gpu_count, gpus.data());
+			VkPhysicalDevice chosen_phys_device = VK_NULL_HANDLE;
 
-		//	for (memory_type = 0; memory_type < 32; memory_type++)
-		//	{
+			for (auto& gpu : gpus)
+			{
 
-		//		if (memoryRequirements.memoryTypeBits & (1 << memory_type))
-		//		{
-		//			const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
+				VkPhysicalDeviceProperties phys_properties{};
+				vkGetPhysicalDeviceProperties(gpu, &phys_properties);
+				std::cout << "Physical device: " << std::endl;
+				std::cout << phys_properties.deviceName << std::endl;
+				std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
+				std::cout << "device type: " << phys_properties.deviceType << std::endl;
+				VkPhysicalDeviceFeatures phys_features{};
+				vkGetPhysicalDeviceFeatures(gpu, &phys_features);
 
-		//			// If type has all our preferred flags
-		//			if ((type.propertyFlags & preferredFlags) == preferredFlags)
-		//			{
-		//				selected_type = memory_type;
-		//				break;
-		//			}
-		//		}
-		//	}
+				VkPhysicalDeviceMemoryProperties phys_memory_properties{};
+				vkGetPhysicalDeviceMemoryProperties(gpu, &phys_memory_properties);
+				std::cout << "heap count: " << phys_memory_properties.memoryHeapCount << std::endl;
+				for (uint32_t j = 0; j < phys_memory_properties.memoryHeapCount; j++)
+				{
+					VkMemoryHeap heap{};
+					heap = phys_memory_properties.memoryHeaps[j];
 
-		//	if (selected_type != ~0u)
-		//	{
-		//		for (memory_type = 0; memory_type < 32; memory_type++)
-		//		{
+					std::cout << "heap size:" << std::endl;
+					std::cout << heap.size << std::endl;
+					std::cout << "flags: " << heap.flags << std::endl;
+				}
 
-		//			if (memoryRequirements.memoryTypeBits & (1 << memory_type))
-		//			{
-		//				const VkMemoryType& type = device_memory_properties.memoryTypes[memory_type];
+				if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+					chosen_phys_device == VK_NULL_HANDLE)
+				{
+					chosen_phys_device = gpu;
+					spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
+					return chosen_phys_device;
+				}
+			}
 
-		//				// If type has all our required flags
-		//				if ((type.propertyFlags & requiredFlags) == requiredFlags)
-		//				{
-		//					selected_type = memory_type;
-		//					break;
-		//				}
-		//			}
-		//		}
-		//	}
-		//	return selected_type;
-		//}
-
-
+			spdlog::error("Could not find a phycial device");
+		}
 
 	} // namespace tools
 } // namespace Expectre
