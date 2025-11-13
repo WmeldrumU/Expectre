@@ -40,16 +40,19 @@ struct MVP_uniform_object
 namespace Expectre
 {
 
-	RendererVk::RendererVk(VkPhysicalDevice& physical_device, VkDevice& device, VkQueue& graphics_quue, VkQueue& present_queue) :
-		m_physical_device{ physical_device }, m_device{ device],
-		m_graphics_queue{graphics_queue}, m_present_queue{present_queue}, m_extent{ RESOLUTION_X, RESOLUTION_Y }
+	RendererVk::RendererVk(VkPhysicalDevice& physical_device, VkDevice& device,
+		VmaAllocator& allocator, VkSurfaceKHR& surface, VkQueue& graphics_queue, uint32_t& graphics_queue_index, VkQueue& present_queue, uint32_t& present_queue_index) :
+		m_physical_device{ physical_device }, m_device{ device },
+		m_allocator{ allocator }, m_surface{ surface },
+		m_graphics_queue{ graphics_queue }, m_graphics_queue_index{ graphics_queue_index },
+		m_present_queue{ present_queue }, m_present_queue_index{ present_queue_index },
+		m_extent{ RESOLUTION_X, RESOLUTION_Y }
 	{
 		/*	const auto& phys_device = context.get_phys_device();
 			const auto& device = context.get_device();
 			const auto& allocator = context.get_allocator();*/
 
-		const uint32_t graphics_queue_index = context.graphics_queue_index();
-		// Command buffers and swapchain
+			// Command buffers and swapchain
 		create_swapchain();
 
 		m_swapchain_image_views.resize(m_swapchain_images.size());
@@ -58,7 +61,7 @@ namespace Expectre
 				m_swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 		m_cmd_pool = create_command_pool(device, graphics_queue_index);
-		m_depth_stencil = TextureVk::create_depth_stencil(phys_device, device, m_cmd_pool, m_graphics_queue, allocator, m_extent);
+		m_depth_stencil = TextureVk::create_depth_stencil(m_physical_device, device, m_cmd_pool, m_graphics_queue, allocator, m_extent);
 		m_render_pass = create_renderpass(device, m_swapchain_image_format, m_depth_stencil.image_info.format, true);
 
 		VkDescriptorSetLayoutBinding ubo_layout_binding{};
@@ -85,7 +88,7 @@ namespace Expectre
 		}
 		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		m_texture = TextureVk::create_texture_from_file(device, m_cmd_pool, m_graphics_queue, allocator, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-		m_texture_sampler = ToolsVk::create_texture_sampler(phys_device, device);
+		m_texture_sampler = ToolsVk::create_texture_sampler(m_physical_device, device);
 		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj")));
 		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
 		create_geometry_buffer();
@@ -124,91 +127,85 @@ namespace Expectre
 
 	void RendererVk::cleanup_swapchain()
 	{
-		const auto& device = m_context.get_device();
 		// Destroy depth buffer
-		vkDestroyImageView(device, m_depth_stencil.view, nullptr);
-		vmaDestroyImage(m_context.get_allocator(), m_depth_stencil.image, m_depth_stencil.allocation);
+		vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
+		vmaDestroyImage(m_allocator, m_depth_stencil.image, m_depth_stencil.allocation);
 
 		for (auto framebuffer : m_swapchain_framebuffers)
 		{
-			vkDestroyFramebuffer(device, framebuffer, nullptr);
+			vkDestroyFramebuffer(m_device, framebuffer, nullptr);
 		}
 
 		for (auto imageView : m_swapchain_image_views)
 		{
-			vkDestroyImageView(device, imageView, nullptr);
+			vkDestroyImageView(m_device, imageView, nullptr);
 		}
 
-		vkDestroySwapchainKHR(device, m_swapchain, nullptr);
+		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 	}
 
 	RendererVk::~RendererVk()
 	{
 
-		const auto& device = m_context.get_device();
-		const auto& allocator = m_context.get_allocator();
 
-		vkDeviceWaitIdle(device);
+		vkDeviceWaitIdle(m_device);
 
 		// Destroy synchronization objects
 		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
 		{
-			vkDestroySemaphore(device, m_available_image_semaphores[i], nullptr);
-			vkDestroySemaphore(device, m_finished_render_semaphores[i], nullptr);
-			vkDestroyFence(device, m_in_flight_fences[i], nullptr);
+			vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
+			vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
+			vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
 		}
 
-		vkDestroyDescriptorSetLayout(device, m_descriptor_set_layout, nullptr);
+		vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
 		// Destroy descriptor pool
-		vkDestroyDescriptorPool(device, m_descriptor_pool, nullptr);
+		vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
 
 		// Destroy uniform buffers
 		for (auto& ub : m_uniform_buffers)
 		{
-			vkDestroyBuffer(device, ub.allocated_buffer.buffer, nullptr);
-			vmaUnmapMemory(allocator, ub.allocated_buffer.allocation);
-			vmaFreeMemory(allocator, ub.allocated_buffer.allocation);
+			vkDestroyBuffer(m_device, ub.allocated_buffer.buffer, nullptr);
+			vmaUnmapMemory(m_allocator, ub.allocated_buffer.allocation);
+			vmaFreeMemory(m_allocator, ub.allocated_buffer.allocation);
 		}
 
 		// Destroy vertex and index buffer
-		vkDestroyBuffer(device, m_geometry_buffer.indices.buffer, nullptr);
-		vmaFreeMemory(allocator, m_geometry_buffer.indices.allocation);
-		vkDestroyBuffer(device, m_geometry_buffer.vertices.buffer, nullptr);
-		vmaFreeMemory(allocator, m_geometry_buffer.vertices.allocation);
+		vkDestroyBuffer(m_device, m_geometry_buffer.indices.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_geometry_buffer.indices.allocation);
+		vkDestroyBuffer(m_device, m_geometry_buffer.vertices.buffer, nullptr);
+		vmaFreeMemory(m_allocator, m_geometry_buffer.vertices.allocation);
 
 		// Destroy pipeline and related layouts
-		vkDestroyPipeline(device, m_pipeline, nullptr);
-		vkDestroyPipelineLayout(device, m_pipeline_layout, nullptr);
-		vkDestroyRenderPass(device, m_render_pass, nullptr);
+		vkDestroyPipeline(m_device, m_pipeline, nullptr);
+		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 
 		// Destroy texture resources
-		vkDestroySampler(device, m_texture_sampler, nullptr);
-		vkDestroyImageView(device, m_texture.view, nullptr);
-		vkDestroyImage(device, m_texture.image, nullptr);
-		vmaFreeMemory(allocator, m_texture.allocation);
+		vkDestroySampler(m_device, m_texture_sampler, nullptr);
+		vkDestroyImageView(m_device, m_texture.view, nullptr);
+		vkDestroyImage(m_device, m_texture.image, nullptr);
+		vmaFreeMemory(m_allocator, m_texture.allocation);
 
 		// Destroy command pool
-		vkDestroyCommandPool(device, m_cmd_pool, nullptr);
+		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
 
 		cleanup_swapchain();
 
 		VmaTotalStatistics stats{};
-		vmaCalculateStatistics(allocator, &stats);
+		vmaCalculateStatistics(m_allocator, &stats);
 
 		// Or a human-readable string:
 		char* statsStr = nullptr;
-		vmaBuildStatsString(allocator, &statsStr, VK_TRUE);
+		vmaBuildStatsString(m_allocator, &statsStr, VK_TRUE);
 		// log statsStr somewhere:
 		printf("%s\n", statsStr);
-		vmaFreeStatsString(allocator, statsStr);
+		vmaFreeStatsString(m_allocator, statsStr);
 	}
 
 	void RendererVk::create_swapchain()
 	{
-		const auto& physical_device = m_context.get_phys_device();
-		const auto& surface = m_context.get_surface();
-
-		ToolsVk::SwapChainSupportDetails swapchain_support_details = ToolsVk::query_swap_chain_support(physical_device, surface);
+		ToolsVk::SwapChainSupportDetails swapchain_support_details = ToolsVk::query_swap_chain_support(m_physical_device, m_surface);
 
 		m_surface_format = ToolsVk::choose_swap_surface_format(swapchain_support_details.formats);
 		// VkExtent2D extent = tools::choose_swap_extent(swapchain_support_details.capabilities, m_window);
@@ -223,7 +220,7 @@ namespace Expectre
 
 		VkSwapchainCreateInfoKHR create_info{};
 		create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		create_info.surface = surface;
+		create_info.surface = m_surface;
 		create_info.minImageCount = image_count;
 		create_info.imageFormat = m_surface_format.format;
 		create_info.imageColorSpace = m_surface_format.colorSpace;
@@ -231,7 +228,7 @@ namespace Expectre
 		create_info.imageArrayLayers = 1;
 		create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-		ToolsVk::QueueFamilyIndices indices = ToolsVk::findQueueFamilies(physical_device, surface);
+		ToolsVk::QueueFamilyIndices indices = ToolsVk::findQueueFamilies(m_physical_device, m_surface);
 		uint32_t queue_family_indices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 		if (indices.graphicsFamily != indices.presentFamily)
@@ -250,13 +247,11 @@ namespace Expectre
 		create_info.presentMode = PRESENT_MODE;
 		create_info.clipped = VK_TRUE;
 
-		const auto& device = m_context.get_device();
+		VK_CHECK_RESULT(vkCreateSwapchainKHR(m_device, &create_info, nullptr, &m_swapchain));
 
-		VK_CHECK_RESULT(vkCreateSwapchainKHR(device, &create_info, nullptr, &m_swapchain));
-
-		vkGetSwapchainImagesKHR(device, m_swapchain, &image_count, nullptr);
+		vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, nullptr);
 		m_swapchain_images.resize(image_count);
-		vkGetSwapchainImagesKHR(device, m_swapchain, &image_count, m_swapchain_images.data());
+		vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, m_swapchain_images.data());
 
 		m_swapchain_image_format = m_surface_format.format;
 	}
@@ -273,8 +268,6 @@ namespace Expectre
 
 	void RendererVk::create_geometry_buffer()
 	{
-		const auto& device = m_context.get_device();
-
 		VkDeviceSize vertex_buffer_size = sizeof(Vertex) * m_all_vertices.size();
 		VkDeviceSize index_buffer_size = sizeof(uint32_t) * m_all_indices.size();
 
@@ -283,42 +276,41 @@ namespace Expectre
 
 		// === STAGING BUFFERS ===
 
-		AllocatedBuffer vertex_staging = ToolsVk::create_buffer(m_context.get_allocator(), vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		AllocatedBuffer vertex_staging = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
 		VmaAllocationCreateInfo staging_alloc_info = {};
 		staging_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
 
-		const auto& allocator = m_context.get_allocator();
 		void* data;
-		VK_CHECK_RESULT(vmaMapMemory(allocator, vertex_staging.allocation, &data));
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging.allocation, &data));
 		memcpy(data, m_all_vertices.data(), static_cast<size_t>(vertex_buffer_size));
-		vmaUnmapMemory(allocator, vertex_staging.allocation);
+		vmaUnmapMemory(m_allocator, vertex_staging.allocation);
 
-		AllocatedBuffer index_staging = ToolsVk::create_buffer(allocator, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		AllocatedBuffer index_staging = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-		VK_CHECK_RESULT(vmaMapMemory(allocator, index_staging.allocation, &data));
+		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
 		memcpy(data, m_all_indices.data(), static_cast<size_t>(index_buffer_size));
-		vmaUnmapMemory(allocator, index_staging.allocation);
+		vmaUnmapMemory(m_allocator, index_staging.allocation);
 
 		// === DEVICE LOCAL BUFFERS ===
 		VmaAllocationCreateInfo device_alloc_info = {};
 		device_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
 		// Vertex buffer (device-local)
-		m_geometry_buffer.vertices = ToolsVk::create_buffer(allocator, vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		m_geometry_buffer.vertices = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		// Index buffer (device-local)
-		m_geometry_buffer.indices = ToolsVk::create_buffer(allocator, index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		m_geometry_buffer.indices = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		// === COPY ===
-		ToolsVk::copy_buffer(device, m_cmd_pool, m_graphics_queue, vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
-		ToolsVk::copy_buffer(device, m_cmd_pool, m_graphics_queue, index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
+		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
+		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
 
 		// Cleanup staging
-		vmaDestroyBuffer(allocator, vertex_staging.buffer, vertex_staging.allocation);
-		vmaDestroyBuffer(allocator, index_staging.buffer, index_staging.allocation);
+		vmaDestroyBuffer(m_allocator, vertex_staging.buffer, vertex_staging.allocation);
+		vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
 	}
 
 	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format, bool is_presenting_pass)
@@ -620,8 +612,6 @@ namespace Expectre
 
 	void RendererVk::create_sync_objects()
 	{
-		const auto& device = m_context.get_device();
-
 		m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);
 		m_finished_render_semaphores.resize(MAX_CONCURRENT_FRAMES);
 		m_in_flight_fences.resize(MAX_CONCURRENT_FRAMES);
@@ -639,17 +629,17 @@ namespace Expectre
 			// Create an "available" and "finished" semphore
 			// Create fence as well
 			auto avail =
-				vkCreateSemaphore(device,
+				vkCreateSemaphore(m_device,
 					&semaphore_info,
 					nullptr,
 					&m_available_image_semaphores[i]);
 			auto finished =
-				vkCreateSemaphore(device,
+				vkCreateSemaphore(m_device,
 					&semaphore_info,
 					nullptr,
 					&m_finished_render_semaphores[i]);
 			auto fences =
-				vkCreateFence(device,
+				vkCreateFence(m_device,
 					&fence_info,
 					nullptr,
 					&m_in_flight_fences[i]);
@@ -728,18 +718,16 @@ namespace Expectre
 
 	void RendererVk::draw_frame()
 	{
-		const auto& device = m_context.get_device();
-
-		vkWaitForFences(device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(m_device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE, UINT64_MAX);
 
 		uint32_t image_index;
 		VkResult result =
-			vkAcquireNextImageKHR(device, m_swapchain, UINT64_MAX,
+			vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
 				m_available_image_semaphores[m_current_frame],
 				VK_NULL_HANDLE, &image_index);
 		VK_CHECK_RESULT(result);
 		update_uniform_buffer();
-		vkResetFences(device, 1, &m_in_flight_fences[m_current_frame]);
+		vkResetFences(m_device, 1, &m_in_flight_fences[m_current_frame]);
 		vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
 		record_draw_commands(m_cmd_buffers[m_current_frame], image_index);
 
@@ -783,14 +771,12 @@ namespace Expectre
 
 	VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings)
 	{
-		const auto& device = m_context.get_device();
-
 		VkDescriptorSetLayoutCreateInfo layout_info{};
 		layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
 		layout_info.pBindings = layout_bindings.data();
 		VkDescriptorSetLayout layout;
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &layout));
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &layout));
 		return layout;
 	}
 
@@ -857,13 +843,8 @@ namespace Expectre
 		memcpy(m_uniform_buffers[m_current_frame].mapped, &ubo, sizeof(ubo));
 	}
 
-
-	bool RendererVk::isReady() { return m_ready; };
-
-
 	void RendererVk::update(uint64_t delta_t)
 	{
-		const auto& device = m_context.get_device();
 
 		// update camera velocity
 		glm::vec3 dir(0.0f);
@@ -887,7 +868,7 @@ namespace Expectre
 		const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
 		if (frag_shader_changed || vert_shader_changed)
 		{
-			m_pipeline = create_pipeline(device, m_render_pass, m_pipeline_layout);
+			m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
 		}
 
 		// if (m_ui_renderer) {
@@ -939,4 +920,4 @@ namespace Expectre
 	}
 
 
-	}
+}

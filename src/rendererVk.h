@@ -55,16 +55,22 @@ namespace Expectre
 
 	public:
 		RendererVk() = delete;
-		RendererVk(VkPhysicalDevice& physical_device, VkDevice& device, VkQueue& graphics_quue, VkQueue& present_queue);
+		// --- Prevent copying ---
+		// Delete the copy constructor
+		RendererVk(const RendererVk&) = delete;
+		// Delete the copy assignment operator
+		RendererVk& operator=(const RendererVk&) = delete;
+		RendererVk(VkPhysicalDevice& physical_device, VkDevice& device,
+			VmaAllocator& allocator, VkSurfaceKHR& surface,
+			VkQueue& graphics_queue, uint32_t& graphics_queue_index,
+			VkQueue& present_queue, uint32_t& present_queue_index);
 		~RendererVk();
 
-		bool isReady();
-		void update(uint64_t delta_t);
+		bool is_ready() { return m_ready; }
+		void update(uint64_t delta_t) override;
 		void draw_frame();
 
 	private:
-
-		void create_logical_device_and_queues();
 
 		void create_swapchain();
 
@@ -175,7 +181,10 @@ namespace Expectre
 
 		std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
 
-		RenderContextVk& m_context;
+		VmaAllocator& m_allocator;
+		VkSurfaceKHR& m_surface;
+		uint32& m_graphics_queue_index;
+		uint32& m_present_queue_index;
 	};
 
 }

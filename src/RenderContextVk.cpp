@@ -14,7 +14,7 @@
 
 namespace Expectre {
 
-	RenderContextVk::RenderContextVk(SDL_Window* window) : m_window{window}
+	RenderContextVk::RenderContextVk(SDL_Window* window) : m_window{ window }
 	{
 
 		create_instance();
@@ -22,8 +22,11 @@ namespace Expectre {
 		create_device();
 		create_memory_allocator();
 
-		m_renderer =
-			std::make_shared<RendererVk>(*this);
+		//m_renderer =
+		//	std::make_shared<RendererVk>(m_physical_device, m_device,
+		//		m_allocator, m_surface, m_graphics_queue,
+		//		m_graphics_queue_index, m_present_queue, m_present_queue_index);
+		m_ready = true;
 	}
 
 	RenderContextVk::~RenderContextVk() {
@@ -174,5 +177,11 @@ namespace Expectre {
 		allocatorCreateInfo.instance = m_instance;
 
 		vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
+	}
+
+	void RenderContextVk::update(uint64_t delta_time) {
+		m_renderer->update(delta_time);
+		m_renderer->draw_frame();
+
 	}
 } // namespace Expectreb

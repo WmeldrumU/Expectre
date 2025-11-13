@@ -28,6 +28,9 @@ namespace Expectre
 		uint32_t present_queue_index() { return m_present_queue_index; }
 		const VmaAllocator& get_allocator() { return m_allocator; }
 		const VkSurfaceKHR& get_surface() { return m_surface; }
+		void update(uint64_t delta_t);
+		bool is_ready() { return m_ready; }
+
 	private:
 		void create_instance();
 		void create_device();
@@ -51,6 +54,8 @@ namespace Expectre
 		VkQueue m_graphics_queue{};
 		VkQueue m_present_queue{};
 		float m_priority = 1.0;
+
+		bool m_ready{ false };
 	};
 
 } // namespace Expectre
