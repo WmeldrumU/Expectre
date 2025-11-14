@@ -1,18 +1,19 @@
 #ifndef SCENE_CAMERA
 #define SCENE_CAMERA
 
-#include "scene/SceneNode.h"
+#include "scene/SceneObject.h"
 
 namespace Expectre
 {
-    class Camera
+    class Camera : SceneObject
     {
-        Camera();
+        Camera(SceneObject* parent, std::string name);
 
         // Delete the copy constructor
-        Object(const SceneNode &other) = delete;
+        Camera(const Camera &other) = delete;
         // Delete the copy assignment operator as well for consistency
-        SceneNode &operator=(const SceneNode &other) = delete;
+        Camera &operator=(const Camera &other) = delete;
+        private:
     };
 }
 #endif // SCENE_CAMERA
