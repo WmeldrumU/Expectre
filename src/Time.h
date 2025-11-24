@@ -58,4 +58,4 @@ private:
     double m_deltaTime = 0.0;
     double m_runningTime = 0.0;
 };
-#endif TIME_H
+#endif // TIME_H

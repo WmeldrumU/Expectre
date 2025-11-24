@@ -1,4 +1,4 @@
-#include "scene/Camera.h"
+#include "Camera.h"
 
 namespace Expectre
 {

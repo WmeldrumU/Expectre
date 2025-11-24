@@ -45,7 +45,7 @@ ninja/[*]
 Build commands
 ```
 conan install . -pr:h clang-cl -pr:b clang-cl --build=missing
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="Debug/generators/conan_toolchain.cmake" 
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="Debug/generators/conan_toolchain.cmake"
 cmake --build build --config Debug
 ```
 

@@ -29,102 +29,102 @@ namespace Expectre
 			throw std::runtime_error("Unable to initialize application window!");
 		}
 
-#if defined(USE_WEBGPU)
-		spdlog::debug("Using WebGPU");
-		m_renderer =
-			std::make_shared<RendererWgpu>();
-#elif defined(USE_DIRECTX)
-		m_renderer = std::make_shared<Renderer_Dx>();
-#else
-		m_render_context = std::make_unique<RenderContextVk>(m_window);
-#endif
+// #if defined(USE_WEBGPU)
+// 		spdlog::debug("Using WebGPU");
+// 		m_renderer =
+// 			std::make_shared<RendererWgpu>();
+// #elif defined(USE_DIRECTX)
+// 		m_renderer = std::make_shared<Renderer_Dx>();
+// #else
+// 		m_render_context = std::make_unique<RenderContextVk>(m_window);
+// #endif
 
-		if (m_render_context->is_ready()) {
-			// make a weak ptr for observer input notifications
-			std::weak_ptr<InputObserver> input_observer(m_renderer);
-			add_observer(input_observer);
-		}
+// 		if (m_render_context->is_ready()) {
+// 			// make a weak ptr for observer input notifications
+// 			std::weak_ptr<InputObserver> input_observer(m_renderer);
+// 			add_observer(input_observer);
+// 		}
 	}
 
-	void Engine::run()
-	{
+	// void Engine::run()
+	// {
 
-		if (!m_render_context->is_ready())
-		{
-			throw std::runtime_error("renderer could not initialize!");
-		}
-		static uint64_t last_time = SDL_GetTicks();
-		bool quit = false;
+	// 	if (!m_render_context->is_ready())
+	// 	{
+	// 		throw std::runtime_error("renderer could not initialize!");
+	// 	}
+	// 	static uint64_t last_time = SDL_GetTicks();
+	// 	bool quit = false;
 
-		while (!quit)
-		{
-			uint64_t current_time = SDL_GetTicks();
-			uint64_t delta_time = current_time - last_time;
-			last_time = current_time;
+	// 	while (!quit)
+	// 	{
+	// 		uint64_t current_time = SDL_GetTicks();
+	// 		uint64_t delta_time = current_time - last_time;
+	// 		last_time = current_time;
 
-			// Handle events on input queue
-			quit = process_input();
+	// 		// Handle events on input queue
+	// 		quit = process_input();
 
-			// Render frame
-			m_render_context->update(delta_time);
+	// 		// Render frame
+	// 		m_render_context->update(delta_time);
 
-			limit_frame_rate(60, delta_time);
-			Time::Instance().Update();
-		}
+	// 		limit_frame_rate(60, delta_time);
+	// 		Time::Instance().Update();
+	// 	}
 
-		// SDL cleanup
-		SDL_DestroyWindow(m_window);
-		//SDL_Vulkan_UnloadLibrary();
-		SDL_Quit();
+	// 	// SDL cleanup
+	// 	SDL_DestroyWindow(m_window);
+	// 	//SDL_Vulkan_UnloadLibrary();
+	// 	SDL_Quit();
 
-		return;
-	}
+	// 	return;
+	// }
 
-	void Engine::limit_frame_rate(uint32_t desired_fps, uint64_t delta_time)
-	{
-		auto desired_frame_time = 1000 / desired_fps; // Milliseconds per frame for desired FPS
+// 	void Engine::limit_frame_rate(uint32_t desired_fps, uint64_t delta_time)
+// 	{
+// 		auto desired_frame_time = 1000 / desired_fps; // Milliseconds per frame for desired FPS
 
-		if (delta_time < desired_frame_time)
-		{
-			auto sleepTime = std::chrono::milliseconds(desired_frame_time - delta_time);
-			std::this_thread::sleep_for(sleepTime);
-		}
-	}
+// 		if (delta_time < desired_frame_time)
+// 		{
+// 			auto sleepTime = std::chrono::milliseconds(desired_frame_time - delta_time);
+// 			std::this_thread::sleep_for(sleepTime);
+// 		}
+// 	}
 
-	void Engine::draw()
-	{
-	}
+// 	void Engine::draw()
+// 	{
+// 	}
 
-	void Engine::add_observer(std::weak_ptr<InputObserver> observer)
-	{
-		m_observers.push_back(observer);
-	}
+// 	void Engine::add_observer(std::weak_ptr<InputObserver> observer)
+// 	{
+// 		m_observers.push_back(observer);
+// 	}
 
-	bool Engine::process_input()
-	{
-		bool quit = false;
-		SDL_Event event;
-		// Handle events on queue
-		while (SDL_PollEvent(&event) != 0)
-		{
-			// User requests quit
-			if (event.type == SDL_EVENT_QUIT)
-			{
-				quit = true;
-			}
-			// Handle input
-			else if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
-			{
-				for (auto& weak_observer : m_observers)
-				{
-					std::shared_ptr<InputObserver> observer_ptr = weak_observer.lock();
-					if (!observer_ptr)
-						continue;
-					observer_ptr->on_input_event(event);
-				}
-			}
-		}
-		return quit;
-	}
+// 	bool Engine::process_input()
+// 	{
+// 		bool quit = false;
+// 		SDL_Event event;
+// 		// Handle events on queue
+// 		while (SDL_PollEvent(&event) != 0)
+// 		{
+// 			// User requests quit
+// 			if (event.type == SDL_EVENT_QUIT)
+// 			{
+// 				quit = true;
+// 			}
+// 			// Handle input
+// 			else if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+// 			{
+// 				for (auto& weak_observer : m_observers)
+// 				{
+// 					std::shared_ptr<InputObserver> observer_ptr = weak_observer.lock();
+// 					if (!observer_ptr)
+// 						continue;
+// 					observer_ptr->on_input_event(event);
+// 				}
+// 			}
+// 		}
+// 		return quit;
+// 	}
 
 }
