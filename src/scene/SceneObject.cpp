@@ -1,4 +1,4 @@
-#include "SceneObject.h"
+#include "scene/SceneObject.h"
 #include <stdexcept>
 #include <string>
 

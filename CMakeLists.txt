@@ -23,8 +23,10 @@ find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 
-# add source files
-set(SOURCES
+    # add source files
+    set(SOURCES
+    src/input/InputManager.h
+    src/input/InputManager.cpp
     src/Engine.cpp
     src/Engine.h
     src/IRenderer.h
@@ -45,13 +47,12 @@ set(SOURCES
     # src/RendererWgpu.cpp
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
-    src/Shared.h
     # src/UIRendererVkNoesis.cpp
     # src/UIRendererVkNoesis.h
     src/ToolsVk.h
     # src/FastLZ.h
     # src/FastLZ.cpp
-    src/Time.h
+    src/AppTime.h
     src/TextureVk.h
     # src/UtilsNs.h
     # src/scene/Scene.h
@@ -86,7 +87,10 @@ message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(ExpectreApp PUBLIC
     ${COMMON_LIBRARIES}
 )
-target_include_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
+target_include_directories(ExpectreApp PRIVATE 
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/lib/
+)
 target_link_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
 
 # Define it as a macro so it can be used in C++

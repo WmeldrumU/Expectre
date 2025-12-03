@@ -1,5 +1,5 @@
-#ifndef TIME_H
-#define TIME_H
+#ifndef APPTIME_H
+#define APPTIME_H
 #include <chrono>
 
 class Time
@@ -58,4 +58,4 @@ private:
     double m_deltaTime = 0.0;
     double m_runningTime = 0.0;
 };
-#endif // TIME_H
+#endif // APPTIME_H
