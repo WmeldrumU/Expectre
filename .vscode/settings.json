@@ -1,5 +1,4 @@
 {
-    "C_Cpp.confkigurationProvider": "ms-vscode.cmake-tools",
     "files.associations": {
         "iostream": "cpp",
         "algorithm": "cpp",
@@ -106,5 +105,5 @@
         "string_view": "cpp",
         "cassert": "cpp"
     },
-    "C_Cpp.errorSquiggles": "Enabled"
+    "C_Cpp.errorSquiggles": "enabled"
 }

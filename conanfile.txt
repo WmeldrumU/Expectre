@@ -3,8 +3,7 @@ sdl/3.2.14
 spdlog/1.16.0
 glm/0.9.5.4
 stb/cci.20230920
-assimp/5.4.3
-vulkan-memory-allocator/3.3.0
+assimp/6.0.2
 
 [generators]
 CMakeToolchain
@@ -12,3 +11,7 @@ CMakeDeps
 
 [layout]
 cmake_layout
+
+[options]
+sdl/*:opengl=False
+sdl/*:libusb=False

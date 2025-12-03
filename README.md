@@ -49,6 +49,38 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE="Debug/generators/conan_toolchain.cmake"
 cmake --build build --config Debug
 ```
 
+
+#### Conan profile (llvm)
+```
+[settings]
+os=Windows
+arch=x86_64
+build_type=Debug
+compiler=clang
+compiler.version=19
+compiler.cppstd=20
+compiler.runtime=dynamic
+compiler.runtime_type=Debug
+compiler.runtime_version=v144
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.build:compiler_executables = {"c": "clang", "cpp": "clang++"}
+tools.compilation:verbosity=verbose
+
+[tool_requires]
+ninja/[*]
+```
+
+
+Build commands
+```
+conan install . -pr:h llvm -pr:b llvm --build=missing
+cmake --preset conan-debug 
+cmake --build .\build\Debug\
+```
+
+
 TODOS
 - noesis integration
 - zoom to fit

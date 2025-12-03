@@ -26,7 +26,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "model.h"
+#include "Model.h"
 #define VK_CHECK_RESULT(f)                                                                                                                         \
 	{                                                                                                                                              \
 		VkResult res = (f);                                                                                                                        \
@@ -579,6 +579,7 @@ namespace Expectre {
 			}
 
 			spdlog::error("Could not find a phycial device");
+			throw std::runtime_error("Could not find a phycial device");
 		}
 
 	} // namespace tools

@@ -22,7 +22,6 @@ find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
-find_package(VulkanMemoryAllocator REQUIRED)
 
 # add source files
 set(SOURCES
@@ -32,33 +31,33 @@ set(SOURCES
     src/IRendererInfo.h
     # src/IUIRenderer.h
     src/main.cpp
-    # src/Model.h
+    src/Model.h
     # src/NoesisShaders.h
     src/observer.h
     src/RenderContextVk.cpp
     src/RenderContextVk.h
-    # src/RenderDeviceVk.cpp
-    # src/RenderDeviceVk.h
+    src/RenderDeviceVk.cpp
+    src/RenderDeviceVk.h
     # src/RendererDx.cpp
     # src/RendererDx.h
-    # src/RendererVk.cpp
-    # src/RendererVk.h
+    src/RendererVk.cpp
+    src/RendererVk.h
     # src/RendererWgpu.cpp
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
-    # src/Shared.h
+    src/Shared.h
     # src/UIRendererVkNoesis.cpp
     # src/UIRendererVkNoesis.h
-    # src/ToolsVk.h
+    src/ToolsVk.h
     # src/FastLZ.h
     # src/FastLZ.cpp
     src/Time.h
-    # src/TextureVk.h
+    src/TextureVk.h
     # src/UtilsNs.h
     # src/scene/Scene.h
     # src/scene/Scene.cpp
-    # src/scene/SceneObject.cpp
-    # src/scene/SceneObject.h
+    src/scene/SceneObject.cpp
+    src/scene/SceneObject.h
     # src/scene/SceneRoot.h
     # src/scene/Camera.h
     # src/scene/Camera.cpp
@@ -81,7 +80,6 @@ set(COMMON_LIBRARIES
     fmt::fmt
     Vulkan::Vulkan
     Vulkan::shaderc_combined
-    GPUOpen::VulkanMemoryAllocator
     # Noesis
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")

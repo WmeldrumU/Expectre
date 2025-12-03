@@ -22,20 +22,20 @@ namespace Expectre
 		RenderContextVk(SDL_Window* window);
 		~RenderContextVk();
 
-	// 	const VkDevice& get_device() { return m_device; }
-	// 	const VkPhysicalDevice& get_phys_device() { return m_physical_device; }
-	// 	uint32_t graphics_queue_index() { return m_graphics_queue_index; }
-	// 	uint32_t present_queue_index() { return m_present_queue_index; }
-	// 	const VmaAllocator& get_allocator() { return m_allocator; }
-	// 	const VkSurfaceKHR& get_surface() { return m_surface; }
-	// 	void update(uint64_t delta_t);
-	// 	bool is_ready() { return m_ready; }
+		const VkDevice& get_device() { return m_device; }
+		const VkPhysicalDevice& get_phys_device() { return m_physical_device; }
+		uint32_t graphics_queue_index() { return m_graphics_queue_index; }
+		uint32_t present_queue_index() { return m_present_queue_index; }
+		const VmaAllocator& get_allocator() { return m_allocator; }
+		const VkSurfaceKHR& get_surface() { return m_surface; }
+		void update(uint64_t delta_t);
+		bool is_ready() { return m_ready; }
 
 	private:
 		void create_instance();
-	// 	void create_device();
-	// 	void create_surface();
-	// 	void create_memory_allocator();
+		void create_device();
+		void create_surface();
+		void create_memory_allocator();
 
 
 		VkInstance m_instance;
