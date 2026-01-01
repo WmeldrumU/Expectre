@@ -4,9 +4,10 @@
 #define VMA_DEBUG_DETECT_LEAKS 1
 #define VMA_STATS_STRING_ENABLED 1
 
-#include "RendererVk.h"          // <-- add this
-#include "ToolsVk.h"             // <-- needed for ToolsVk::... calls
+#include "RendererVk.h"
+#include "ToolsVk.h"
 #include "Engine.h"
+#include "scene/SceneObject.h"
 
 #include <spdlog/spdlog.h>
 #include <vulkan/vulkan.h>
@@ -26,10 +27,10 @@ namespace Expectre {
 		create_device();
 		create_memory_allocator();
 
-		//m_renderer =
-		//	std::make_shared<RendererVk>(m_physical_device, m_device,
-		//		m_allocator, m_surface, m_graphics_queue,
-		//		m_graphics_queue_index, m_present_queue, m_present_queue_index);
+		m_renderer =
+			std::make_shared<RendererVk>(m_physical_device, m_device,
+				m_allocator, m_surface, m_graphics_queue,
+				m_graphics_queue_index, m_present_queue, m_present_queue_index);
 		m_ready = true;
 	}
 
@@ -44,7 +45,7 @@ namespace Expectre {
 
 		vkDestroyInstance(m_instance, nullptr);
 
-		m_window = nullptr;
+		// m_window = nullptr;
 	}
 
 	void RenderContextVk::create_instance()
@@ -157,7 +158,6 @@ namespace Expectre {
 
 	void RenderContextVk::create_surface()
 	{
-		m_window = SDL_CreateWindow("Expectre", RESOLUTION_X, RESOLUTION_Y, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 		auto err = SDL_Vulkan_CreateSurface(m_window, m_instance, nullptr, &m_surface);
 		// Create a Vulkan surface using SDL
 		if (!err)
@@ -182,9 +182,9 @@ namespace Expectre {
 		vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 	}
 
-	void RenderContextVk::update(uint64_t delta_time) {
+	void RenderContextVk::UpdateAndRender(uint64_t delta_time, SceneObject& object) {
 		m_renderer->update(delta_time);
 		m_renderer->draw_frame();
 
 	}
-} // namespace Expectreb
+} // namespace Expectre

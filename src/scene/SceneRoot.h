@@ -1,6 +1,6 @@
 #ifndef EXPECTRE_SCENEROOT_H
 #define EXPECTRE_SCENEROOT_H
-#include "SceneObject.h"
+#include "scene/SceneObject.h"
 #include <string>
 #include <glm/mat3x4.hpp>
 

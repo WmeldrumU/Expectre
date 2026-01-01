@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
 	{
 		std::cout << "STARTING UP...." << std::endl;
 		Expectre::Engine engine{};
-		// engine.run();
+		engine.run();
 	}
 	catch (std::exception &e)
 	{
