@@ -33,6 +33,7 @@ find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
     src/IRendererInfo.h
     # src/IUIRenderer.h
     src/main.cpp
+    src/MathUtils.h
     src/Model.h
     # src/NoesisShaders.h
     src/observer.h
@@ -60,8 +61,8 @@ find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
     src/scene/SceneObject.cpp
     src/scene/SceneObject.h
     src/scene/SceneRoot.h
-    # src/scene/Camera.h
-    # src/scene/Camera.cpp
+    src/scene/Camera.h
+    src/scene/Camera.cpp
 )
 message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
