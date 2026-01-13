@@ -12,19 +12,20 @@ namespace Expectre
     SceneRoot(std::string name = "SceneRoot") : SceneObject()
     {
       m_parent = nullptr;
-      m_world_transform = glm::mat3x4{};
-      m_relative_transform = glm::mat3x4{};
+      m_world_transform = glm::mat4x3{};
+      m_relative_transform = glm::mat4x3{};
       m_name = name;
     }
 
-    glm::mat3x4 get_world_transform() override
+    glm::mat4x3 get_world_transform() override
     {
-      return glm::mat3x4{};
+      //todo - implement
+      return m_world_transform;
     }
 
-    glm::mat3x4 get_relative_transform() override
+    glm::mat4x3 get_relative_transform() override
     {
-      return glm::mat3x4{};
+      return m_relative_transform;
     }
   };
 } // namespace Expectre

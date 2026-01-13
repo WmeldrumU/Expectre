@@ -6,9 +6,8 @@
 
 namespace Expectre {
 Scene::Scene(std::string scene_name)
-    : m_root{}, m_camera{m_root, scene_name + "Camera"} {
+    : m_root{}, m_camera{&m_root, scene_name + "Camera"} {
 
-  create_root();
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
   auto bunny_dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
   Model::import_model(teapot_dir, m_root);

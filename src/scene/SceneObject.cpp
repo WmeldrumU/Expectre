@@ -13,7 +13,7 @@ namespace Expectre
                                 null unless the current object is scene root.");
         }
         m_world_transform = parent->get_world_transform();
-        m_relative_transform = glm::mat3x4{};
+        m_relative_transform = glm::mat4x3{};
 
         if (name == "")
         {
