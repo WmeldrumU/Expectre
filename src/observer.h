@@ -9,7 +9,7 @@ namespace Expectre
     {
     public:
         virtual ~InputObserver() = default;
-        virtual void on_input_event(const SDL_Event &event) = 0;
+        //virtual void on_input_event(const SDL_Event &event) = 0;
     };
 }
 #endif

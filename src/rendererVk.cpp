@@ -22,6 +22,8 @@
 #include "ShaderFileWatcher.h"
 #include "ToolsVk.h"
 
+#include "scene/Camera.h"
+
 struct MVP_uniform_object {
   glm::mat4 model;
   glm::mat4 view;
@@ -93,10 +95,10 @@ RendererVk::RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
       WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
-  m_models.push_back(
-      load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj")));
-  m_models.push_back(
-      load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
+  // m_models.push_back(
+  //     load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj")));
+  // m_models.push_back(
+  //     load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
   create_geometry_buffer();
 
   std::vector<VkDescriptorPoolSize> pool_sizes(2);
@@ -170,10 +172,9 @@ RendererVk::~RendererVk() {
   }
 
   // Destroy vertex and index buffer
-  vkDestroyBuffer(m_device, m_geometry_buffer.indices.buffer, nullptr);
-  vmaFreeMemory(m_allocator, m_geometry_buffer.indices.allocation);
-  vkDestroyBuffer(m_device, m_geometry_buffer.vertices.buffer, nullptr);
-  vmaFreeMemory(m_allocator, m_geometry_buffer.vertices.allocation);
+
+  vmaDestroyBuffer(m_allocator, m_geometry_buffer.buffer,
+                   m_geometry_buffer.allocation);
 
   // Destroy pipeline and related layouts
   vkDestroyPipeline(m_device, m_pipeline, nullptr);
@@ -273,60 +274,23 @@ VkImageView RendererVk::create_swapchain_image_views(VkDevice device,
 }
 
 void RendererVk::create_geometry_buffer() {
-  VkDeviceSize vertex_buffer_size = sizeof(Vertex) * m_all_vertices.size();
-  VkDeviceSize index_buffer_size = sizeof(uint32_t) * m_all_indices.size();
 
-  m_geometry_buffer.index_count = m_all_indices.size();
-  m_geometry_buffer.vertex_count = m_all_vertices.size();
-
+  static uint32_t geometry_buffer_init_size_bytes = 1024 * 1024 * 64; // 64MB
   // === STAGING BUFFERS ===
 
-  AllocatedBuffer vertex_staging = ToolsVk::create_buffer(
-      m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-  VmaAllocationCreateInfo staging_alloc_info = {};
-  staging_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-
-  void *data;
-  VK_CHECK_RESULT(vmaMapMemory(m_allocator, vertex_staging.allocation, &data));
-  memcpy(data, m_all_vertices.data(), static_cast<size_t>(vertex_buffer_size));
-  vmaUnmapMemory(m_allocator, vertex_staging.allocation);
-
-  AllocatedBuffer index_staging = ToolsVk::create_buffer(
-      m_allocator, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-  VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
-  memcpy(data, m_all_indices.data(), static_cast<size_t>(index_buffer_size));
-  vmaUnmapMemory(m_allocator, index_staging.allocation);
-
-  // === DEVICE LOCAL BUFFERS ===
-  VmaAllocationCreateInfo device_alloc_info = {};
-  device_alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-  // Vertex buffer (device-local)
-  m_geometry_buffer.vertices = ToolsVk::create_buffer(
-      m_allocator, vertex_buffer_size,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+  auto buffer = ToolsVk::create_buffer(
+      m_allocator, geometry_buffer_init_size_bytes,
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+          VK_BUFFER_USAGE_TRANSFER_DST_BIT,
       VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  // Index buffer (device-local)
-  m_geometry_buffer.indices = ToolsVk::create_buffer(
-      m_allocator, index_buffer_size,
-      VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  // === COPY ===
-  ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue,
-                       vertex_staging.buffer, m_geometry_buffer.vertices.buffer,
-                       vertex_buffer_size);
-  ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue,
-                       index_staging.buffer, m_geometry_buffer.indices.buffer,
-                       index_buffer_size);
 
-  // Cleanup staging
-  vmaDestroyBuffer(m_allocator, vertex_staging.buffer,
-                   vertex_staging.allocation);
-  vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
+  m_geometry_buffer.allocation = buffer.allocation;
+  m_geometry_buffer.buffer = buffer.buffer;
+  m_geometry_buffer.vertex_offset = 0;
+  m_geometry_buffer.index_begin =
+      static_cast<uint32_t>(geometry_buffer_init_size_bytes * 0.80);
+  m_geometry_buffer.index_offset = m_geometry_buffer.index_begin;
+  m_geometry_buffer.buffer_size = geometry_buffer_init_size_bytes;
 }
 
 VkRenderPass RendererVk::create_renderpass(VkDevice device,
@@ -732,26 +696,28 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
   VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(command_buffer, 0, 1,
-                         &m_geometry_buffer.vertices.buffer, offsets);
+  vkCmdBindVertexBuffers(command_buffer, 0, 1, &m_geometry_buffer.buffer,
+                         offsets);
 
-  vkCmdBindIndexBuffer(command_buffer, m_geometry_buffer.indices.buffer, 0,
-                       VK_INDEX_TYPE_UINT32);
+  vkCmdBindIndexBuffer(command_buffer, m_geometry_buffer.buffer,
+                       m_geometry_buffer.index_begin, VK_INDEX_TYPE_UINT32);
 
   vkCmdBindDescriptorSets(
       command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1,
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
-  vkCmdDrawIndexed(command_buffer,
-                   static_cast<uint32_t>(m_geometry_buffer.index_count), 1, 0,
-                   0, 0);
+  // Calculate index count: (bytes used) / (bytes per index)
+  auto index_count =
+      (m_geometry_buffer.index_offset - m_geometry_buffer.index_begin) /
+      sizeof(uint32_t);
+  vkCmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
 
   vkCmdEndRenderPass(command_buffer);
 
   VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 }
 
-void RendererVk::draw_frame() {
+void RendererVk::draw_frame(const Camera &camera) {
   vkWaitForFences(m_device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE,
                   UINT64_MAX);
 
@@ -761,7 +727,7 @@ void RendererVk::draw_frame() {
                             m_available_image_semaphores[m_current_frame],
                             VK_NULL_HANDLE, &image_index);
   VK_CHECK_RESULT(result);
-  update_uniform_buffer();
+  update_uniform_buffer(camera);
   vkResetFences(m_device, 1, &m_in_flight_fences[m_current_frame]);
   vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
   record_draw_commands(m_cmd_buffers[m_current_frame], image_index);
@@ -856,7 +822,7 @@ UniformBuffer RendererVk::create_uniform_buffer(VmaAllocator allocator,
   return uniform_buffer;
 }
 
-void RendererVk::update_uniform_buffer() {
+void RendererVk::update_uniform_buffer(const Camera &camera) {
   // static auto startTime = std::chrono::high_resolution_clock::now();
 
   // auto currentTime = std::chrono::high_resolution_clock::now();
@@ -871,7 +837,7 @@ void RendererVk::update_uniform_buffer() {
   // ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f),
   // glm::vec3(0.0f, 1.0f, 0.0f));
   ubo.model = glm::mat4(1.0f);
-  ubo.view = glm::lookAt(m_camera.pos, m_camera.forward_dir,
+  ubo.view = glm::lookAt(camera.get_position(), camera.get_forward_dir(),
                          glm::vec3(0.0f, 1.0f, 0.0f));
   ubo.projection = glm::perspective(
       glm::radians(45.0f), static_cast<float>(m_extent.width) / m_extent.height,
@@ -913,43 +879,73 @@ void RendererVk::update(uint64_t delta_t) {
   //	m_ui_renderer->Update(Time::Instance().RunningTimeSeconds());
   // }
 }
-void RendererVk::on_input_event(const SDL_Event &event) {
 
-  // Check for up keys
-  if (event.type == SDL_EVENT_KEY_UP) {
-    switch (event.key.key) {
-    case SDLK_W:
-      m_camera.moveForward = false;
-      break;
-    case SDLK_S:
-      m_camera.moveBack = false;
-      break;
-    case SDLK_A:
-      m_camera.moveLeft = false;
-      break;
-    case SDLK_D:
-      m_camera.moveRight = false;
-      break;
-    }
+void RendererVk::upload_mesh_to_gpu(const Mesh &mesh) {
+  // Early return if mesh is empty
+  if (mesh.vertices.empty() || mesh.indices.empty()) {
+    spdlog::warn("Attempted to upload empty mesh to GPU");
+    return;
   }
 
-  // Check for down keys
-  if (event.type == SDL_EVENT_KEY_DOWN) {
-    switch (event.key.key) {
-    case SDLK_W:
-      m_camera.moveForward = true;
-      break;
-    case SDLK_S:
-      m_camera.moveBack = true;
-      break;
-    case SDLK_A:
-      m_camera.moveLeft = true;
-      break;
-    case SDLK_D:
-      m_camera.moveRight = true;
-      break;
-    }
-  }
+  VkDeviceSize vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
+  VkDeviceSize index_buffer_size = sizeof(uint32_t) * mesh.indices.size();
+  
+  // Align vertex buffer size to 4 bytes to keep index offsets aligned
+  vertex_buffer_size = (vertex_buffer_size + 3) & ~3;
+
+  VkDeviceSize mesh_buffer_size = vertex_buffer_size + index_buffer_size;
+
+  // === STAGING BUFFERS ===
+  AllocatedBuffer mesh_staging = ToolsVk::create_buffer(
+      m_allocator, mesh_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      VMA_MEMORY_USAGE_CPU_ONLY,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+  void *data{nullptr};
+  VK_CHECK_RESULT(vmaMapMemory(m_allocator, mesh_staging.allocation, &data));
+  uint8_t *start_ptr = static_cast<uint8_t *>(data);
+  memcpy(start_ptr, mesh.vertices.data(), vertex_buffer_size);
+  memcpy(start_ptr + vertex_buffer_size, mesh.indices.data(),
+         index_buffer_size);
+
+  // === copy from staging to device buffer
+
+  VkBufferCopy vertex_region{};
+  vertex_region.srcOffset = 0;
+  vertex_region.dstOffset =
+      static_cast<VkDeviceSize>(m_geometry_buffer.vertex_offset);
+  vertex_region.size = vertex_buffer_size;
+
+  // Verify this won't write over our index buffer
+  assert(m_geometry_buffer.vertex_offset + vertex_buffer_size <=
+         m_geometry_buffer.index_begin);
+
+  // first, copy vertices
+  ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue,
+                       mesh_staging.buffer, m_geometry_buffer.buffer,
+                       vertex_region);
+  m_geometry_buffer.vertex_offset += vertex_buffer_size;
+
+  VkBufferCopy index_region{};
+  index_region.srcOffset = static_cast<VkDeviceSize>(vertex_buffer_size);
+  index_region.dstOffset =
+      static_cast<VkDeviceSize>(m_geometry_buffer.index_offset);
+  index_region.size = index_buffer_size;
+
+  // Verify this won't write outside the geometry buffer
+  assert(m_geometry_buffer.index_offset + index_buffer_size <=
+         m_geometry_buffer.buffer_size);
+  // second, copy indices
+  ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue,
+                       mesh_staging.buffer, m_geometry_buffer.buffer,
+                       index_region);
+  m_geometry_buffer.index_offset += index_buffer_size;
+
+  // todo - add mesh tracking logic (keep track of where meshes are in the geoemetry buffer)
+
+  // Cleanup staging
+  vmaUnmapMemory(m_allocator, mesh_staging.allocation);
+  vmaDestroyBuffer(m_allocator, mesh_staging.buffer, mesh_staging.allocation);
 }
-
 } // namespace Expectre

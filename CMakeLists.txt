@@ -22,6 +22,7 @@ find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
+find_package(xxHash REQUIRED)
 
     # add source files
     set(SOURCES
@@ -36,6 +37,8 @@ find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
     src/MathUtils.h
     src/Model.h
     src/Mesh.h
+    src/MeshManager.h
+    src/MeshManager.cpp
     # src/NoesisShaders.h
     src/observer.h
     src/RenderContextVk.cpp
@@ -83,6 +86,7 @@ set(COMMON_LIBRARIES
     fmt::fmt
     Vulkan::Vulkan
     Vulkan::shaderc_combined
+    xxHash::xxhash
     # Noesis
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
