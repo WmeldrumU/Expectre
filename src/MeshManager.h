@@ -43,6 +43,9 @@ public:
 private:
   MeshManager() = default;
   ~MeshManager() = default;
+
+  void compute_mesh_normals(Mesh& mesh);
+
   uint32_t m_next_mesh_id{0};
   std::vector<MeshHandle> m_meshes_to_upload_to_gpu{};
   std::unordered_map<MeshHandle, Mesh> m_mesh_map{};

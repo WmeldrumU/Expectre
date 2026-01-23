@@ -10,7 +10,7 @@ namespace Expectre
   {
   public:
     // Called once per frame to poll SDL events
-    void Update();
+    bool Update();
 
     bool IsKeyDown(SDL_Keycode key) const;
     // Just this frame

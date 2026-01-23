@@ -47,16 +47,10 @@ void Engine::run() {
     uint64_t delta_time = current_time - last_time;
     last_time = current_time;
 
-    // Handle events on input queue
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT) {
-        quit = true;
-      }
-    }
+    
 
     // Update input manager, find which keys are pressed/released this frame
-    m_input_manager.Update();
+    quit = m_input_manager.Update();
     // Update scene
     m_scene.Update(delta_time, m_input_manager);
 
