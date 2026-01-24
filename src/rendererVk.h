@@ -47,9 +47,9 @@ struct GeometryBuffer {
   VmaAllocation allocation{VK_NULL_HANDLE}; // Allocation handle for the buffer
   VkBuffer buffer{}; // Handle to the Vulkan buffer object that the memory is
                      // bound to
-  uint32_t vertex_offset = -1;
-  uint32_t index_begin = -1;
-  uint32_t index_offset = -1;
+  uint32_t vertex_offset = 0; // bytes
+  uint32_t index_begin = 0; // bytes
+  uint32_t index_offset = 0; // bytes
   uint32_t buffer_size = 0; // Total size of the geometry buffer in bytes
   std::unordered_map<MeshHandle, MeshAllocation> mesh_allocations;
 };
@@ -170,6 +170,7 @@ private:
   std::vector<VkFence> m_in_flight_fences{};
 
 	GeometryBuffer m_geometry_buffer{};
+  std::vector<MeshAllocation> m_mesh_allocations{};
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
   VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
   VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
