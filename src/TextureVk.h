@@ -1,5 +1,3 @@
-#include <spdlog/spdlog.h>
-
 #ifndef TEXTURE_VK_H
 #define TEXTURE_VK_H
 #include <spdlog/spdlog.h>
@@ -15,6 +13,13 @@
 namespace Expectre
 {
 
+	struct TextureInfo {
+		VkDevice device;
+		VkCommandPool cmd_pool;
+		VkQueue graphics_queu;
+		VmaAllocator allocator;
+	};
+
 
 	class TextureVk /*: public Noesis::Texture*/
 	{
@@ -25,11 +30,6 @@ namespace Expectre
 		VkImageCreateInfo image_info;
 		VkImageViewCreateInfo view_info;
 		VkImageLayout layout;
-		/*uint32_t GetWidth() const override { return image_info.extent.width; }
-		uint32_t GetHeight() const override { return image_info.extent.height; }
-		bool HasMipMaps() const override { return image_info.mipLevels > 1; }
-		bool IsInverted() const override { return false; }
-		bool HasAlpha() const override { return true; }*/
 
 
 		static VkImageAspectFlags choose_aspect(VkFormat format) {
@@ -76,7 +76,7 @@ namespace Expectre
 				// No previous accesses to wait on
 				barrier.srcAccessMask = 0;
 
-				// We’re going to use the image as a depth/stencil attachment (read for tests + write)
+				// Weï¿½re going to use the image as a depth/stencil attachment (read for tests + write)
 				barrier.dstAccessMask =
 					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
 					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -170,6 +170,7 @@ namespace Expectre
 				&image_allocation,
 				nullptr));
 			if (aspect_mask & VK_IMAGE_ASPECT_COLOR_BIT) {
+				// Upload pixel data via staging buffer
 				size_t imageSize = tex_width * tex_height * 4;
 				const void* src_data = pixelData;
 				std::vector<uint8_t> zeroData;
@@ -199,7 +200,7 @@ namespace Expectre
 					tex_width,
 					tex_height);
 
-				// Final layout transition (for either read, write, or both)
+				// Final layout transition
 				transition_image_layout(device, cmd_pool, graphics_queue, image, texture_format,
 					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 					final_layout);
@@ -208,7 +209,7 @@ namespace Expectre
 				vmaDestroyBuffer(allocator, staging.buffer, staging.allocation);
 			}
 			else {
-				// No upload (depth textures): just transition to the desired layout
+				// No upload (depth textures don't start with any data): just transition to the desired layout
 				transition_image_layout(device, cmd_pool, graphics_queue, image, texture_format,
 					VK_IMAGE_LAYOUT_UNDEFINED,
 					final_layout);

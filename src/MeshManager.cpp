@@ -1,5 +1,8 @@
 #include "MeshManager.h"
 
+#include <xxhash.h>
+
+
 namespace Expectre {
 
 uint64_t MeshManager::compute_mesh_hash(const Mesh &mesh) const {

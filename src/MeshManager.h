@@ -5,7 +5,6 @@
 
 #include <assimp/Importer.hpp>
 #include <assimp/mesh.h>
-#include <xxhash.h>
 
 #include <optional>
 #include <unordered_map>

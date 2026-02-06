@@ -6,7 +6,8 @@
 
 #include "Engine.h"
 #include "MeshManager.h"
-#include "RendererVk.h"
+#include "MaterialManager.h"
+#include "TextureManager.h"
 #include "ToolsVk.h"
 #include "scene/SceneObject.h"
 
@@ -176,16 +177,11 @@ void RenderContextVk::create_memory_allocator() {
   vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 }
 
-void RenderContextVk::UpdateAndRender(uint64_t delta_time,
-                                      Scene &scene) {
-
-
-
+void RenderContextVk::UpdateAndRender(uint64_t delta_time, Scene &scene) {
 
   // Upload meshes that have been added since last frame
   const auto meshes_to_upload =
       MeshManager::Instance().consume_meshes_to_upload_to_gpu();
-
   for (const auto &mesh_handle : meshes_to_upload) {
 
     if (auto mesh_opt = MeshManager::Instance().get_mesh(mesh_handle)) {
@@ -195,15 +191,30 @@ void RenderContextVk::UpdateAndRender(uint64_t delta_time,
                     mesh.name, mesh.vertices.size(), mesh.indices.size());
       // Upload mesh to GPU via renderer
       m_renderer->upload_mesh_to_gpu(mesh);
-
     } else {
       spdlog::error("Mesh with hash {} not found in MeshManager!",
                     mesh_handle.mesh_id);
     }
   }
 
+  // Textures
+  const auto& textures_to_upload = TextureManager::Instance().consume_textures_to_upload_to_gpu();
+
+  for (const auto& tex_handle: textures_to_upload) {
+        if (auto tex_opt = TextureManager::Instance().get_texture(tex_handle)) {
+      const Texture &texture = tex_opt->get(); // tex_opt->get() returns const Texture&
+      // use texture without copying
+      spdlog::debug("Uploading texture {} with dimensions {} x {}",
+                    texture.name, texture.width, texture.height);
+      // Upload texture to GPU via renderer
+      m_renderer->upload_texture_to_gpu(texture);
+
+    } else {
+      spdlog::error("Texture with hash {} not found in TextureManager!",
+                    tex_handle.texture_id);
+    }
+  }
   m_renderer->update(delta_time);
   m_renderer->draw_frame(scene.get_camera());
-
 }
 } // namespace Expectre

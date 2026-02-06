@@ -11,7 +11,7 @@ namespace Expectre {
 		IUIRenderer(const IUIRenderer&) = delete;
 		IUIRenderer& operator=(const IUIRenderer&) = delete;
 
-		//virtual void Draw(uint32_t current_frame) = 0;
+		// virtual void Draw(uint32_t current_frame) = 0;
 		//virtual void Update(uint64_t total_time);
 		virtual ~IUIRenderer() = default;
 

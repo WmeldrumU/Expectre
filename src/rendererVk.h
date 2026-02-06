@@ -18,13 +18,11 @@
 
 #include "IRenderer.h"
 #include "IUIRenderer.h"
-#include "Model.h"
 #include "ShaderFileWatcher.h"
 #include "TextureVk.h"
 #include "ToolsVk.h"
 #include "observer.h"
 #include "scene/SceneObject.h"
-
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -34,7 +32,7 @@
 #define PRESENT_MODE VK_PRESENT_MODE_MAILBOX_KHR
 namespace Expectre {
 
-  class Camera;
+class Camera;
 
 struct MeshAllocation {
   uint32_t vertex_offset;
@@ -48,10 +46,16 @@ struct GeometryBuffer {
   VkBuffer buffer{}; // Handle to the Vulkan buffer object that the memory is
                      // bound to
   uint32_t vertex_offset = 0; // bytes
-  uint32_t index_begin = 0; // bytes
-  uint32_t index_offset = 0; // bytes
-  uint32_t buffer_size = 0; // Total size of the geometry buffer in bytes
+  uint32_t index_begin = 0;   // bytes
+  uint32_t index_offset = 0;  // bytes
+  uint32_t buffer_size = 0;   // Total size of the geometry buffer in bytes
   std::unordered_map<MeshHandle, MeshAllocation> mesh_allocations;
+};
+
+struct MVP_uniform_object {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 projection;
 };
 struct UniformBuffer {
   AllocatedBuffer allocated_buffer{};
@@ -82,8 +86,8 @@ public:
   void update(uint64_t delta_t) override;
   void draw_frame(const Camera &camera) override;
 
-
   void upload_mesh_to_gpu(const Mesh &mesh);
+  void upload_texture_to_gpu(const Texture &texture);
 
 private:
   void create_swapchain();
@@ -142,7 +146,6 @@ private:
 
   void update_geometry_buffer(SceneObject &object);
 
-  std::unique_ptr<Model> load_model(std::string dir);
   VkPhysicalDevice &m_physical_device;
   VkDevice &m_device;
 
@@ -169,7 +172,7 @@ private:
   std::vector<VkSemaphore> m_finished_render_semaphores{};
   std::vector<VkFence> m_in_flight_fences{};
 
-	GeometryBuffer m_geometry_buffer{};
+  GeometryBuffer m_geometry_buffer{};
   std::vector<MeshAllocation> m_mesh_allocations{};
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
   VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
