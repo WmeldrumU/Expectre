@@ -29,7 +29,7 @@ void main() {
 
     // Specular
 
-    //outColor = vec4(fragNorm, 1.0);
+    outColor = vec4(normal, 1.0);
     //outColor = vec4((ambient + diffuse) * mesh_color, 1.0);
-    outColor = texture(texSampler, fragTexCoord);
+    //outColor = texture(texSampler, fragTexCoord);
 }

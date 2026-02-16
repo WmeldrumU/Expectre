@@ -8,7 +8,7 @@
 #include <thread>
 
 namespace Expectre {
-Engine::Engine() : m_scene{"Main Scene"} {
+Engine::Engine() : m_scene("Main Scene") {
 
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
     SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
@@ -35,9 +35,8 @@ Engine::Engine() : m_scene{"Main Scene"} {
 
 void Engine::run() {
 
-  if (!m_render_context->is_ready())
-  {
-  	throw std::runtime_error("renderer could not initialize!");
+  if (!m_render_context->is_ready()) {
+    throw std::runtime_error("renderer could not initialize!");
   }
   static uint64_t last_time = SDL_GetTicks();
   bool quit = false;
@@ -46,8 +45,6 @@ void Engine::run() {
     uint64_t current_time = SDL_GetTicks();
     uint64_t delta_time = current_time - last_time;
     last_time = current_time;
-
-    
 
     // Update input manager, find which keys are pressed/released this frame
     quit = m_input_manager.Update();
