@@ -16,7 +16,10 @@ public:
   }
 
   TextureHandle import_texture(std::string image_directory);
-  TextureHandle TextureManager::import_texture(void *data);
+  //TextureHandle TextureManager::import_texture(void *data);
+  TextureHandle import_texture(std::string name, void *data,
+                                             uint32_t width, uint32_t height,
+                                             uint32_t channels);
 
   std::vector<TextureHandle> consume_textures_to_upload_to_gpu() {
     return std::move(m_textures_to_upload_to_gpu);
