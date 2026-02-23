@@ -891,14 +891,14 @@ void RendererVk::update_uniform_buffer(const Camera &camera) {
 
 void RendererVk::update(uint64_t delta_t) {
 
-  // Check if shader files have changed
+  // Check if shader files have changed, if so, create a new pipeline
+  // This allow for hot reloading of shaders while the app is running!
   const bool frag_shader_changed = m_frag_shader_watcher->check_for_changes();
   const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
   if (frag_shader_changed || vert_shader_changed) {
     m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
   }
   // upload pending assets to GPU
-
   for (const auto &mesh_handle :
        MeshManager::Instance().consume_meshes_to_upload_to_gpu()) {
     const auto &mesh_opt = MeshManager::Instance().get_mesh(mesh_handle);

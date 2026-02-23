@@ -140,7 +140,7 @@ void RenderContextVk::create_device() {
   requiredFeatures.samplerAnisotropy = VK_TRUE;
   requiredFeatures.fillModeNonSolid = VK_TRUE;
 
-  std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
+  std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   VkDeviceCreateInfo device_create_info{};
   device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
