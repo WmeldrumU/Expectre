@@ -36,6 +36,15 @@ public:
   RenderResourceManager(VkDevice device, VmaAllocator allocator, VkQueue queue)
       : m_device(device), m_allocator(allocator), m_graphics_queue(queue) {}
 
+  ~RenderResourceManager() {
+    if (m_vertex_buffer.buffer != VK_NULL_HANDLE) {
+      vmaDestroyBuffer(m_allocator, m_vertex_buffer.buffer, m_vertex_buffer.allocation);
+    }
+    if (m_index_buffer.buffer != VK_NULL_HANDLE) {
+      vmaDestroyBuffer(m_allocator, m_index_buffer.buffer, m_index_buffer.allocation);
+    }
+  }
+
   void create_vertex_buffer(uint32_t size_bytes);
   void create_index_buffer(uint32_t size_bytes);
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
