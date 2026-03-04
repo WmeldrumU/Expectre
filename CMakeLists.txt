@@ -62,8 +62,13 @@ find_package(xxHash REQUIRED)
     src/TextureManager.h
     src/TextureManager.cpp
     src/ToolsVk.h
-    # src/FastLZ.h
-    # src/FastLZ.cpp
+    src/noesis/FastLZ.h
+    src/noesis/FastLZ.cpp
+    src/noesis/VKRenderDevice.h
+    src/noesis/VKRenderDevice.cpp
+    src/noesis/VKFactory.h
+    src/noesis/NoesisUI.h
+    src/noesis/NoesisUI.cpp
     src/AppTime.h
     src/TextureVk.h
     # src/UtilsNs.h
@@ -122,6 +127,17 @@ target_include_directories(ExpectreApp PRIVATE
     ${PROJECT_SOURCE_DIR}/lib/
 )
 target_link_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
+
+# Copy Noesis.dll to the build output directory so the exe can find it at runtime
+if(WIN32)
+    set(NOESIS_DLL "${NOESIS_ROOT}/Bin/windows_x86_64/Noesis.dll")
+    add_custom_command(TARGET ExpectreApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${NOESIS_DLL}"
+            $<TARGET_FILE_DIR:ExpectreApp>
+        COMMENT "Copying Noesis.dll to output directory"
+    )
+endif()
 
 # Define it as a macro so it can be used in C++
 add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
