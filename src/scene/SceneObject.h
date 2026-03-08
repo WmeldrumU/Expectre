@@ -40,7 +40,7 @@ namespace Expectre
         }
 
         const std::vector<std::unique_ptr<SceneObject>>& get_children() {
-
+            return m_children;
         }
     protected:
         SceneObject* m_parent;

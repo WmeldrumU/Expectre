@@ -9,7 +9,7 @@ namespace Expectre
     {
         create_root();
     }
-    void Scene::Update(float delta_time, const InputManager &input_manager)
+    void Scene::Update(uint64_t delta_time, const InputManager &input_manager)
     {
         // Update scene logic here, e.g., traverse scene graph, update animations, etc.
         // This is a placeholder implementation.

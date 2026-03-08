@@ -542,44 +542,88 @@ namespace Expectre {
 			vkEnumeratePhysicalDevices(instance, &gpu_count, nullptr);
 			gpus.resize(gpu_count);
 			vkEnumeratePhysicalDevices(instance, &gpu_count, gpus.data());
+			
+			if (gpu_count == 0)
+			{
+				spdlog::error("Could not find a physical device");
+				throw std::runtime_error("Could not find a physical device");
+			}
+
 			VkPhysicalDevice chosen_phys_device = VK_NULL_HANDLE;
+			VkDeviceSize max_vram = 0;
 
 			for (auto& gpu : gpus)
 			{
-
 				VkPhysicalDeviceProperties phys_properties{};
 				vkGetPhysicalDeviceProperties(gpu, &phys_properties);
 				std::cout << "Physical device: " << std::endl;
 				std::cout << phys_properties.deviceName << std::endl;
 				std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
 				std::cout << "device type: " << phys_properties.deviceType << std::endl;
+				
 				VkPhysicalDeviceFeatures phys_features{};
 				vkGetPhysicalDeviceFeatures(gpu, &phys_features);
 
 				VkPhysicalDeviceMemoryProperties phys_memory_properties{};
 				vkGetPhysicalDeviceMemoryProperties(gpu, &phys_memory_properties);
 				std::cout << "heap count: " << phys_memory_properties.memoryHeapCount << std::endl;
+				
+				// Calculate total VRAM (device local memory)
+				VkDeviceSize total_vram = 0;
 				for (uint32_t j = 0; j < phys_memory_properties.memoryHeapCount; j++)
 				{
-					VkMemoryHeap heap{};
-					heap = phys_memory_properties.memoryHeaps[j];
-
+					VkMemoryHeap heap = phys_memory_properties.memoryHeaps[j];
 					std::cout << "heap size:" << std::endl;
 					std::cout << heap.size << std::endl;
 					std::cout << "flags: " << heap.flags << std::endl;
+					
+					// Only count device local memory (VRAM)
+					if (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+					{
+						total_vram += heap.size;
+					}
 				}
-
-				if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
-					chosen_phys_device == VK_NULL_HANDLE)
+				
+				std::cout << "Total VRAM: " << (total_vram / (1024 * 1024)) << " MB" << std::endl;
+				
+				// Prioritize discrete GPUs first, then choose device with most VRAM
+				bool is_better = false;
+				if (chosen_phys_device == VK_NULL_HANDLE)
+				{
+					is_better = true;
+				}
+				else
+				{
+					VkPhysicalDeviceProperties current_properties{};
+					vkGetPhysicalDeviceProperties(chosen_phys_device, &current_properties);
+					
+					bool current_is_discrete = current_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+					bool new_is_discrete = phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+					
+					// Prioritize discrete GPUs
+					if (new_is_discrete && !current_is_discrete)
+					{
+						is_better = true;
+					}
+					// If both discrete or both not discrete, choose by VRAM
+					else if (new_is_discrete == current_is_discrete && total_vram > max_vram)
+					{
+						is_better = true;
+					}
+				}
+				
+				if (is_better)
 				{
 					chosen_phys_device = gpu;
-					spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
-					return chosen_phys_device;
+					max_vram = total_vram;
+					spdlog::info("Selected physical device: {} ({}) with {} MB VRAM", 
+					             phys_properties.deviceName,
+					             phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "Discrete" : "Integrated",
+					             max_vram / (1024 * 1024));
 				}
 			}
 
-			spdlog::error("Could not find a phycial device");
-			throw std::runtime_error("Could not find a phycial device");
+			return chosen_phys_device;
 		}
 
 	} // namespace tools

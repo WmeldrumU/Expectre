@@ -13,8 +13,8 @@ namespace Expectre
         Scene(const Scene &other) = delete;
         // Delete the copy assignment operator as well for consistency
         Scene &operator=(const Scene &other) = delete;
-        void Update(float delta_time, const InputManager& input_manager);
-
+        void Update(uint64_t delta_time, const InputManager& input_manager);
+        SceneObject& GetRoot() { return *m_root; }
     private:
 
     void create_root();

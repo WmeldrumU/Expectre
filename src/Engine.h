@@ -7,6 +7,7 @@
 	
 #include "RenderContextVk.h"
 #include "observer.h"
+#include "input/InputManager.h"
 
 #ifdef NDEBUG
 /**
@@ -44,6 +45,8 @@ namespace Expectre
 		std::vector<std::weak_ptr<InputObserver>> m_observers{};
 		SDL_Window* m_window{};
 		std::unique_ptr<RenderContextVk> m_render_context = nullptr;
+		InputManager m_input_manager;
+		Scene m_scene;
 	};
 
 }
