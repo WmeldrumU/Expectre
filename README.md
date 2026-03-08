@@ -63,6 +63,10 @@ We need to rebuild the pipeline (possibilty more) once recompiled.
 >>>>>>> 011e948 (Scratch notes)
 =======
 - Create separate VkQueue for layout transitions so graphic's queue isn't blocked by resource loading
+<<<<<<< HEAD
 - Add cmake logic to copy Noesis.dll to build directory
 - Move end_single_time_commands out of rendererVk to some utility/tools class
 >>>>>>> c02f530 (Work on noesis integration)
+=======
+- Add cmake logic to copy Noesis.dll to build directory
+>>>>>>> dc99ccc (update readme)
