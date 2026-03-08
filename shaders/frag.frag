@@ -14,7 +14,7 @@ void main() {
     //outColor = vec4(fragTexCoord, 0.0, 1.0);
     // Ambient
     vec3 light_color = vec3(1.0, 1.0, 1.0);
-    vec3 mesh_color = vec3 (0.8, 0.2, 0.8);
+    vec3 mesh_color = vec3 (0.4, 0.4, 0.43);
     //vec3 mesh_color = texture(texSampler, fragTexCoord).rgb; // Use texture if available
 
     float ambient_coef = 0.8;
@@ -29,7 +29,7 @@ void main() {
 
     // Specular
 
-    //outColor = vec4(light_color, 1.0);
-       //outColor = vec4((ambient + diffuse) * mesh_color, 1.0);
-    outColor = texture(texSampler, fragTexCoord);
+    //outColor = vec4(fragNorm, 1.0);
+    outColor = vec4((ambient + diffuse) * mesh_color, 1.0);
+    //outColor = texture(texSampler, fragTexCoord);
 }
