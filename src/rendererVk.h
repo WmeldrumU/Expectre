@@ -19,6 +19,7 @@
 #include <vma/vk_mem_alloc.h>
 
 #include "NsRender/RenderDevice.h"
+#include <NsGui/IView.h> // Add this include to resolve the incomplete type error for Noesis::IView
 
 
 #include "IRenderer.h"
@@ -123,7 +124,6 @@ namespace Expectre
 		void create_memory_allocator();
 		std::unique_ptr<Model> load_model(std::string dir);
 
-		void create_ui_renderer();
 
 		SDL_Window* m_window{};
 		VkInstance m_instance{};
@@ -144,7 +144,6 @@ namespace Expectre
 
 
 		VkRenderPass m_render_pass{};
-		VkRenderPass m_ui_render_pass{};
 		VkPipelineLayout m_pipeline_layout{};
 		VkPipelineLayout m_ui_pipeline_layout{};
 		VkPipeline m_pipeline{};
@@ -234,20 +233,22 @@ namespace Expectre
 		void UnmapIndices() override;
 		void DrawBatch(const Noesis::Batch& batch) override;
 		//@}
-
 		Noesis::Ptr<Noesis::Texture> WrapTexture(VkImage image, uint32_t width, uint32_t height,
 			uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha);
 
 		// State used by Noesis render device
 		UtilsNs::RenderStateNs m_noesis;
-
+		// Staging buffers for the current Noesis frameko
+		AllocatedBuffer m_vertex_staging_ns{};
+		AllocatedBuffer m_index_staging_ns{};
+		VkDescriptorPool m_descriptor_pool_ns{};
+		Noesis::Ptr<Noesis::IView> m_view_ns;
+		VkRenderPass m_render_pass_ns{};
 
 		VkShaderModule m_vert_shaders_ns[Noesis::Shader::Vertex::Count];
 		VkShaderModule m_pix_shaders_ns[Noesis::Shader::Count];
 		UtilsNs::LayoutNs m_layouts_ns[Noesis::Shader::Count];
 
-
-		std::vector<AllocatedBuffer> m_allocated_buffers{};
 
 	};
 }
