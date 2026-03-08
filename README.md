@@ -44,3 +44,7 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE="Debug/generators/conan_toolchain.cmake"
 cmake --build build --config Debug
 ```
 
+TODOS
+- runtime shader compilation
+- noesis integration
+- zoom to fit
