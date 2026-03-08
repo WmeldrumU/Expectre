@@ -56,14 +56,13 @@ find_package(xxHash REQUIRED)
     # src/RendererWgpu.cpp
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
-    src/UIRendererVkNoesis.cpp
-    src/UIRendererVkNoesis.h
     src/Texture.h
     src/TextureManager.h
     src/TextureManager.cpp
     src/ToolsVk.h
     src/noesis/FastLZ.h
     src/noesis/FastLZ.cpp
+    src/noesis/NoesisInputAdapter.h
     src/noesis/VKRenderDevice.h
     src/noesis/VKRenderDevice.cpp
     src/noesis/VKFactory.h

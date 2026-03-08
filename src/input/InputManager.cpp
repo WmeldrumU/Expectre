@@ -20,8 +20,17 @@ bool InputManager::Update() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
 
-    // Handle events on input queue
+    // Broadcast raw event to all registered observers (e.g. Noesis UI)
+    for (auto it = m_observers.begin(); it != m_observers.end();) {
+      if (auto obs = it->lock()) {
+        obs->on_input_event(event);
+        ++it;
+      } else {
+        it = m_observers.erase(it); // expired, remove
+      }
+    }
 
+    // Handle events on input queue
     if (event.type == SDL_EVENT_KEY_DOWN) {
       m_currentKeys[event.key.key] = true;
     } else if (event.type == SDL_EVENT_KEY_UP) {
@@ -31,6 +40,10 @@ bool InputManager::Update() {
     }
   }
   return false;
+}
+
+void InputManager::AddObserver(std::shared_ptr<InputObserver> observer) {
+  m_observers.push_back(observer);
 }
 
 bool InputManager::IsKeyDown(SDL_Keycode key) const {
