@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
 		std::cout << "STARTING UP...." << std::endl;
 		Expectre::Engine engine{};
 		engine.run();
-		// engine.cleanup();
+		engine.cleanup();
 	}
 	catch (std::exception &e)
 	{
