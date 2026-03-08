@@ -50,11 +50,12 @@ set(SOURCES
     src/UIRendererVkNoesis.h
     src/UIRendererVkNoesis_2.h
     src/UIRendererVkNoesis_2.cpp
-    src/VkTools.h
+    src/ToolsVk.h
     src/FastLZ.h
     src/FastLZ.cpp
     src/Time.h
     src/TextureVk.h
+    src/UtilsNs.h
 )
 
 message(STATUS "SOURCES: ${SOURCES}")

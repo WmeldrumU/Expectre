@@ -9,7 +9,8 @@
 #include <vma/vk_mem_alloc.h>
 #include <stb.h>
 
-#include "VkTools.h"
+#include "ToolsVk.h"
+
 
 namespace Expectre
 {
@@ -23,7 +24,7 @@ namespace Expectre
 		VmaAllocation allocation;
 		VkImageCreateInfo image_info;
 		VkImageViewCreateInfo view_info;
-
+		VkImageLayout layout;
 		/*uint32_t GetWidth() const override { return image_info.extent.width; }
 		uint32_t GetHeight() const override { return image_info.extent.height; }
 		bool HasMipMaps() const override { return image_info.mipLevels > 1; }
@@ -92,7 +93,9 @@ namespace Expectre
 			VmaAllocator allocator,
 			const void* pixelData,
 			uint32_t tex_width,
-			uint32_t tex_height
+			uint32_t tex_height,
+			uint32_t mip_levels = 1
+
 		) {
 			VkImage image;
 			VkImageView image_view;
@@ -107,7 +110,7 @@ namespace Expectre
 			image_info.extent.width = tex_width;
 			image_info.extent.height = tex_height;
 			image_info.extent.depth = 1;
-			image_info.mipLevels = 1;
+			image_info.mipLevels = mip_levels;
 			image_info.arrayLayers = 1;
 			image_info.format = texture_format;
 			image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -157,9 +160,11 @@ namespace Expectre
 				tex_width,
 				tex_height);
 
+
+			const VkImageLayout ending_layout = VK_IMAGE_LAYOUT_GENERAL;
 			transition_image_layout(device, cmd_pool, graphics_queue, image, texture_format,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				ending_layout);
 
 			// 5. Cleanup staging buffer
 			vmaDestroyBuffer(allocator, staging.buffer, staging.allocation);
@@ -187,6 +192,7 @@ namespace Expectre
 			texture.image_info = image_info;
 			texture.view_info = view_info;
 			texture.allocation = image_allocation;
+			texture.layout = ending_layout;
 			return texture;
 		}
 
