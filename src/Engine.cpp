@@ -42,8 +42,8 @@ namespace Expectre
 			quit = process_input();
 
 			// Render frame
-			//m_renderer->update(delta_time);
-			//m_renderer->draw_frame();
+			m_renderer->update(delta_time);
+			m_renderer->draw_frame();
 
 			limit_frame_rate(60, delta_time);
 		}
