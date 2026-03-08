@@ -71,9 +71,6 @@ namespace Expectre
 			std::unique_ptr<Expectre::Model> model = std::make_unique<Expectre::Model>();
 			model->transform = model_transform;
 
-			uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());
-			uint32_t running_index_offset = static_cast<uint32_t>(indices.size());
-
 			// Iterate through each mesh
 			for (unsigned int i = 0; i < scene->mNumMeshes; i++)
 			{

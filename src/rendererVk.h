@@ -18,7 +18,7 @@
 
 #include "IRenderer.h"
 #include "observer.h"
-#include "model.h"
+#include "Model.h"
 #include "ShaderFileWatcher.h"
 #include "IUIRenderer.h"
 #include "TextureVk.h"
@@ -68,7 +68,7 @@ namespace Expectre
 
 		bool is_ready() { return m_ready; }
 		void update(uint64_t delta_t) override;
-		void draw_frame();
+		void draw_frame() override;
 
 	private:
 

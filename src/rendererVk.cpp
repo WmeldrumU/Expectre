@@ -1,12 +1,7 @@
 ﻿// Library macros
-#define VMA_IMPLEMENTATION
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
-
-
-#define VMA_DEBUG_DETECT_LEAKS 1
-#define VMA_STATS_STRING_ENABLED 1
 
 #include "RendererVk.h"
 
@@ -25,7 +20,6 @@
 #include "Model.h"
 #include "ShaderFileWatcher.h"
 #include "Time.h"
-#include <NsGui/IRenderer.h>
 #include "RenderContextVk.h"
 
 struct MVP_uniform_object
