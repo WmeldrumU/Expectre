@@ -23,3 +23,29 @@ build_type=Release
 
 
 
+
+
+
+
+clang-cl profile
+[settings]
+os=Windows
+arch=x86_64
+build_type=Release
+compiler=clang
+compiler.version=14
+compiler.cppstd=gnu14
+compiler.runtime=dynamic
+compiler.runtime_type=Debug
+compiler.runtime_version=v142
+ 
+[conf]
+#tools.env.virtualenv:auto_use=True
+tools.cmake.cmaketoolchain:generator=Visual Studio 16
+
+conan2 install . --output-folder=build --build=missing -pr clang-cl 
+cd ./build/
+cmake ../ -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug"
+cmake --build . --config Release
+
+
