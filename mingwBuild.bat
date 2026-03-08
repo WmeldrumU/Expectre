@@ -1,5 +1,5 @@
 rmdir build
 mkdir build
-cd build
-cmake -S ../ -B . -G "MinGW Makefiles" 
-mingw32-make.exe
+conan install . --build=missing -if build -pr foo   
+cmake -B build -G "Visual Studio 16 2019" -T ClangCL
+cmake --build build --config Release
