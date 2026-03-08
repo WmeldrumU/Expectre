@@ -1,5 +1,7 @@
 #include "Engine.h"
 #include "rendererVk.h"
+#include <chrono>
+#include <thread>
 
 namespace Expectre
 {
@@ -30,10 +32,27 @@ namespace Expectre
                 }
             }
 
-            // Render frame 
+            // Render frame
             m_renderer->draw_frame();
 
+            limit_frame_rate(60);
         }
+    }
+
+    void Engine::limit_frame_rate(uint32_t desiredFPS)
+    {
+        static auto lastTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto frameTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime).count();
+        auto desiredFrameTime = 1000 / desiredFPS; // Milliseconds per frame for desired FPS
+
+        if (frameTime < desiredFrameTime)
+        {
+            auto sleepTime = std::chrono::milliseconds(desiredFrameTime - frameTime);
+            std::this_thread::sleep_for(sleepTime);
+        }
+
+        lastTime = std::chrono::high_resolution_clock::now();
     }
 
     void Engine::cleanup()
