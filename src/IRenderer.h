@@ -15,6 +15,4 @@ protected:
     SDL_Window* m_window;
 };
 
-using IRendererPtr = std::shared_ptr<IRenderer>;
-
 #endif // IRENDERER_H

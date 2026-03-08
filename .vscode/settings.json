@@ -96,7 +96,14 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "codecvt": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "*.tcc": "cpp",
+        "memory_resource": "cpp",
+        "string_view": "cpp",
+        "cassert": "cpp"
     },
     "C_Cpp.errorSquiggles": "Enabled"
 }
