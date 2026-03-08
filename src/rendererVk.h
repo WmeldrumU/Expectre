@@ -97,7 +97,7 @@ namespace Expectre
 
 		VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass, VkPipelineLayout pipeline_layout);
 
-		VkDescriptorPool create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes);
+		VkDescriptorPool create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes, uint32_t num_sets);
 
 		VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout descriptor_layout, VkBuffer buffer, VkImageView image_view,
 			VkSampler sampler);
@@ -242,14 +242,8 @@ namespace Expectre
 		AllocatedBuffer m_vertex_staging_ns{};
 		AllocatedBuffer m_index_staging_ns{};
 		VkDescriptorPool m_descriptor_pool_ns{};
-		Noesis::Ptr<Noesis::IView> m_view_ns;
-		VkRenderPass m_render_pass_ns{};
-
-		VkShaderModule m_vert_shaders_ns[Noesis::Shader::Vertex::Count];
-		VkShaderModule m_pix_shaders_ns[Noesis::Shader::Count];
-		UtilsNs::LayoutNs m_layouts_ns[Noesis::Shader::Count];
-
 
 	};
+
 }
 #endif // RENDERER_VK_H
