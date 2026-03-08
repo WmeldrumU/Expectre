@@ -53,6 +53,12 @@ set(SOURCES
     src/Time.h
     src/TextureVk.h
     src/UtilsNs.h
+    src/scene/Scene.h
+    src/scene/Scene.cpp
+    src/scene/SceneObject.cpp
+    src/scene/SceneObject.h
+    src/scene/Camera.h
+    src/scene/Camera.cpp
 )
 
 message(STATUS "SOURCES: ${SOURCES}")
