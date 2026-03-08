@@ -31,7 +31,6 @@ namespace Expectre
 		}
 		static uint64_t last_time = SDL_GetTicks64();
 		bool quit = false;
-		SDL_Event sdl_event;
 
 		while (!quit)
 		{
@@ -40,15 +39,7 @@ namespace Expectre
 			last_time = current_time;
 
 			// Handle events on queue
-			while (SDL_PollEvent(&sdl_event) != 0)
-			{
-				// User requests quit
-				if (sdl_event.type == SDL_QUIT)
-				{
-					quit = true;
-				}
-				process_input();
-			}
+			quit = process_input();
 
 			// Render frame
 			m_renderer->update(delta_time);
@@ -73,7 +64,7 @@ namespace Expectre
 	Engine::~Engine()
 	{
 		m_observers.clear();
-		m_renderer.reset();
+		//m_renderer.reset();
 	}
 
 	void Engine::draw()
@@ -88,25 +79,24 @@ namespace Expectre
 	bool Engine::process_input()
 	{
 		bool quit = false;
-		SDL_Event sdl_event;
-
+		SDL_Event event;
 		// Handle events on queue
-		while (SDL_PollEvent(&sdl_event) != 0)
+		while (SDL_PollEvent(&event) != 0)
 		{
 			// User requests quit
-			if (sdl_event.type == SDL_QUIT)
+			if (event.type == SDL_QUIT)
 			{
 				quit = true;
 			}
 			// Handle input
-			else if (sdl_event.type == SDL_KEYDOWN || sdl_event.type == SDL_KEYUP)
+			else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
 			{
 				for (auto& weak_observer : m_observers)
 				{
 					std::shared_ptr<InputObserver> observer_ptr = weak_observer.lock();
 					if (!observer_ptr)
 						continue;
-					observer_ptr->on_input_event(sdl_event);
+					observer_ptr->on_input_event(event);
 				}
 			}
 		}
