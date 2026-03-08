@@ -181,7 +181,7 @@ namespace Expectre
 				AllocatedBuffer staging = ToolsVk::create_buffer(allocator,
 					imageSize,
 					VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-					VMA_MEMORY_USAGE_CPU_ONLY);
+					VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
 				// Upload image data to the staging buffer
 				void* data;

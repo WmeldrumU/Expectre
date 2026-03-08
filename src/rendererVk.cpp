@@ -88,11 +88,21 @@ namespace Expectre
 		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj")));
 		m_models.push_back(load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj")));
 		create_geometry_buffer();
-		create_uniform_buffers();
-		m_descriptor_pool = create_descriptor_pool(m_device);
+
+		std::vector<VkDescriptorPoolSize> pool_sizes(2);
+		pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool_sizes[0].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
+		pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		pool_sizes[1].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
+		m_descriptor_pool = create_descriptor_pool(m_device, pool_sizes);
+
 		for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
-			m_uniform_buffers[i].descriptorSet =
+			auto& uniform_buffer = m_uniform_buffers[i];
+			uniform_buffer = create_uniform_buffer(m_allocator, sizeof(MVP_uniform_object));
+			uniform_buffer.descriptorSet =
 				create_descriptor_set(m_device, m_descriptor_pool, m_descriptor_set_layout, m_uniform_buffers[i].allocated_buffer.buffer, m_texture.view, m_texture_sampler);
+
+			m_cmd_buffers[i] = create_command_buffer(m_device, m_cmd_pool);
 		}
 
 		create_command_buffers();
@@ -431,7 +441,7 @@ namespace Expectre
 		// === STAGING BUFFERS ===
 
 		AllocatedBuffer vertex_staging = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_MEMORY_USAGE_CPU_ONLY);
+			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
 		VmaAllocationCreateInfo staging_alloc_info = {};
 		staging_alloc_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
@@ -442,7 +452,7 @@ namespace Expectre
 		vmaUnmapMemory(m_allocator, vertex_staging.allocation);
 
 		AllocatedBuffer index_staging = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_MEMORY_USAGE_CPU_ONLY);
+			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
 		VK_CHECK_RESULT(vmaMapMemory(m_allocator, index_staging.allocation, &data));
 		memcpy(data, m_all_indices.data(), static_cast<size_t>(index_buffer_size));
@@ -454,10 +464,10 @@ namespace Expectre
 
 		// Vertex buffer (device-local)
 		m_geometry_buffer.vertices = ToolsVk::create_buffer(m_allocator, vertex_buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VMA_MEMORY_USAGE_GPU_ONLY);
+			VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		// Index buffer (device-local)
 		m_geometry_buffer.indices = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VMA_MEMORY_USAGE_GPU_ONLY);
+			VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		// === COPY ===
 		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
 		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
@@ -467,7 +477,7 @@ namespace Expectre
 		vmaDestroyBuffer(m_allocator, index_staging.buffer, index_staging.allocation);
 	}
 
-	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format)
+	VkRenderPass RendererVk::create_renderpass(VkDevice device, VkFormat color_format, VkFormat depth_format, bool is_presenting_pass)
 	{
 
 		// This function will prepare a single render pass with one subpass
@@ -483,7 +493,10 @@ namespace Expectre
 		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		if (is_presenting_pass) {
 		attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		}
 		// Depth attachment
 
 		// attachments[1].flags = 0;
@@ -698,20 +711,22 @@ namespace Expectre
 		return command_pool;
 	}
 
-	void RendererVk::create_command_buffers()
+	VkCommandBuffer RendererVk::create_command_buffer(VkDevice device, VkCommandPool command_pool)
 	{
 		m_cmd_buffers.resize(MAX_CONCURRENT_FRAMES);
 
 		VkCommandBufferAllocateInfo cmd_buf_info{};
 		cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cmd_buf_info.commandPool = m_cmd_pool;
+		cmd_buf_info.commandPool = command_pool;
 		cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		cmd_buf_info.commandBufferCount = static_cast<uint32_t>(m_cmd_buffers.size());
+		cmd_buf_info.commandBufferCount = 1;
 
-		VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &cmd_buf_info, m_cmd_buffers.data()));
+		VkCommandBuffer command_buffer{};
+		VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmd_buf_info, &command_buffer));
+		return command_buffer;
 	}
 
-	VkDescriptorPool RendererVk::create_descriptor_pool(VkDevice device) {
+	VkDescriptorPool RendererVk::create_descriptor_pool(VkDevice device, std::vector<VkDescriptorPoolSize> pool_sizes) {
 
 		std::array<VkDescriptorPoolSize, 2> pool_sizes{};
 		pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -752,7 +767,7 @@ namespace Expectre
 		VkDescriptorBufferInfo buffer_info{};
 		buffer_info.buffer = buffer;
 		buffer_info.offset = 0;
-		buffer_info.range = sizeof(UBO);
+		buffer_info.range = sizeof(MVP_uniform_object);
 
 		VkDescriptorImageInfo image_info{};
 		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -995,30 +1010,31 @@ namespace Expectre
 		return pipeline_layout;
 	}
 
-	void RendererVk::create_uniform_buffers()
+	UniformBuffer RendererVk::create_uniform_buffer(VmaAllocator allocator, VkDeviceSize buffer_size)
 	{
+		UniformBuffer uniform_buffer;
 		VkBufferCreateInfo buffer_info{};
 		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_info.size = sizeof(UBO);
+		buffer_info.size = buffer_size;
 		buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 		VmaAllocationCreateInfo alloc_info{};
 		alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU; // Host-visible and coherent by default
 
-		for (int i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
-		{
-			AllocatedBuffer& allocated_buffer = m_uniform_buffers[i].allocated_buffer;
-			allocated_buffer = ToolsVk::create_buffer(m_allocator,
-				sizeof(UBO),
+
+		uniform_buffer.allocated_buffer = ToolsVk::create_buffer(allocator,
+			buffer_size,
 				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-				VMA_MEMORY_USAGE_CPU_TO_GPU);
+			VMA_MEMORY_USAGE_CPU_TO_GPU, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 			// Map once for persistent updates
 			VK_CHECK_RESULT(vmaMapMemory(
-				m_allocator,
-				allocated_buffer.allocation,
-				reinterpret_cast<void**>(&m_uniform_buffers[i].mapped)));
+			allocator,
+			uniform_buffer.allocated_buffer.allocation,
+			reinterpret_cast<void**>(&uniform_buffer.mapped)));
+
+		return uniform_buffer;
 		}
 	}
 
@@ -1034,7 +1050,7 @@ namespace Expectre
 
 		// glm::vec3 camera_pos = (1.0f - t) * start + t * end;
 
-		UBO ubo{};
+		MVP_uniform_object ubo{};
 		// ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.model = glm::mat4(1.0f);
 		ubo.view = glm::lookAt(m_camera.pos, m_camera.forward_dir, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -1484,7 +1500,7 @@ namespace Expectre
 		uint32_t size = width * height * texel_size;
 		AllocatedBuffer staging_buffer = ToolsVk::create_buffer(m_allocator, size,
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_MEMORY_USAGE_CPU_ONLY);
+			VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
 		// Copy data into staging buffer
 		void* mapped;
