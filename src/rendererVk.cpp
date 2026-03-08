@@ -110,12 +110,6 @@ namespace Expectre
 		m_ready = true;
 	}
 
-	std::unique_ptr<Model> RendererVk::load_model(std::string dir)
-	{
-		std::unique_ptr<Model> model = Model::import_model(dir, m_all_vertices, m_all_indices);
-		return model;
-	}
-
 	void RendererVk::cleanup_swapchain()
 	{
 		// Destroy depth buffer

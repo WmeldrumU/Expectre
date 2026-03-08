@@ -14,7 +14,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp> // Include this header for glm::pi<float>()
 #include <glm/gtc/matrix_transform.hpp> // Add this include to ensure glm::perspective is available
-
+#include <glm/mat4x3.hpp>
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -147,27 +147,6 @@ namespace Expectre {
 			return shaderModule;
 		}
 
-		static void printMatrix(const glm::mat4& matrix)
-		{
-			for (int i = 0; i < 4; ++i)
-			{
-				for (int j = 0; j < 4; ++j)
-				{
-					std::cout << matrix[j][i] << " ";
-				}
-				std::cout << std::endl;
-			}
-			std::cout << std::endl;
-		}
-
-		static glm::mat4 to_glm(const aiMatrix4x4& m)
-		{
-			return glm::mat4(
-				m.a1, m.b1, m.c1, m.d1,
-				m.a2, m.b2, m.c2, m.d2,
-				m.a3, m.b3, m.c3, m.d3,
-				m.a4, m.b4, m.c4, m.d4);
-		}
 
 
 		static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window)
