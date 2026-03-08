@@ -14,13 +14,7 @@
 #include <glm/glm.hpp>
 #include <stdio.h>
 
-
-
 #include <vma/vk_mem_alloc.h>
-
-#include "NsRender/RenderDevice.h"
-#include <NsGui/IView.h> // Add this include to resolve the incomplete type error for Noesis::IView
-
 
 #include "IRenderer.h"
 #include "observer.h"
@@ -29,7 +23,6 @@
 #include "IUIRenderer.h"
 #include "TextureVk.h"
 #include "ToolsVk.h"
-#include "UtilsNs.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -40,9 +33,8 @@
 namespace Expectre
 {
 
-
-
-	struct GeometryBuffer {
+	struct GeometryBuffer
+	{
 		AllocatedBuffer vertices;
 		uint32_t vertex_count{ 0 }; // Number of vertices in the buffer
 		AllocatedBuffer indices;
@@ -58,30 +50,21 @@ namespace Expectre
 		uint8_t* mapped{ nullptr };
 	};
 
-
-	class RendererVk : public IRenderer, public InputObserver, public ::Noesis::RenderDevice
+	class RendererVk : public IRenderer, public InputObserver
 	{
 
 	public:
 		RendererVk() = delete;
-		RendererVk(SDL_Window* window, uint32_t resolution_x, uint32_t resolution_y);
+		RendererVk(RenderContextVk& context);
 		~RendererVk();
 
-		bool m_enable_validation_layers{ true };
 		bool isReady();
 		void update(uint64_t delta_t);
 		void draw_frame();
 
 	private:
 
-		void create_instance();
-
-		void create_surface();
-
-		void select_physical_device();
-
 		void create_logical_device_and_queues();
-
 
 		void create_swapchain();
 
@@ -108,9 +91,7 @@ namespace Expectre
 
 		void record_draw_commands(VkCommandBuffer command_buffer, uint32_t image_index);
 
-
 		VkPipelineLayout create_pipeline_layout(VkDevice device, VkDescriptorSetLayout descriptor_set_layout);
-
 
 		VkDescriptorSetLayout create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings);
 
@@ -124,14 +105,6 @@ namespace Expectre
 		void create_memory_allocator();
 		std::unique_ptr<Model> load_model(std::string dir);
 
-
-		SDL_Window* m_window{};
-		VkInstance m_instance{};
-		VkSurfaceKHR m_surface{};
-
-		VkPhysicalDevice m_chosen_phys_device{};
-		VkDevice m_device = VK_NULL_HANDLE;
-
 		VkQueue m_graphics_queue = VK_NULL_HANDLE;
 		VkQueue m_present_queue = VK_NULL_HANDLE;
 
@@ -142,7 +115,6 @@ namespace Expectre
 		std::vector<VkFramebuffer> m_swapchain_framebuffers{};
 		std::vector<VkImageView> m_swapchain_image_views{};
 
-
 		VkRenderPass m_render_pass{};
 		VkPipelineLayout m_pipeline_layout{};
 		VkPipelineLayout m_ui_pipeline_layout{};
@@ -151,7 +123,6 @@ namespace Expectre
 		VkDescriptorPool m_descriptor_pool{};
 		VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
 		VkDescriptorSetLayout m_descriptor_set_layout{ VK_NULL_HANDLE };
-		std::vector<const char*> m_validation_layers{ "VK_LAYER_KHRONOS_validation" };
 
 		std::vector<VkSemaphore> m_available_image_semaphores{};
 		std::vector<VkSemaphore> m_finished_render_semaphores{};
@@ -166,22 +137,18 @@ namespace Expectre
 
 		TextureVk m_depth_stencil;
 
-		VmaAllocator m_allocator{ VK_NULL_HANDLE };
-
 		// Index buffer
 		std::vector<Vertex> m_all_vertices{};
 		std::vector<uint32_t> m_all_indices{};
 
-
 		std::vector<std::unique_ptr<Model>> m_models{};
-		//std::vector<GeometryBuffer> m_geometry_buffers{};
+		// std::vector<GeometryBuffer> m_geometry_buffers{};
 		GeometryBuffer m_geometry_buffer{};
 
 		TextureVk m_texture{};
 		VkSampler m_texture_sampler{};
 		VkSurfaceFormatKHR m_surface_format{};
-		uint32_t m_graphics_queue_family_index{ UINT32_MAX };
-		uint32_t m_present_queue_family_index{ UINT32_MAX };
+
 		uint32_t m_current_frame{ 0 };
 		VkDebugUtilsMessengerEXT m_debug_messenger{};
 
@@ -206,43 +173,7 @@ namespace Expectre
 
 		std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
 
-
-		/// From RenderDevice
-	//@{
-		const Noesis::DeviceCaps& GetCaps() const override;
-		Noesis::Ptr<Noesis::RenderTarget> CreateRenderTarget(const char* label, uint32_t width,
-			uint32_t height, uint32_t sampleCount, bool needsStencil) override;
-		Noesis::Ptr<Noesis::RenderTarget> CloneRenderTarget(const char* label,
-			Noesis::RenderTarget* surface) override;
-		Noesis::Ptr<Noesis::Texture> CreateTexture(const char* label, uint32_t width, uint32_t height,
-			uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data) override;
-		void UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y,
-			uint32_t width, uint32_t height, const void* data) override;
-		void BeginOffscreenRender() override;
-		void EndOffscreenRender() override;
-		void BeginOnscreenRender() override;
-		void EndOnscreenRender() override;
-		void SetRenderTarget(Noesis::RenderTarget* surface) override;
-		void BeginTile(Noesis::RenderTarget* surface, const Noesis::Tile& tile) override;
-		void EndTile(Noesis::RenderTarget* surface) override;
-		void ResolveRenderTarget(Noesis::RenderTarget* surface, const Noesis::Tile* tiles,
-			uint32_t numTiles) override;
-		void* MapVertices(uint32_t bytes) override;
-		void UnmapVertices() override;
-		void* MapIndices(uint32_t bytes) override;
-		void UnmapIndices() override;
-		void DrawBatch(const Noesis::Batch& batch) override;
-		//@}
-		Noesis::Ptr<Noesis::Texture> WrapTexture(VkImage image, uint32_t width, uint32_t height,
-			uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha);
-
-		// State used by Noesis render device
-		UtilsNs::RenderStateNs m_noesis;
-		// Staging buffers for the current Noesis frameko
-		AllocatedBuffer m_vertex_staging_ns{};
-		AllocatedBuffer m_index_staging_ns{};
-		VkDescriptorPool m_descriptor_pool_ns{};
-
+		RenderContextVk m_context;
 	};
 
 }

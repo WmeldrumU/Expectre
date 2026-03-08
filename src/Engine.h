@@ -4,6 +4,18 @@
 #include <memory>
 #include "RendererVk.h"
 
+#ifdef NDEBUG
+    /**
+     * @brief Compile-time constant set to true if NDEBUG is defined (Release build).
+     */
+    constexpr bool _is_debug_build = false;
+#else
+    /**
+     * @brief Compile-time constant set to true if NDEBUG is not defined (Debug build).
+     */
+    constexpr bool _is_debug_build = true;
+#endif
+
 namespace Expectre
 {
 
