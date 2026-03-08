@@ -9,6 +9,8 @@ namespace Expectre {
 		virtual ~IRenderer() = default;
 		virtual void draw_frame() = 0;
 		// Add other common methods here
+
+		virtual void update(uint64_t delta_time) = 0;
 	private:
 
 	protected:

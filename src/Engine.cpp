@@ -36,17 +36,20 @@ namespace Expectre
 #elif defined(USE_DIRECTX)
 		m_renderer = std::make_shared<Renderer_Dx>();
 #else
-		RenderContextVk context{m_window};
+		m_render_context = std::make_unique<RenderContextVk>(m_window);
 #endif
-		// make a weak ptr for observer input notifications
-		std::weak_ptr<InputObserver> input_observer(m_renderer);
-		add_observer(input_observer);
+
+		if (m_render_context->is_ready()) {
+			// make a weak ptr for observer input notifications
+			std::weak_ptr<InputObserver> input_observer(m_renderer);
+			add_observer(input_observer);
+		}
 	}
 
 	void Engine::run()
 	{
 
-		if (!m_renderer->isReady())
+		if (!m_render_context->is_ready())
 		{
 			throw std::runtime_error("renderer could not initialize!");
 		}
@@ -63,14 +66,13 @@ namespace Expectre
 			quit = process_input();
 
 			// Render frame
-			m_renderer->update(delta_time);
-			m_renderer->draw_frame();
+			m_render_context->update(delta_time);
 
 			limit_frame_rate(60, delta_time);
 			Time::Instance().Update();
 		}
 
-				// SDL cleanup
+		// SDL cleanup
 		SDL_DestroyWindow(m_window);
 		//SDL_Vulkan_UnloadLibrary();
 		SDL_Quit();
