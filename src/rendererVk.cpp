@@ -673,10 +673,10 @@ namespace Expectre
         //     {-1.0, 1.0, 0.0f},
         //     {0.0, -1.0, 0.0}};
         const std::vector<Vertex> vertices = {
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}};
+            {{-0.5f, -1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+            {{0.5f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+            {{0.5f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+            {{-0.5f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}};
         uint32_t vertex_buffer_size =
             static_cast<uint32_t>((vertices.size() * sizeof(Vertex)));
         // Setup indices
@@ -1468,9 +1468,16 @@ namespace Expectre
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-        glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 2.0f);
+        glm::vec3 start{-1.0f, 0.0f, 2.0f};
+        glm::vec3 end{3.0f, 0.0f, 5.0f};
+        float t = sin(time / 4.0f * glm::pi<float>()) * 0.5f + 0.5f;
+
+
+        glm::vec3 camera_pos = (1.0f - t) * start + t*end;
+
         UBO ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.model = glm::mat4(1.0f);
         ubo.view = glm::lookAt(camera_pos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(RESOLUTION_X) / RESOLUTION_Y, 0.1f, 1000.0f);
 
@@ -1482,7 +1489,7 @@ namespace Expectre
     void Renderer_Vk::create_texture_image()
     {
         int tex_width, tex_height, tex_channels;
-        stbi_uc *pixels = stbi_load("../../assets/textures/hello.bmp",
+        stbi_uc *pixels = stbi_load("../../assets/textures/hello4.jpg",
                                     &tex_width, &tex_height,
                                     &tex_channels, STBI_rgb_alpha);
         VkDeviceSize image_size = tex_width * tex_height * 4;
@@ -1520,8 +1527,8 @@ namespace Expectre
                              static_cast<uint32_t>(tex_width),
                              static_cast<uint32_t>(tex_height));
         transition_image_layout(m_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         vkDestroyBuffer(m_device, staging_buffer, nullptr);
         vkFreeMemory(m_device, staging_buffer_memory, nullptr);
