@@ -54,6 +54,7 @@ set(SOURCES
     src/FastLZ.h
     src/FastLZ.cpp
     src/Time.h
+    src/TextureVk.h
 )
 
 message(STATUS "SOURCES: ${SOURCES}")

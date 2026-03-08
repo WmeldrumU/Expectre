@@ -16,11 +16,15 @@
 
 #include <vma/vk_mem_alloc.h>
 
+#include "NsRender/RenderDevice.h"
+
+
 #include "IRenderer.h"
 #include "observer.h"
 #include "model.h"
 #include "ShaderFileWatcher.h"
 #include "IUIRenderer.h"
+#include "VkTools.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -31,18 +35,7 @@
 namespace Expectre
 {
 
-	// Vertex buffer and attributes
-	struct AllocatedBuffer
-	{
-		VmaAllocation allocation{ VK_NULL_HANDLE }; // Allocation handle for the buffer
-		VkBuffer buffer{};                       // Handle to the Vulkan buffer object that the memory is bound to
-		// Allow copying (optional but safe if you're careful)
-		AllocatedBuffer() = default;
-		AllocatedBuffer(const AllocatedBuffer&) = default;
-		AllocatedBuffer& operator=(const AllocatedBuffer&) = default;
-	};
-	typedef AllocatedBuffer VertexBuffer;
-	typedef AllocatedBuffer IndexBuffer;
+
 
 	struct GeometryBuffer {
 		AllocatedBuffer vertices;
@@ -69,7 +62,7 @@ namespace Expectre
 		VkImageViewCreateInfo image_view_info;
 	};
 
-	class RendererVk : public IRenderer, public InputObserver
+	class RendererVk : public IRenderer, public InputObserver, public ::Noesis::RenderDevice
 	{
 
 	public:
@@ -81,7 +74,6 @@ namespace Expectre
 		bool isReady();
 		void update(uint64_t delta_t);
 		void draw_frame();
-		void end_single_time_commands(VkCommandBuffer cmd_buffer);
 
 	private:
 
@@ -124,13 +116,7 @@ namespace Expectre
 
 		void update_uniform_buffer();
 
-		void create_texture_image();
-
-		const TextureVk create_texture_from_file(std::string dir);
-
 		void cleanup_swapchain();
-
-		AllocatedBuffer create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
 
 		void create_image(uint32_t width, uint32_t height,
 			VkFormat format, VkImageTiling tiling,
@@ -139,17 +125,6 @@ namespace Expectre
 			VkImage& image,
 			VkDeviceMemory& image_memory);
 
-
-		void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-
-		VkCommandBuffer begin_single_time_commands();
-
-		void transition_image_layout(VkImage image,
-			VkFormat format, VkImageLayout old_layout,
-			VkImageLayout new_layout);
-
-		void create_texture_image_view();
-
 		void create_texture_sampler();
 
 		uint32_t choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
@@ -157,9 +132,7 @@ namespace Expectre
 			VkMemoryPropertyFlags prefferedFlags);
 
 		void on_input_event(const SDL_Event& event) override;
-		void copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 		void create_memory_allocator();
-
 		void load_model(std::string dir);
 
 		void create_ui_renderer();
@@ -220,10 +193,8 @@ namespace Expectre
 		//std::vector<GeometryBuffer> m_geometry_buffers{};
 		GeometryBuffer m_geometry_buffer{};
 
-		VkImage m_texture_image{};
-		VkImageView m_texture_image_view{};
+		TextureVk m_texture{};
 		VkSampler m_texture_sampler{};
-		VmaAllocation m_texture_image_allocation{};
 		VkSurfaceFormatKHR m_surface_format{};
 		uint32_t m_graphics_queue_family_index{ UINT32_MAX };
 		uint32_t m_present_queue_family_index{ UINT32_MAX };
@@ -250,6 +221,34 @@ namespace Expectre
 		std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
 
 		std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
+
+
+		/// From RenderDevice
+	//@{
+		const Noesis::DeviceCaps& GetCaps() const override;
+		Noesis::Ptr<::Noesis::RenderTarget> CreateRenderTarget(const char* label, uint32_t width,
+			uint32_t height, uint32_t sampleCount, bool needsStencil) override;
+		Noesis::Ptr<Noesis::RenderTarget> CloneRenderTarget(const char* label,
+			Noesis::RenderTarget* surface) override;
+		Noesis::Ptr<Noesis::Texture> CreateTexture(const char* label, uint32_t width, uint32_t height,
+			uint32_t numLevels, Noesis::TextureFormat::Enum format, const void** data) override;
+		void UpdateTexture(Noesis::Texture* texture, uint32_t level, uint32_t x, uint32_t y,
+			uint32_t width, uint32_t height, const void* data) override;
+		void BeginOffscreenRender() override;
+		void EndOffscreenRender() override;
+		void BeginOnscreenRender() override;
+		void EndOnscreenRender() override;
+		void SetRenderTarget(Noesis::RenderTarget* surface) override;
+		void BeginTile(Noesis::RenderTarget* surface, const Noesis::Tile& tile) override;
+		void EndTile(Noesis::RenderTarget* surface) override;
+		void ResolveRenderTarget(Noesis::RenderTarget* surface, const Noesis::Tile* tiles,
+			uint32_t numTiles) override;
+		void* MapVertices(uint32_t bytes) override;
+		void UnmapVertices() override;
+		void* MapIndices(uint32_t bytes) override;
+		void UnmapIndices() override;
+		void DrawBatch(const Noesis::Batch& batch) override;
+		//@}
 	};
 }
 #endif // RENDERER_VK_H
