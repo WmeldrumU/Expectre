@@ -105,6 +105,8 @@ namespace Expectre
 	{
 		vkDeviceWaitIdle(m_device);
 
+		m_ui_renderer.reset();
+
 
 		// Destroy synchronization objects
 		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
@@ -546,18 +548,13 @@ namespace Expectre
 		depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		// Geometry subpass
-		std::array<VkSubpassDescription, 2> subpasses{};
+		std::array<VkSubpassDescription, 1> subpasses{};
 		subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpasses[0].colorAttachmentCount = 1;
 		subpasses[0].pColorAttachments = &color_ref;
 		subpasses[0].pDepthStencilAttachment = &depth_ref;
 
-		//ui subpass
-		subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpasses[1].colorAttachmentCount = 1;
-		subpasses[1].pColorAttachments = &color_ref;
-
-		std::array<VkSubpassDependency, 3> dependencies{};
+		std::array<VkSubpassDependency, 2> dependencies{};
 		// 1) External -> Subpass 0: sync clears (color + depth)
 		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependencies[0].dstSubpass = 0;
@@ -569,24 +566,16 @@ namespace Expectre
 			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 		dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-		dependencies[1].srcSubpass = 0;
-		dependencies[1].dstSubpass = 1;
-		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		dependencies[1].dependencyFlags = 0;
-
 		// 2) Subpass 0 -> External: sync store + final transition
-		dependencies[2].srcSubpass = 0;
-		dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
-		dependencies[2].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+		dependencies[1].srcSubpass = 0;
+		dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
 			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
 			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-		dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+		dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+		dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -954,15 +943,11 @@ namespace Expectre
 
 		vkCmdDrawIndexed(command_buffer, static_cast<uint32_t>(m_geometry_buffer.index_count), 1, 0, 0, 0);
 
-		vkCmdNextSubpass(command_buffer, VK_SUBPASS_CONTENTS_INLINE);
-
-		auto* ui_renderer = static_cast<UIRendererVkNoesis*>(m_ui_renderer.get());
-		ui_renderer->SetCommandBuffer(command_buffer, m_current_frame, m_current_frame);
-		ui_renderer->SetRenderPass(m_render_pass, VK_SAMPLE_COUNT_1_BIT);
-		m_ui_renderer->Draw(m_current_frame);
-
 		vkCmdEndRenderPass(command_buffer);
 
+		
+		//m_ui_renderer->Draw(m_current_frame);
+		
 		VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 	}
 
@@ -1593,7 +1578,6 @@ namespace Expectre
 		renderer_info.queue_submit_function = [this](VkCommandBuffer cmd) {
 			end_single_time_commands(cmd);
 			};
-		renderer_info.allocator = m_allocator;
 		m_ui_renderer = std::make_unique<UIRendererVkNoesis>(renderer_info);
 	}
 }
