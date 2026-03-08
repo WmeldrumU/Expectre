@@ -6,7 +6,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp> // Include this header for glm::pi<float>()
 #include <glm/gtc/matrix_transform.hpp> // Add this include to ensure glm::perspective is available
-#include <glm/mat4x3.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -44,6 +43,27 @@ static void printMatrix4x3(const glm::mat4x3 &matrix) {
   }
   spdlog::info("");
 }
+
+static glm::mat4x3 apply_trf(const glm::mat4x3 &A, const glm::mat4x3 &B) {
+  glm::mat4x3 C;
+
+  glm::mat3 Ra(A[0], A[1], A[2]); // 3x3 basis
+  glm::vec3 ta = A[3];
+
+  glm::mat3 Rb(B[0], B[1], B[2]);
+  glm::vec3 tb = B[3];
+
+  glm::mat3 R = Ra * Rb;
+  glm::vec3 t = Ra * tb + ta;
+
+  C[0] = R[0];
+  C[1] = R[1];
+  C[2] = R[2];
+  C[3] = t;
+
+  return C;
+}
+
 } // namespace MathUtils
 } // namespace Expectre
 

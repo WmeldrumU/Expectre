@@ -43,7 +43,6 @@ namespace Expectre
 	private:
 		bool m_isIntialized{ false };
 		uint32_t m_frameNumber{ 0 };
-		std::vector<std::weak_ptr<InputObserver>> m_observers{};
 		SDL_Window* m_window{};
 		std::unique_ptr<RenderContextVk> m_render_context = nullptr;
 		InputManager m_input_manager;

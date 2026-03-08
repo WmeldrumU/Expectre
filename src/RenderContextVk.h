@@ -6,10 +6,12 @@
 #include <vma/vk_mem_alloc.h> // for VmaAllocator
 #include <memory>							// for std::shared_ptr
 
-#include "IRenderer.h"
 #include "scene/SceneObject.h"
+#include "RendererVk.h"
+
 namespace Expectre
 {
+class Scene;
 
 #define RESOLUTION_X 1280
 #define RESOLUTION_Y 720
@@ -27,7 +29,7 @@ namespace Expectre
 		uint32_t present_queue_index() { return m_present_queue_index; }
 		const VmaAllocator &get_allocator() { return m_allocator; }
 		const VkSurfaceKHR &get_surface() { return m_surface; }
-		void UpdateAndRender(uint64_t delta_time, SceneObject &object);
+		void UpdateAndRender(uint64_t delta_time, Scene &scene);
 		bool is_ready() { return m_ready; }
 
 	private:
@@ -42,7 +44,7 @@ namespace Expectre
 		VmaAllocator m_allocator{};
 		VkPhysicalDevice m_physical_device{};
 		VkDevice m_device = VK_NULL_HANDLE;
-		std::shared_ptr<IRenderer> m_renderer = nullptr;
+		std::shared_ptr<RendererVk> m_renderer = nullptr;
 
 		// make queues/indeces part of a device class?
 		VkCommandPool m_cmd_pool;

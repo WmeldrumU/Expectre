@@ -18,7 +18,13 @@ public:
 
   void update(uint64_t delta_time, const InputManager &input_manager);
 
+  glm::vec3 get_position() const { return m_position; }
+  glm::vec3 get_forward_dir() const { return m_forward_dir; }
+
 private:
+  float m_camera_speed = 1.0f;
+  glm::vec3 m_position = {0.0f, 1.0f, 2.0f};
+  glm::vec3 m_forward_dir = {0.0f, 0.0f, -1.0f};
 };
 } // namespace Expectre
 #endif // SCENE_CAMERA

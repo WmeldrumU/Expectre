@@ -435,13 +435,12 @@ static AllocatedBuffer create_buffer(VmaAllocator allocator, VkDeviceSize size,
 
 static void copy_buffer(VkDevice device, VkCommandPool command_pool,
                         VkQueue graphics_queue, VkBuffer srcBuffer,
-                        VkBuffer dstBuffer, VkDeviceSize size) {
+                        VkBuffer dstBuffer, VkBufferCopy copy_region) {
   VkCommandBuffer commandBuffer =
       ToolsVk::begin_single_time_commands(device, command_pool);
 
-  VkBufferCopy copyRegion{};
-  copyRegion.size = size;
-  vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+  vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copy_region);
 
   ToolsVk::end_single_time_commands(device, command_pool, commandBuffer,
                                     graphics_queue);

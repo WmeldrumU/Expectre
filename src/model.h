@@ -4,6 +4,9 @@
 #include "Mesh.h"
 #include "ToolsVk.h"
 #include "scene/SceneObject.h"
+#include "Mesh.h"
+#include "MeshManager.h"
+
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h> // Make sure you include Vulkan header
@@ -16,7 +19,7 @@ struct TextureInfo {
 };
 
 inline std::shared_ptr<SceneObject>
-process_node(const aiScene *scene, const aiNode *node, SceneObject &parent) {
+import_scene_object(const aiScene *scene, const aiNode *node, SceneObject &parent, const std::string &file_path = "") {
   if (node == nullptr) {
     return nullptr;
   }
@@ -27,7 +30,7 @@ process_node(const aiScene *scene, const aiNode *node, SceneObject &parent) {
   std::shared_ptr<SceneObject> scene_object =
       std::make_shared<SceneObject>(&parent, node->mName.C_Str());
 
-  scene_object->set_transform(MathUtils::to_glm_4x3(node->mTransformation));
+  scene_object->set_relative_transform(MathUtils::to_glm_4x3(node->mTransformation));
 
   // Create separate children nodes for each mesh.
   for (auto i = 0; i < node->mNumMeshes; i++) {
@@ -37,12 +40,12 @@ process_node(const aiScene *scene, const aiNode *node, SceneObject &parent) {
     std::shared_ptr<SceneObject> mesh_as_child_scene_object =
         std::make_shared<SceneObject>(scene_object.get(),
                                       ai_mesh->mName.C_Str());
-    mesh_as_child_scene_object->set_transform(
+    mesh_as_child_scene_object->set_relative_transform(
         glm::mat4x3(1.0f)); // child mesh transform will be same as parent
 
-    Mesh imported_mesh = import_mesh(ai_mesh);
+    MeshHandle mesh_handle = MeshManager::Instance().import_mesh(ai_mesh);
     // Set node mesh data
-    mesh_as_child_scene_object->set_mesh(std::move(imported_mesh));
+    mesh_as_child_scene_object->set_mesh(mesh_handle);
 
     scene_object->add_child(mesh_as_child_scene_object);
   }
@@ -50,7 +53,7 @@ process_node(const aiScene *scene, const aiNode *node, SceneObject &parent) {
   // Recurse for child nodes
   for (auto i = 0; i < node->mNumChildren; i++) {
     auto ai_child_node = node->mChildren[i];
-    auto child = process_node(scene, ai_child_node, *scene_object);
+    auto child = import_scene_object(scene, ai_child_node, *scene_object);
     if (child != nullptr) {
       scene_object->add_child(child);
     }
@@ -64,7 +67,7 @@ struct Model {
   // glm::vec3 center{ 0.0f, 0.0f, 0.0f };
   // float radius{ 1.0f };
 
-  static inline void import_model(const std::string &file_path,
+  static inline void import_model_as_scene_object(const std::string &file_path,
                                   SceneObject &import_parent) {
     Assimp::Importer importer;
     const aiScene *scene = importer.ReadFile(
@@ -78,7 +81,7 @@ struct Model {
 
     const aiNode *root = scene->mRootNode;
 
-    auto import_child = process_node(scene, root, import_parent);
+    auto import_child = import_scene_object(scene, root, import_parent,  file_path);
 
     import_parent.add_child(import_child);
   }

@@ -25,26 +25,20 @@ Engine::Engine() : m_scene{"Main Scene"} {
 
 #if defined(USE_WEBGPU)
   spdlog::debug("Using WebGPU");
-  m_renderer = std::make_shared<RendererWgpu>();
+  // m_render_context = std::make_shared<RenderContextWgpu>();
 #elif defined(USE_DIRECTX)
-  m_renderer = std::make_shared<Renderer_Dx>();
+  // m_render_context = std::make_unique<RenderContextDx>(m_window);
 #else
-  // m_render_context = std::make_unique<RenderContextVk>(m_window);
+  m_render_context = std::make_unique<RenderContextVk>(m_window);
 #endif
-
-  // if (m_render_context->is_ready()) {
-  // 	// make a weak ptr for observer input notifications
-  // 	std::weak_ptr<InputObserver> input_observer(m_renderer);
-  // 	add_observer(input_observer);
-  // }
 }
 
 void Engine::run() {
 
-  // if (!m_render_context->is_ready())
-  // {
-  // 	throw std::runtime_error("renderer could not initialize!");
-  // }
+  if (!m_render_context->is_ready())
+  {
+  	throw std::runtime_error("renderer could not initialize!");
+  }
   static uint64_t last_time = SDL_GetTicks();
   bool quit = false;
 
@@ -67,15 +61,13 @@ void Engine::run() {
     m_scene.Update(delta_time, m_input_manager);
 
     // Render frame
-    m_render_context->UpdateAndRender(delta_time, m_scene.get_root());
+    m_render_context->UpdateAndRender(delta_time, m_scene);
 
     limit_frame_rate(60, delta_time);
-    // Time::Instance().Update();
   }
 
   // SDL cleanup
   SDL_DestroyWindow(m_window);
-  // SDL_Vulkan_UnloadLibrary();
   SDL_Quit();
 
   return;
@@ -90,38 +82,5 @@ void Engine::limit_frame_rate(uint32_t desired_fps, uint64_t delta_time) {
     std::this_thread::sleep_for(sleepTime);
   }
 }
-
-// 	void Engine::add_observer(std::weak_ptr<InputObserver> observer)
-// 	{
-// 		m_observers.push_back(observer);
-// 	}
-
-// 	bool Engine::process_input()
-// 	{
-// 		bool quit = false;
-// 		SDL_Event event;
-// 		// Handle events on queue
-// 		while (SDL_PollEvent(&event) != 0)
-// 		{
-// 			// User requests quit
-// 			if (event.type == SDL_EVENT_QUIT)
-// 			{
-// 				quit = true;
-// 			}
-// 			// Handle input
-// 			else if (event.type == SDL_EVENT_KEY_DOWN || event.type
-// == SDL_EVENT_KEY_UP)
-// 			{
-// 				for (auto& weak_observer : m_observers)
-// 				{
-// 					std::shared_ptr<InputObserver>
-// observer_ptr = weak_observer.lock();
-// if (!observer_ptr) 						continue;
-// 					observer_ptr->on_input_event(event);
-// 				}
-// 			}
-// 		}
-// 		return quit;
-// 	}
 
 } // namespace Expectre
