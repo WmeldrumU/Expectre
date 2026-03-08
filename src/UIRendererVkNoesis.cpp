@@ -1,49 +1,44 @@
-// #include "UIRendererVkNoesis.h"
-// #include "Texture.h"
-// #include "TextureManager.h"
-// #include "TextureVk.h"
-// namespace Expectre {
-// const Noesis::DeviceCaps &UiRendererVkNoesis::GetCaps() const {
-//   static Noesis::DeviceCaps caps = []() {
-//     Noesis::DeviceCaps c{};
-//     c.centerPixelOffset = 0.0f;
-//     c.clipSpaceYInverted = false;
-//     c.depthRangeZeroToOne = true;
-//     c.linearRendering = true;
-//     c.subpixelRendering = false;
-//     return c;
-//   }();
-//   return caps;
-// }
+#include "UIRendererVkNoesis.h"
+#include "ToolsVk.h"
+namespace Expectre {
+UIRendererVkNoesis::UIRendererVkNoesis(VkPhysicalDevice phys_device,
+                                       VkDevice device, VmaAllocator allocator)
+    : m_phys_device{phys_device}, m_device{device}, m_allocator{allocator} {}
+const Noesis::DeviceCaps &UIRendererVkNoesis::GetCaps() const {
+  static Noesis::DeviceCaps caps;
+  caps.linearRendering = true;
+  caps.subpixelRendering = false;
+  caps.depthRangeZeroToOne = true;
+  caps.clipSpaceYInverted = false;
+  return caps;
+}
 
-// Noesis::Ptr<Noesis::Texture> UiRendererVkNoesis::CreateTexture(
-//     const char *label, uint32_t width, uint32_t height, uint32_t numLevels,
-//     Noesis::TextureFormat::Enum format, const void **data) {
+UIRendererVkNoesis::~UIRendererVkNoesis() {
+  for (const auto &alloc : m_allocations) {
+    vmaDestroyBuffer(m_allocator, alloc.buffer, alloc.allocation);
+  }
+}
 
-//   Texture tex;
-//   tex.width = width;
-//   tex.height = height;
-//   tex.channels = 4;
-//   tex.name = std::string(label);
+void UIRendererVkNoesis::BeginTile(Noesis::RenderTarget *surface,
+                                   const Noesis::Tile &tile) {}
+void UIRendererVkNoesis::EndTile(Noesis::RenderTarget *surface) {}
 
-//   // clang-format off
-//   /*
-//   Noesis texture formats
-//   RGBA8 -  A four-component format that supports 8 bits per channel, including alpha
-//   RGBX8 - A four-component format that supports 8 bits for each color, channel and 8 bits unused
-//   R8 - A single-component format that supports 8 bits for the red channel
+void *UIRendererVkNoesis::MapVertices(uint32_t bytes) {
 
-  
-//   Count - number of different formats
-//   */
-//   // clang-format on
+  VkDeviceSize vk_bytes = static_cast<VkDeviceSize>(bytes);
+  static uint32_t ns_vert_mapping = 1;
+  AllocatedBuffer buffer = ToolsVk::create_buffer(
+      m_allocator, vk_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+      VMA_MEMORY_USAGE_CPU_TO_GPU, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      "NOESIS" + std::to_string(ns_vert_mapping));
 
-//   // Set channels to 1 if r8 format, otherwise always use 4 channels
-//   if (format == Noesis::TextureFormat::Enum::R8) {
-//     tex.channels = 1;
-//   }
+  void *data;
+  VK_CHECK_RESULT(vmaMapMemory(m_allocator, buffer.allocation, &data));
+  m_allocations.push_back(buffer);
+  return data;
+}
+void UIRendererVkNoesis::UnmapVertices() {}
+void *UIRendererVkNoesis::MapIndices(uint32_t bytes) {}
+void UIRendererVkNoesis::UnmapIndices() {}
 
-//   return nullptr;
-// }
-
-// } // namespace Expectre
+} // namespace Expectre
