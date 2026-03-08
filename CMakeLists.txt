@@ -5,14 +5,11 @@ project(Expectre CXX)
 # set(CMAKE_CXX_STANDARD 20)
 # set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-# 1. Look for a SDL2 package, 2. look for the SDL2 component and 3. fail if none can be found
 find_package(SDL2 REQUIRED)
-# 1. Look for a SDL2 package, 2. Look for the SDL2maincomponent and 3. DO NOT fail when SDL2main is not available
-# find_package(SDL2 REQUIRED CONFIG COMPONENTS SDL2main)
 find_package(Vulkan REQUIRED)
 
-message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
-message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
+# message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
+# message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
 file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
 # add the executable
