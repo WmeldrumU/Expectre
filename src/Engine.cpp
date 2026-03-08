@@ -36,7 +36,7 @@ namespace Expectre
 #elif defined(USE_DIRECTX)
 		m_renderer = std::make_shared<Renderer_Dx>();
 #else
-		RenderContextVk context{};
+		RenderContextVk context{m_window};
 #endif
 		// make a weak ptr for observer input notifications
 		std::weak_ptr<InputObserver> input_observer(m_renderer);

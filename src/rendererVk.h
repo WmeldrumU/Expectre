@@ -55,7 +55,7 @@ namespace Expectre
 
 	public:
 		RendererVk() = delete;
-		RendererVk(RenderContextVk& context);
+		RendererVk(VkPhysicalDevice& physical_device, VkDevice& device, VkQueue& graphics_quue, VkQueue& present_queue);
 		~RendererVk();
 
 		bool isReady();
@@ -102,11 +102,13 @@ namespace Expectre
 		void cleanup_swapchain();
 
 		void on_input_event(const SDL_Event& event) override;
-		void create_memory_allocator();
-		std::unique_ptr<Model> load_model(std::string dir);
 
-		VkQueue m_graphics_queue = VK_NULL_HANDLE;
-		VkQueue m_present_queue = VK_NULL_HANDLE;
+		std::unique_ptr<Model> load_model(std::string dir);
+		VkPhysicalDevice& m_physical_device;
+		VkDevice& m_device;
+
+		VkQueue& m_graphics_queue;
+		VkQueue& m_present_queue;
 
 		VkSwapchainKHR m_swapchain{};
 		std::vector<VkImage> m_swapchain_images{};
@@ -173,7 +175,7 @@ namespace Expectre
 
 		std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
 
-		RenderContextVk m_context;
+		RenderContextVk& m_context;
 	};
 
 }

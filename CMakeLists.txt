@@ -33,23 +33,20 @@ set(SOURCES
     src/Model.h
     src/NoesisShaders.h
     src/observer.h
-    src/ProvidersApi.h
+    src/RenderContextVk.cpp
+    src/RenderContextVk.h
+    src/RenderDeviceVk.cpp
+    src/RenderDeviceVk.h
     src/RendererDx.cpp
     src/RendererDx.h
     src/RendererVk.cpp
     src/RendererVk.h
     src/RendererWgpu.cpp
     src/RendererWgpu.h
-    src/RenderGraph.cpp
-    src/RenderGraph.h
-    src/RenderPass.cpp
-    src/RenderPass.h
     src/ShaderFileWatcher.h
     src/Shared.h
     src/UIRendererVkNoesis.cpp
     src/UIRendererVkNoesis.h
-    src/UIRendererVkNoesis_2.h
-    src/UIRendererVkNoesis_2.cpp
     src/ToolsVk.h
     src/FastLZ.h
     src/FastLZ.cpp
