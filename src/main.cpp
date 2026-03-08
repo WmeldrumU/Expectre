@@ -1,15 +1,15 @@
 ﻿// Excpectre.cpp : Defines the entry point for the application.
 //
 #include <iostream>
-#include <SDL2/SDL.h>
+#include "SDL.h"
 #include "rendererVk.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	try
 	{
 		std::cout << "STARTING UP...." << std::endl;
-		//vkCreateInstance(NULL, NULL, NULL);
+		vkCreateInstance(NULL, NULL, NULL);
 		// setup window
 		expectre::Renderer_Vk renderer{};
 
