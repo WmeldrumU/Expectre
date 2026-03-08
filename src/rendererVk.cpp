@@ -156,8 +156,10 @@ RendererVk::~RendererVk() {
   // Destroy synchronization objects
   for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
     vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
-    vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
     vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
+  }
+  for (size_t i = 0; i < m_swapchain_images.size(); i++) {
+    vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
   }
 
   vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
@@ -289,6 +291,9 @@ void RendererVk::create_geometry_buffer() {
   m_geometry_buffer.vertex_offset = 0;
   m_geometry_buffer.index_begin =
       static_cast<uint32_t>(geometry_buffer_init_size_bytes * 0.80);
+  // Must be rounded to nearest multiple of 4 for vkCmdBindIndexBuffer
+  m_geometry_buffer.index_begin = (m_geometry_buffer.index_begin + 3) & ~3;
+
   m_geometry_buffer.index_offset = m_geometry_buffer.index_begin;
   m_geometry_buffer.buffer_size = geometry_buffer_init_size_bytes;
 }
@@ -618,8 +623,8 @@ VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkImageView view,
 }
 
 void RendererVk::create_sync_objects() {
+  m_finished_render_semaphores.resize(m_swapchain_images.size());
   m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);
-  m_finished_render_semaphores.resize(MAX_CONCURRENT_FRAMES);
   m_in_flight_fences.resize(MAX_CONCURRENT_FRAMES);
 
   VkSemaphoreCreateInfo semaphore_info{};
@@ -630,19 +635,19 @@ void RendererVk::create_sync_objects() {
   fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
   for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
-    // For each swapchain image
-    // Create an "available" and "finished" semphore
-    // Create fence as well
     auto avail = vkCreateSemaphore(m_device, &semaphore_info, nullptr,
                                    &m_available_image_semaphores[i]);
-    auto finished = vkCreateSemaphore(m_device, &semaphore_info, nullptr,
-                                      &m_finished_render_semaphores[i]);
     auto fences =
         vkCreateFence(m_device, &fence_info, nullptr, &m_in_flight_fences[i]);
-
     VK_CHECK_RESULT(avail);
-    VK_CHECK_RESULT(finished);
     VK_CHECK_RESULT(fences);
+  }
+
+  // Create one render finished semaphore per swapchain image
+  for (size_t i = 0; i < m_swapchain_images.size(); i++) {
+    auto finished = vkCreateSemaphore(m_device, &semaphore_info, nullptr,
+                                      &m_finished_render_semaphores[i]);
+    VK_CHECK_RESULT(finished);
   }
 }
 
@@ -746,8 +751,8 @@ void RendererVk::draw_frame(const Camera &camera) {
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers = &m_cmd_buffers[m_current_frame];
 
-  VkSemaphore signal_semaphores[] = {
-      m_finished_render_semaphores[m_current_frame]};
+  // Use image_index - each swapchain image needs its own semaphore
+  VkSemaphore signal_semaphores[] = {m_finished_render_semaphores[image_index]};
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = signal_semaphores;
 
@@ -837,7 +842,8 @@ void RendererVk::update_uniform_buffer(const Camera &camera) {
   // ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f),
   // glm::vec3(0.0f, 1.0f, 0.0f));
   ubo.model = glm::mat4(1.0f);
-  ubo.view = glm::lookAt(camera.get_position(), camera.get_forward_dir(),
+  ubo.view = glm::lookAt(camera.get_position(),
+                         camera.get_position() + camera.get_forward_dir(),
                          glm::vec3(0.0f, 1.0f, 0.0f));
   ubo.projection = glm::perspective(
       glm::radians(45.0f), static_cast<float>(m_extent.width) / m_extent.height,
@@ -889,9 +895,11 @@ void RendererVk::upload_mesh_to_gpu(const Mesh &mesh) {
 
   VkDeviceSize vertex_buffer_size = sizeof(Vertex) * mesh.vertices.size();
   VkDeviceSize index_buffer_size = sizeof(uint32_t) * mesh.indices.size();
-  
+
   // Align vertex buffer size to 4 bytes to keep index offsets aligned
   vertex_buffer_size = (vertex_buffer_size + 3) & ~3;
+  // Align vertex buffer size to 4 bytes to keep index offsets aligned
+  index_buffer_size = (index_buffer_size + 3) & ~3;
 
   VkDeviceSize mesh_buffer_size = vertex_buffer_size + index_buffer_size;
 
@@ -942,7 +950,8 @@ void RendererVk::upload_mesh_to_gpu(const Mesh &mesh) {
                        index_region);
   m_geometry_buffer.index_offset += index_buffer_size;
 
-  // todo - add mesh tracking logic (keep track of where meshes are in the geoemetry buffer)
+  // todo - add mesh tracking logic (keep track of where meshes are in the
+  // geoemetry buffer)
 
   // Cleanup staging
   vmaUnmapMemory(m_allocator, mesh_staging.allocation);

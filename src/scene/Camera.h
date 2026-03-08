@@ -22,7 +22,7 @@ public:
   glm::vec3 get_forward_dir() const { return m_forward_dir; }
 
 private:
-  float m_camera_speed = 1.0f;
+  float m_camera_speed = 3.0f;
   glm::vec3 m_position = {0.0f, 1.0f, 2.0f};
   glm::vec3 m_forward_dir = {0.0f, 0.0f, -1.0f};
 };
