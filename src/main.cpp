@@ -11,7 +11,7 @@
 int main(int argc, char *argv[])
 {
 
-#ifdef _MSC_VER &&__clang__
+#ifdef _MSC_VER && __clang__
 	std::cout << "Compiled with clang-cl\n";
 #else
 	std::cout << "Other compiler\n";
