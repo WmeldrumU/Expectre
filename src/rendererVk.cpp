@@ -120,6 +120,7 @@ namespace Expectre
 		m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 
 		// noesis init
+		m_noesis.device = &m_device;
 		m_noesis.rp = UtilsNs::CreateRenderPass(m_device, VK_SAMPLE_COUNT_1_BIT, true, m_swapchain_image_format, m_depth_stencil.image_info.format);
 
 		//CreateBuffers();
@@ -166,7 +167,7 @@ namespace Expectre
 
 		//CreateLayouts();
 #define NS_DESCRIPTOR_POOL_MAX_SETS 128
-		UtilsNs::CreateLayouts(m_device, m_noesis);
+		UtilsNs::CreateLayouts(m_noesis);
 		std::vector<VkDescriptorPoolSize>pool_sizes_ns =
 		{
 			{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, NS_DESCRIPTOR_POOL_MAX_SETS * 4},
@@ -175,11 +176,16 @@ namespace Expectre
 
 
 		//CreateShaders();
-		UtilsNs::CreateNsShaders();
+		UtilsNs::CreateShaders(m_noesis);
+
 		//CreateSamplers();
+		m_noesis.queue_family_index = m_present_queue_family_index;
+		UtilsNs::CreateSamplers(m_noesis);
+
 		//CreateTransferCommandPool();
+		UtilsNs::CreateTransferCommandPool(m_noesis);
 		//CreateDescriptorPool();
-		// 
+		UtilsNs::CreateDescriptorPool(m_noesis);
 		// Build Noesis shader modules & descriptor layouts
 		Expectre::UtilsNs::CreateNoesisShaderModules(m_device, m_noesis,
 			/*sRGB*/ true, /*stereo*/ false);
@@ -217,7 +223,6 @@ namespace Expectre
 		// technique that extrudes the contours of the geometry smoothing them
 		m_noesis.view->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
 		m_noesis.view->GetRenderer()->Init(this);
-
 
 		m_ready = true;
 	}
@@ -264,7 +269,7 @@ namespace Expectre
 		vmaDestroyBuffer(m_allocator, m_noesis.pixelCB1.buffer, m_noesis.pixelCB1.allocation);
 		vmaDestroyBuffer(m_allocator, m_noesis.texUpload.buffer, m_noesis.texUpload.allocation);
 
-
+		// Needs work 
 		for (auto i = 0; i < UtilsNs::Shader::Count; i++) {
 			if (m_noesis.layouts[i].pipelineLayout != VK_NULL_HANDLE) {
 				vkDestroyPipelineLayout(m_device, m_noesis.layouts[i].pipelineLayout, nullptr);
@@ -996,12 +1001,14 @@ namespace Expectre
 
 		vkCmdDrawIndexed(command_buffer, static_cast<uint32_t>(m_geometry_buffer.index_count), 1, 0, 0, 0);
 
+		auto* r = m_noesis.view->GetRenderer();
+		r->UpdateRenderTree();
+		r->RenderOffscreen();
+		r->Render();
+
 		vkCmdEndRenderPass(command_buffer);
 
-		//auto* r = m_noesis.view->GetRenderer();
-		//r->UpdateRenderTree();
-		//r->RenderOffscreen();
-		//r->Render();
+	
 
 		VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 	}
@@ -1055,6 +1062,8 @@ namespace Expectre
 		result = vkQueuePresentKHR(m_present_queue, &present_info);
 		VK_CHECK_RESULT(result);
 		m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
+
+
 	}
 
 	VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(const std::vector<VkDescriptorSetLayoutBinding>& layout_bindings)

@@ -136,7 +136,8 @@ namespace Expectre
 			VkFormat texture_format = VK_FORMAT_R8G8B8A8_SRGB,
 			VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
 			VkImageUsageFlags extra_usage = 0,
-			VkImageLayout final_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			VkImageLayout final_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			std::string debug_name = ""
 		) {
 			VkImage image;
 			VkImageView image_view;

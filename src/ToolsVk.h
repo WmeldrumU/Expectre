@@ -592,6 +592,13 @@ namespace Expectre {
 			return sampler;
 		}
 
+		static void DebugMarker(VkCommandBuffer cmd_buffer, std::string name) {
+			VkDebugMarkerMarkerInfoEXT info{};
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
+			info.pMarkerName = name.c_str();
+			vkCmdDebugMarkerBeginEXT(cmd_buffer, &info);
+		}
+
 		//uint32_t choose_heap_from_flags(VkPhysicalDevice phys_device, const VkMemoryRequirements& memoryRequirements,
 		//	VkMemoryPropertyFlags requiredFlags,
 		//	VkMemoryPropertyFlags preferredFlags)
