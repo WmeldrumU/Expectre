@@ -15,11 +15,10 @@
 #include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
 
-#include "shared.h"
 #include "ToolsVk.h"
 #include "Model.h"
 #include "ShaderFileWatcher.h"
-#include "Time.h"
+#include "AppTime.h"
 #include "RenderContextVk.h"
 
 struct MVP_uniform_object

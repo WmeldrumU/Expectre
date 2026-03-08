@@ -1,8 +1,8 @@
 #ifndef SCENE
 #define SCENE
 
-#include "SceneObject.h"
-
+#include "scene/SceneObject.h"
+#include "input/InputManager.h"
 namespace Expectre
 {
     class Scene
@@ -13,7 +13,7 @@ namespace Expectre
         Scene(const Scene &other) = delete;
         // Delete the copy assignment operator as well for consistency
         Scene &operator=(const Scene &other) = delete;
-
+        void Update(float delta_time, const InputManager& input_manager);
 
     private:
 

@@ -5,7 +5,7 @@
 #include <vector>
 #include <SDL3/SDL.h>
 	
-// #include "RenderContextVk.h"
+#include "RenderContextVk.h"
 #include "observer.h"
 
 #ifdef NDEBUG
@@ -43,7 +43,7 @@ namespace Expectre
 		uint32_t m_frameNumber{ 0 };
 		std::vector<std::weak_ptr<InputObserver>> m_observers{};
 		SDL_Window* m_window{};
-		// std::unique_ptr<RenderContextVk> m_render_context = nullptr;
+		std::unique_ptr<RenderContextVk> m_render_context = nullptr;
 	};
 
 }
