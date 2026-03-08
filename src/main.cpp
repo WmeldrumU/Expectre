@@ -16,15 +16,8 @@ int main(int argc, char *argv[])
 	try
 	{
 		std::cout << "STARTING UP...." << std::endl;
-		Expectre::Renderer_Vk renderer{};
-		Expectre::Engine engine{&renderer};
-		// setup window
-
-		// create renderer, pass to "engine"
-		// start engine -- engine.run()
-
-		// create input
-
+		Expectre::Engine engine{};
+		engine.run();
 		engine.cleanup();
 	}
 	catch (std::exception &e)

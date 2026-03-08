@@ -64,32 +64,35 @@ namespace Expectre
 
         create_swap_chain();
 
-        create_command_buffers();
-
         prepare_depth();
 
         create_vertex_buffer();
 
         create_layouts();
 
-        prepare_render_pass();
+        create_renderpass();
 
-        prepare_pipeline();
+        create_pipeline();
+
+        create_framebuffers();
+
+        create_command_pool();
+
+        create_command_buffers();
+
+        create_sync_objects();
+
+        m_ready = true;
 
         // prepare_present_cmd_pool_and_buffers();
 
-        create_descriptor_pool_and_sets();
+        // create_descriptor_pool_and_sets();
 
         // create command buffers/pool
 
         // create descriptor pool + sets
 
         // create framebuffers
-        create_framebuffers();
-
-        demo_draw_build_cmd();
-
-        //
 
         // push a command to gpu?
 
@@ -124,6 +127,15 @@ namespace Expectre
     Renderer_Vk::~Renderer_Vk()
     {
         for (auto i = 0; i < m_swapchain_images.size(); i++)
+        {
+            vkDestroySemaphore(m_device, available_image_semaphors[i], nullptr);
+            vkDestroySemaphore(m_device, available_image_semaphors[i], nullptr);
+            vkDestroyFence(m_device, in_flight_fences[i], nullptr);
+        }
+
+        vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
+
+        for (auto i = 0; i < m_framebuffers.size(); i++)
         {
             vkDestroyFramebuffer(m_device, m_framebuffers[i], nullptr);
         }
@@ -573,15 +585,6 @@ namespace Expectre
         }
     }
 
-    void Renderer_Vk::create_semaphors_and_fences()
-    {
-        VkSemaphoreCreateInfo sem_create_info = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-        };
-    }
-
     void Renderer_Vk::create_swap_chain()
     {
         VkResult err;
@@ -667,41 +670,6 @@ namespace Expectre
         // TODO: Possibly put in code herer for VK_GOOGLE_display_timing?
 
         // TODO: consider moving m_swapchain_images locally here
-    }
-
-    void Renderer_Vk::create_command_buffers()
-    {
-        VkCommandPoolCreateInfo cmd_pool_info = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .queueFamilyIndex = m_graphics_queue_family_index,
-        };
-        VkResult err = vkCreateCommandPool(m_device, &cmd_pool_info, nullptr, &m_cmd_pool);
-        assert(!err);
-        VK_CHECK_RESULT(err);
-
-        VkCommandBufferAllocateInfo cmd_alloc_info = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .commandPool = m_cmd_pool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-        err = vkAllocateCommandBuffers(m_device, &cmd_alloc_info, &m_cmd_buffer);
-        assert(!err);
-        VK_CHECK_RESULT(err);
-
-        // TODO: consider naming command buffer
-        VkCommandBufferBeginInfo cmd_buffer_info = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .pInheritanceInfo = nullptr,
-        };
-        err = vkBeginCommandBuffer(m_cmd_buffer, &cmd_buffer_info);
-        assert(!err);
-        VK_CHECK_RESULT(err);
     }
 
     void Renderer_Vk::create_vertex_buffer()
@@ -871,7 +839,7 @@ namespace Expectre
         // TODO:consider naming DepthView
     }
 
-    void Renderer_Vk::prepare_render_pass()
+    void Renderer_Vk::create_renderpass()
     {
 
         // This function will prepare a single render pass with one subpass
@@ -957,19 +925,17 @@ namespace Expectre
         VK_CHECK_RESULT(err);
     }
 
-    void Renderer_Vk::prepare_pipeline()
+    void Renderer_Vk::create_pipeline()
     {
 #define NUM_DYNAMIC_STATES 2 /*Viewport and Scissor*/
 
         //
 
-        VkPipelineCacheCreateInfo pipeline_cache_info{};
+        // VkPipelineCacheCreateInfo pipeline_cache_info{};
         VkPipelineInputAssemblyStateCreateInfo input_assem_state_info{};
         VkPipelineRasterizationStateCreateInfo raster_state_info{};
         VkPipelineColorBlendStateCreateInfo blend_state_info{};
-        VkPipelineMultisampleStateCreateInfo sample_state_info{};
         VkPipelineViewportStateCreateInfo viewport_state_info{};
-        VkResult err;
 
         input_assem_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         input_assem_state_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1094,16 +1060,46 @@ namespace Expectre
             .pDynamicState = &dynamic_state_info,
             .renderPass = m_render_pass,
         };
-
-        VK_CHECK_RESULT(vkCreateGraphicsPipelines(m_device,
-                                                  m_pipeline_cache, 1,
-                                                  &pipeline_info,
-                                                  nullptr,
-                                                  &m_pipeline));
+        try
+        {
+            auto err = vkCreateGraphicsPipelines(m_device, m_pipeline_cache, 1,
+                                                 &pipeline_info,
+                                                 nullptr,
+                                                 &m_pipeline);
+            VK_CHECK_RESULT(err);
+        }
+        catch (std::exception &e)
+        {
+            std::cout << e.what() << std::endl;
+        }
 
         // Shader modules are no longer needed once pipeline is created
         vkDestroyShaderModule(m_device, shader_stages[0].module, nullptr);
         vkDestroyShaderModule(m_device, shader_stages[1].module, nullptr);
+    }
+
+    void Renderer_Vk::create_command_pool()
+    {
+
+        VkCommandPoolCreateInfo pool_info{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = m_graphics_queue_family_index,
+        };
+
+        VK_CHECK_RESULT(vkCreateCommandPool(m_device, &pool_info, nullptr, &m_cmd_pool));
+    }
+
+    void Renderer_Vk::create_command_buffers()
+    {
+        VkCommandBufferAllocateInfo cmd_buf_info{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = m_cmd_pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+
+        VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &cmd_buf_info, &m_cmd_buffer));
     }
 
     void Renderer_Vk::create_descriptor_pool_and_sets()
@@ -1189,73 +1185,104 @@ namespace Expectre
         }
     }
 
-    void Renderer_Vk::demo_draw_build_cmd()
+    void Renderer_Vk::create_sync_objects()
     {
+        available_image_semaphors.resize(m_swapchain_images.size());
+        finished_render_semaphors.resize(m_swapchain_images.size());
+        in_flight_fences.resize(m_swapchain_images.size());
+
+        VkSemaphoreCreateInfo semaphore_info{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
+
+        VkFenceCreateInfo fence_info{
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+
         for (auto i = 0; i < m_swapchain_images.size(); i++)
         {
-            const VkCommandBufferBeginInfo cmd_buf_info = {
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                .pNext = nullptr,
-                .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-                .pInheritanceInfo = nullptr,
-            };
-            const std::array<VkClearValue, 2> clear_values = {
-                VkClearValue{.color.float32 = {0.2f, 0.2f, 0.2f, 0.2f}},
-                {.depthStencil = {1.0f, 0}},
-            };
-            const VkRenderPassBeginInfo renderpass_begin_info{
-                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                .pNext = nullptr,
-                .renderPass = m_render_pass,
-                .framebuffer = m_framebuffers[i],
-                .renderArea.offset.x = 0,
-                .renderArea.offset.y = 0,
-                .renderArea.extent.width = 1280,
-                .renderArea.extent.width = 720,
-                .clearValueCount = static_cast<uint32_t>(clear_values.size()),
-                .pClearValues = clear_values.data(),
-            };
-            VkResult err;
-            err = vkBeginCommandBuffer(m_cmd_buffer, &cmd_buf_info);
-            assert(!err);
-            VK_CHECK_RESULT(err);
-            // TODO: consider naming command draw buffer
+            // For each swapchain image
+            // Create an "available" and "finished" semphore
+            // Create fence as well
+            auto avail =
+                vkCreateSemaphore(m_device,
+                                  &semaphore_info,
+                                  nullptr,
+                                  &available_image_semaphors[i]);
+            auto finished =
+                vkCreateSemaphore(m_device,
+                                  &semaphore_info,
+                                  nullptr,
+                                  &finished_render_semaphors[i]);
+            auto fences =
+                vkCreateFence(m_device,
+                              &fence_info,
+                              nullptr,
+                              &in_flight_fences[i]);
 
-            // TODO: consider push drawbegin label
-
-            vkCmdBindPipeline(m_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-            vkCmdBindDescriptorSets(m_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout,
-                                    0, m_descriptor_sets.size(), m_descriptor_sets.data(), 0, nullptr);
-            // Update dynamic viewport state
-            VkViewport viewport{};
-            float viewport_dimension;
-            viewport_dimension = 720.0f;
-            viewport.y = (1280 - 720) / 2.0f;
-            viewport.height = viewport_dimension;
-            viewport.width = viewport_dimension;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(m_cmd_buffer, 0, 1, &viewport);
-            // Update dynamic scissor state
-            VkRect2D scissor{
-                .extent.width = 1280.0f,
-                .extent.height = 720.0f,
-                .offset.x = 0,
-                .offset.y = 0};
-            vkCmdSetScissor(m_cmd_buffer, 0, 1, &scissor);
-            
-            VkDeviceSize offsets[1]{ 0 };
-            // vkCmdBindVertexBuffers(m_cmd_buffer, 0, 1, m_swapchain_uniform_buffers, offsets);
-            // // consider pushing "actualdraw" label
-            // vkCmdBindIndexBuffer(m_cmd_buffer, m_buffer, 0, VK_INDEX_TYPE_UINT32);
-            // TODO: switch to usng indices
-            vkCmdDraw(m_cmd_buffer, 3, 1, 0, 0);
-
-            vkCmdEndRenderPass(m_cmd_buffer)
-
-            err = vkEndCommandBuffer(m_cmd_buffer(m_cmd_buffer));
-            assert(!err);
+            VK_CHECK_RESULT(avail);
+            VK_CHECK_RESULT(finished);
+            VK_CHECK_RESULT(fences);
         }
     }
 
+    void Renderer_Vk::record_command_buffer()
+    {
+        VkCommandBufferBeginInfo begin_info{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+            .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+            .pInheritanceInfo = nullptr,
+        };
+
+        VK_CHECK_RESULT(vkBeginCommandBuffer(m_cmd_buffer, &begin_info));
+
+        const VkClearValue clear_col = {{{0.2f, 0.1f, 0.2f, 1.0f}}};
+        VkRenderPassBeginInfo renderpass_info = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .pNext = NULL,
+            .renderPass = m_render_pass,
+            .framebuffer = m_framebuffers[m_current_frame],
+            .renderArea.offset.x = 0,
+            .renderArea.offset.y = 0,
+            .renderArea.extent.width = 1280,
+            .renderArea.extent.height = 720,
+            .clearValueCount = 1,
+            .pClearValues = &clear_col,
+        };
+
+        vkCmdBeginRenderPass(m_cmd_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(m_cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+
+        VkViewport viewport{
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = 1280.0f,
+            .height = 720.0f,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        vkCmdSetViewport(m_cmd_buffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset.x = 0,
+        scissor.offset.y = 0,
+        scissor.extent.width = 1280,
+        scissor.extent.height = 720,
+
+        vkCmdSetScissor(m_cmd_buffer, 0, 1, &scissor);
+
+        vkCmdDraw(m_cmd_buffer, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(m_cmd_buffer);
+
+        VK_CHECK_RESULT(vkEndCommandBuffer(m_cmd_buffer));
+    }
+
+    void Renderer_Vk::draw_frame()
+    {
+    }
+
+    bool Renderer_Vk::isReady() { return m_ready; };
 }
