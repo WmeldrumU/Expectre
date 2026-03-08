@@ -1,3 +1,4 @@
+#ifdef USE_WEBGPU
 #include "RendererWgpu.h"
 #include "spdlog/spdlog.h"
 #include "../lib/sdl2webgpu/sdl2webgpu.h"
@@ -212,3 +213,5 @@ namespace Expectre
     spdlog::debug("RendererWgpu::draw_frame()");
   }
 }
+
+#endif
