@@ -3,12 +3,26 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <optional>
+#include <string>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
 
 namespace Expectre
 {
+    typedef struct _SwapChainBuffers
+    {
+        VkImage image;
+        VkImageView view;
+    } SwapChainBuffer;
+
+    struct VsUniform {
+    // Must start with MVP
+    float mvp[4][4];
+    float position[12 * 3][4];
+    float attr[12 * 3][4];
+};
+
     class Renderer_Vk
     {
 
@@ -26,33 +40,61 @@ namespace Expectre
 
         void create_surface();
 
-        void create_swap_chain();
+        void query_swap_chain_support();
 
         void select_physical_device();
 
         void create_logical_device_and_queues();
 
+        void get_surface_format();
+
+        void create_swap_chain();
+
+        void create_command_buffers();
+
+        void create_descriptors();
+
+        void create_vertex_buffer();
+
         void create_buffers_and_images();
 
         void create_views();
-        uint32_t choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements, 
-        VkMemoryPropertyFlags requiredFlags, 
-        VkMemoryPropertyFlags prefferedFlags);
+
+        void select_surface_formats();
+
+        void get_present_mode();
+
+        void create_semaphors_and_fences();
+
+        uint32_t choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements,
+                                        VkMemoryPropertyFlags requiredFlags,
+                                        VkMemoryPropertyFlags prefferedFlags);
 
         SDL_Window *m_window{};
         VkInstance m_instance{};
         VkSurfaceKHR m_surface{};
+        VkSwapchainKHR m_swapchain{};
         VkBufferView m_buffer_view{};
         VkImageView m_image_view{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;
-        std::vector<const char *> m_supported_extensions = {VK_KHR_SURFACE_EXTENSION_NAME};
+        std::vector<const char *> m_required_instance_extensions = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        std::vector<const char *> m_required_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        std::vector<VkImage> m_swapchain_images{};
+        std::vector<SwapChainBuffer> m_swapchain_buffers{};
+        std::vector<VkBuffer> m_swapchain_uniform_buffers{};
+        std::vector<VkDeviceMemory> m_uniform_memories{};
+        VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
         VkDevice m_device = VK_NULL_HANDLE;
         VkBuffer m_buffer = VK_NULL_HANDLE;
         VkImage m_image = VK_NULL_HANDLE;
-        uint32_t graphics_queue_family_index{UINT32_MAX};
-        uint32_t present_queue_family_index{UINT32_MAX};
+        VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
+        VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
+        
+        VkSurfaceFormatKHR m_surface_format{};
+        uint32_t m_graphics_queue_family_index{UINT32_MAX};
+        uint32_t m_present_queue_family_index{UINT32_MAX};
         float m_priority = 1.0f;
         VkQueue m_graphics_queue;
         VkQueue m_present_queue;
