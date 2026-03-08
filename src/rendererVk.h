@@ -33,6 +33,7 @@ namespace Expectre {
         VkSurfaceKHR m_surface{};
         std::vector<const char*> m_validation_layers;
         std::vector<VkPhysicalDevice> m_physical_devices;
+        VkPhysicalDevice m_chosen_phys_device;
         VkDevice m_device;
         uint32_t graphics_queue_family_index{UINT32_MAX};
         uint32_t present_queue_family_index{UINT32_MAX};
