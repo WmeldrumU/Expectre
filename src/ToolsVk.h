@@ -387,7 +387,7 @@ namespace Expectre {
 		static VkFormat find_depth_format(VkPhysicalDevice phys_device)
 		{
 			return find_supported_format(phys_device,
-				{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+				{ VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
 				VK_IMAGE_TILING_OPTIMAL,
 				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 		}
@@ -493,47 +493,6 @@ namespace Expectre {
 			}
 		}
 
-		// Return pair: VkImage + VmaAllocation
-		struct ImageAlloc {
-			VkImage image = VK_NULL_HANDLE;
-			VmaAllocation allocation = VK_NULL_HANDLE;
-		};
-
-		inline ImageAlloc CreateImage2D(
-			VmaAllocator allocator,
-			uint32_t width, uint32_t height,
-			VkFormat format,
-			uint32_t mipLevels,
-			VkImageUsageFlags usage,                               // e.g. VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-			VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
-			VkImageCreateFlags flags = 0                           // e.g. VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT if needed
-		) {
-			ImageAlloc out{};
-
-			VkImageCreateInfo ici{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-			ici.flags = flags;
-			ici.imageType = VK_IMAGE_TYPE_2D;
-			ici.format = format;
-			ici.extent = { width, height, 1 };
-			ici.mipLevels = mipLevels;
-			ici.arrayLayers = 1;
-			ici.samples = samples;
-			ici.tiling = VK_IMAGE_TILING_OPTIMAL;
-			ici.usage = usage;
-			ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-			VmaAllocationCreateInfo aci{};
-			aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-			VkResult res = vmaCreateImage(allocator, &ici, &aci, &out.image, &out.allocation, nullptr);
-			if (res != VK_SUCCESS) {
-				// Handle error as you prefer; return nulls so caller can check
-				out.image = VK_NULL_HANDLE;
-				out.allocation = VK_NULL_HANDLE;
-			}
-			return out;
-		}
 
 
 		static VkSampler create_texture_sampler(VkPhysicalDevice physical_device, VkDevice device)
