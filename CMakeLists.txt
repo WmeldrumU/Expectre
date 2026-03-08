@@ -35,12 +35,14 @@ find_package(xxHash REQUIRED)
     # src/IUIRenderer.h
     src/main.cpp
     src/MathUtils.h
-    src/Model.h
     src/Mesh.h
     src/MeshManager.h
     src/MeshManager.cpp
     # src/NoesisShaders.h
     src/observer.h
+    src/Material.h
+    src/MaterialManager.h
+    src/MaterialManager.cpp
     src/RenderContextVk.cpp
     src/RenderContextVk.h
     src/RenderDeviceVk.cpp
@@ -52,8 +54,11 @@ find_package(xxHash REQUIRED)
     # src/RendererWgpu.cpp
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
-    # src/UIRendererVkNoesis.cpp
-    # src/UIRendererVkNoesis.h
+    src/UIRendererVkNoesis.cpp
+    src/UIRendererVkNoesis.h
+    src/Texture.h
+    src/TextureManager.h
+    src/TextureManager.cpp
     src/ToolsVk.h
     # src/FastLZ.h
     # src/FastLZ.cpp
@@ -67,15 +72,17 @@ find_package(xxHash REQUIRED)
     src/scene/SceneRoot.h
     src/scene/Camera.h
     src/scene/Camera.cpp
+    src/noesis/TextureVkNs.h
+    src/noesis/RenderTargetVkNs.h
 )
 message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
 add_executable(ExpectreApp ${SOURCES})
 
 # Noesis Include/Lib Paths
-# set(NOESIS_ROOT "C:/noesis")
-# include_directories(${NOESIS_ROOT}/Include)
-# link_directories(${NOESIS_ROOT}/Lib/windows_x86_64)
+set(NOESIS_ROOT "C:/noesis")
+include_directories(${NOESIS_ROOT}/Include)
+link_directories(${NOESIS_ROOT}/Lib/windows_x86_64)
 
 set(COMMON_LIBRARIES
     SDL3::SDL3
@@ -87,7 +94,7 @@ set(COMMON_LIBRARIES
     Vulkan::Vulkan
     Vulkan::shaderc_combined
     xxHash::xxhash
-    # Noesis
+    Noesis
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(ExpectreApp PUBLIC

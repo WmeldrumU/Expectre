@@ -10,8 +10,8 @@ Scene::Scene(std::string scene_name)
 
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
   auto bunny_dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
-  Model::import_model_as_scene_object(teapot_dir, m_root);
-  Model::import_model_as_scene_object(bunny_dir, m_root);
+  import_model_as_scene_object(teapot_dir, m_root);
+  import_model_as_scene_object(bunny_dir, m_root);
 }
 
 void Scene::Update(uint64_t delta_time, const InputManager &input_manager) {

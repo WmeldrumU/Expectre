@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include "Mesh.h"
+#include "Material.h"
 #include "MathUtils.h"
 
 namespace Expectre
@@ -56,10 +57,20 @@ namespace Expectre
             // m_mesh_is_dirty = true;
         }
 
+        void set_material(const MaterialHandle material_handle)
+        {
+            m_material_handle = material_handle;
+        }
+
         bool has_mesh()
         {
             return m_mesh_handle.mesh_id != -1;
             // return m_has_mesh;
+        }
+
+        bool has_material()
+        {
+            return m_material_handle.material_id != -1;
         }
 
         bool is_mesh_dirty()
@@ -70,6 +81,11 @@ namespace Expectre
         const MeshHandle& get_mesh()
         {
             return m_mesh_handle;
+        }
+
+        const MaterialHandle& get_material()
+        {
+            return m_material_handle;
         }
 
         bool is_trf_dirty()
@@ -85,6 +101,7 @@ namespace Expectre
         glm::mat4x3 m_relative_transform{};
 
         MeshHandle m_mesh_handle{};
+        MaterialHandle m_material_handle{};
 
         std::vector<std::shared_ptr<SceneObject>> m_children;
         bool m_renderable = true;
