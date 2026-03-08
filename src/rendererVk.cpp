@@ -5,6 +5,8 @@
 #include <set>
 #include <bitset>
 #include <assert.h>
+#include <vulkan/vulkan.h>
+#include <array>
 
 #include "rendererVk.h"
 #include "shared.h"
@@ -64,9 +66,13 @@ namespace Expectre
 
         create_command_buffers();
 
-        create_descriptors();
+        prepare_depth();
 
-       create_vertex_buffer();
+        create_vertex_buffer();
+
+        create_layouts();
+
+        prepare_render_pass();
 
         // create_buffers_and_images();
 
@@ -98,12 +104,21 @@ namespace Expectre
 
     Renderer_Vk::~Renderer_Vk()
     {
+        vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+        vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+
+        // Destroy depth buffer
+        vkDestroyImageView(m_device, m_depth.view, nullptr);
+        vkDestroyImage(m_device, m_depth.image, nullptr);
+        vkFreeMemory(m_device, m_depth.mem, nullptr);
+
+        // Destroy uniform buffers
         for (auto i = 0; i < m_swapchain_buffers.size(); i++)
         {
             vkDestroyImageView(m_device, m_swapchain_buffers[i].view, nullptr);
             vkDestroyBuffer(m_device, m_swapchain_uniform_buffers[i], nullptr);
             vkFreeMemory(m_device, m_uniform_memories[i], nullptr);
-            
         }
         vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
         vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
@@ -402,7 +417,7 @@ namespace Expectre
         image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         image_info.imageType = VK_IMAGE_TYPE_2D;
         image_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-        image_info.extent = {1024, 1024, 1};
+        image_info.extent = {1280, 720, 1};
         image_info.mipLevels = 10;
         image_info.arrayLayers = 1;
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -682,7 +697,7 @@ namespace Expectre
         glm::mat4 P = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, .01f, 1000.0f);
         glm::mat4 MVP = P * V * M;
 
-        VkBufferCreateInfo buffer_info {
+        VkBufferCreateInfo buffer_info{
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             .size = sizeof(vs_data),
@@ -712,7 +727,7 @@ namespace Expectre
             assert(found);
             // Allocate uniform memory
             err = vkAllocateMemory(m_device, &alloc_info, nullptr, &m_uniform_memories[i]);
-            
+
             // TODO: consider naming swapchain unifrom memory object
 
             assert(!err);
@@ -720,7 +735,197 @@ namespace Expectre
         }
     }
 
-    void Renderer_Vk::create_descriptors()
+    void Renderer_Vk::create_layouts()
     {
+        VkResult err;
+        // Create descriptor set layout
+        // Binding 0: Uniform buffer for vertex shader
+        const VkDescriptorSetLayoutBinding layout_binding = {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .pImmutableSamplers = nullptr,
+        };
+
+        VkDescriptorSetLayoutCreateInfo layout_info{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .bindingCount = 1,
+            .pBindings = &layout_binding,
+        };
+
+        err = vkCreateDescriptorSetLayout(m_device, &layout_info,
+                                          nullptr, &m_descriptor_set_layout);
+        VK_CHECK_RESULT(err);
+
+        // Create pipeline layout, used to generate pipeline
+        // "In a more complex scenario you would have different pipeline layouts for different descriptor set layouts that could be reused"
+        VkPipelineLayoutCreateInfo pipeline_layout_info{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .setLayoutCount = 1,
+            .pSetLayouts = &m_descriptor_set_layout,
+        };
+        err = vkCreatePipelineLayout(m_device, &pipeline_layout_info,
+                                     nullptr, &m_pipeline_layout);
+        VK_CHECK_RESULT(err);
+        assert(!err);
+    }
+
+    void Renderer_Vk::prepare_depth()
+    {
+        const VkFormat depth_format = VK_FORMAT_D16_UNORM;
+        const VkImageCreateInfo image_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = depth_format,
+            .extent = {1280, 720, 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        };
+
+        VkImageViewCreateInfo view_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = VK_NULL_HANDLE,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = depth_format,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
+
+        VkMemoryRequirements mem_reqs;
+        VkResult err;
+        bool found;
+
+        m_depth.format = depth_format;
+
+        // create image
+        err = vkCreateImage(m_device, &image_info, nullptr, &m_depth.image);
+        assert(!err);
+        VK_CHECK_RESULT(err);
+
+        // Get depth image memory requirments
+        vkGetImageMemoryRequirements(m_device, m_depth.image, &mem_reqs);
+        uint32_t depth_mem_index;
+        m_depth.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        m_depth.mem_alloc.pNext = nullptr;
+        m_depth.mem_alloc.allocationSize = mem_reqs.size;
+        m_depth.mem_alloc.memoryTypeIndex = 0;
+        found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
+                                            m_phys_memory_properties.memoryTypes,
+                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &depth_mem_index);
+        assert(found);
+
+        // allocate memory
+        err = vkAllocateMemory(m_device, &m_depth.mem_alloc, nullptr, &m_depth.mem);
+
+        // bind memory
+        err = vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0);
+        // assert(!err);
+        VK_CHECK_RESULT(err);
+        // create image view
+        view_info.image = m_depth.image;
+        err = vkCreateImageView(m_device, &view_info, nullptr, &m_depth.view);
+
+        // TODO:consider naming DepthView
+    }
+
+    void Renderer_Vk::prepare_render_pass()
+    {
+
+        // This function will prepare a single render pass with one subpass
+
+        // Descriptors for render pass attachments
+        std::array<VkAttachmentDescription, 2> attachments{};
+        // Color attachment
+        attachments[0].flags = 0,
+        attachments[0].format = m_surface_format.format;
+        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        // Depth attachment
+
+        attachments[1].flags = 0;
+        attachments[1].format = m_depth.format;
+        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference color_ref = {
+            .attachment = 0,
+            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        };
+        VkAttachmentReference depth_ref = {
+            .attachment = 1,
+            .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
+        // One subpass
+        VkSubpassDescription subpass = {
+            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &color_ref,
+            .pDepthStencilAttachment = &depth_ref,
+            .inputAttachmentCount = 0,
+            .pInputAttachments = nullptr,
+            .preserveAttachmentCount = 0,
+            .pPreserveAttachments = nullptr,
+        };
+
+        std::array<VkSubpassDependency, 2> dependencies{};
+        // Depth attachment
+        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL,
+        dependencies[0].dstSubpass = 0,
+        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+        dependencies[0].dependencyFlags = 0;
+        // Color attachment
+
+        dependencies[1].srcSubpass = VK_SUBPASS_EXTERNAL,
+        dependencies[1].dstSubpass = 0,
+        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        dependencies[1].srcAccessMask = 0,
+        dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        dependencies[1].dependencyFlags = 0;
+
+        VkRenderPassCreateInfo render_pass_info{
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .attachmentCount = 2,
+            .pAttachments = attachments.data(),
+            .subpassCount = 1,
+            .pSubpasses = &subpass,
+            .dependencyCount = 2,
+            .pDependencies = dependencies.data(),
+        };
+        VkResult err;
+        err = vkCreateRenderPass(m_device, &render_pass_info, nullptr, &m_render_pass);
+        assert(!err);
+        VK_CHECK_RESULT(err);
     }
 }

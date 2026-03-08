@@ -16,12 +16,13 @@ namespace Expectre
         VkImageView view;
     } SwapChainBuffer;
 
-    struct VsUniform {
-    // Must start with MVP
-    float mvp[4][4];
-    float position[12 * 3][4];
-    float attr[12 * 3][4];
-};
+    struct VsUniform
+    {
+        // Must start with MVP
+        float mvp[4][4];
+        float position[12 * 3][4];
+        float attr[12 * 3][4];
+    };
 
     class Renderer_Vk
     {
@@ -52,9 +53,13 @@ namespace Expectre
 
         void create_command_buffers();
 
-        void create_descriptors();
-
         void create_vertex_buffer();
+
+        void create_layouts();
+
+        void prepare_depth();
+
+        void prepare_render_pass();
 
         void create_buffers_and_images();
 
@@ -74,8 +79,11 @@ namespace Expectre
         VkInstance m_instance{};
         VkSurfaceKHR m_surface{};
         VkSwapchainKHR m_swapchain{};
+        VkRenderPass m_render_pass{};
         VkBufferView m_buffer_view{};
         VkImageView m_image_view{};
+        VkPipelineLayout m_pipeline_layout{};
+        VkDescriptorSetLayout m_descriptor_set_layout{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;
@@ -91,7 +99,17 @@ namespace Expectre
         VkImage m_image = VK_NULL_HANDLE;
         VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
         VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
-        
+
+        struct
+        {
+            VkFormat format;
+
+            VkImage image;
+            VkMemoryAllocateInfo mem_alloc;
+            VkDeviceMemory mem;
+            VkImageView view;
+        } m_depth;
+
         VkSurfaceFormatKHR m_surface_format{};
         uint32_t m_graphics_queue_family_index{UINT32_MAX};
         uint32_t m_present_queue_family_index{UINT32_MAX};
