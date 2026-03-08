@@ -1,40 +1,33 @@
 # Expectre
+C++20/Vulkan/SDL2 based renderer
 
 
+## Build
 
+Using Conan 2 + CMake + Clang
 
+Current build for Windows:
 
-
-clang-cl profile
+#### Conan profile
+```
 [settings]
-os=Windows
 arch=x86_64
 build_type=Debug
 compiler=clang
-compiler.version=14
-compiler.cppstd=gnu14
+compiler.cppstd=gnu23
 compiler.runtime=dynamic
 compiler.runtime_type=Debug
-compiler.runtime_version=v142
- 
+compiler.runtime_version=v143
+compiler.version=14
+os=Windows
 [conf]
-#tools.env.virtualenv:auto_use=True
-tools.cmake.cmaketoolchain:generator=Visual Studio 16
+tools.cmake.cmaketoolchain:generator=Visual Studio 17
+```
 
-conan2 install . --output-folder=build --build=missing -pr clang-cl 
-cd ./build/
-cmake ../ -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug"
-cmake --build . --config Debug
+Build commands
+```
+conan install . --build=missing -pr clang-cl
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="generators/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
 
-UBUNTU
-export CC=clang CXX=clang++
-
-
-See https://blog.conan.io/2022/10/13/Different-flavors-Clang-compiler-Windows.html for info on profiles/compiler
-
-Make sure vulkan + optional glm headers are installed, as well as the vulkan environemtn variables (these should be set by the installer on windows)
-conan2 install . -pr clang-cl --build=missing        
-
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="build/generators/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug" --debug-find                         
-
-cmake --build .\build\ --config debug     

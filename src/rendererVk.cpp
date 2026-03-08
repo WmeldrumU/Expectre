@@ -13,6 +13,12 @@
 #include "spdlog/spdlog.h"
 #include "VkTools.h"
 
+struct Vertex
+{
+    glm::vec2 pos;
+    glm::vec3 color;
+};
+
 // struct
 // {
 //     glm::mat4 modelMatrix;
@@ -36,7 +42,7 @@ namespace Expectre
             SDL_Log("Unable to initialize vulkan lib: %s", SDL_GetError());
             throw std::runtime_error("SDL failed to load Vulkan Library!");
         }
-        m_window = SDL_CreateWindow("WINDOW TITLE",
+        m_window = SDL_CreateWindow("Expectre",
                                     SDL_WINDOWPOS_CENTERED,
                                     SDL_WINDOWPOS_CENTERED,
                                     1280, 720,
@@ -117,7 +123,7 @@ namespace Expectre
         vkFreeMemory(m_device, m_vertices.memory, nullptr);
 
         // might not need this
-        //vkDestroyBuffer(m_device, m_buffer, nullptr);
+        // vkDestroyBuffer(m_device, m_buffer, nullptr);
 
         for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++)
         {
@@ -623,20 +629,16 @@ namespace Expectre
         //     {1.0, 1.0, 0.0},
         //     {-1.0, 1.0, 0.0f},
         //     {0.0, -1.0, 0.0}};
-        std::vector<glm::vec2> vertices_pos{
-            {-0.5f, 0.5f},
-            {0.0f, 0.5f},
-            {0.5f, 0.5f}};
-        std::vector<glm::vec3> vertices_color{
-            {1.0f, 0.0f, 0.0f},
-            {0.0f, 1.0f, 0.0f},
-            {0.0f, 0.0f, 1.0f}};
+        std::vector<Vertex> vertices{
+            {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.0f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
         uint32_t vertex_buffer_size =
-            static_cast<uint32_t>((vertices_color.size() +
-                                   vertices_pos.size()) *
-                                  sizeof(uint32_t));
+            static_cast<uint32_t>((vertices.size() * sizeof(Vertex)));
+        // Setup indices
         std::vector<uint32_t> index_buffer{0, 1, 2};
         m_indices.count = static_cast<uint32_t>(index_buffer.size());
+        uint32_t index_buffer_size = m_indices.count * sizeof(index_buffer[0]);
 
         VkMemoryAllocateInfo mem_alloc{};
         mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -683,7 +685,7 @@ namespace Expectre
         // Map the memory, then copy it
         err = vkMapMemory(m_device, staging_buffers.vertices.memory, 0, mem_alloc.allocationSize, 0, &data);
         VK_CHECK_RESULT(err);
-        memcpy(data, vertices_pos.data(), vertex_buffer_size);
+        memcpy(data, vertices.data(), vertex_buffer_size);
         vkUnmapMemory(m_device, staging_buffers.vertices.memory);
         err = vkBindBufferMemory(m_device, staging_buffers.vertices.buffer, staging_buffers.vertices.memory, 0);
         VK_CHECK_RESULT(err);
@@ -703,7 +705,7 @@ namespace Expectre
         VK_CHECK_RESULT(err);
 
         // Index buffer
-        uint32_t index_buffer_size = m_indices.count * sizeof(uint32_t);
+        // uint32_t index_buffer_size = sizeof(index_buffer[0]) * index_buffer.size();
 
         VkBufferCreateInfo index_buffer_info{};
         index_buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -974,19 +976,19 @@ namespace Expectre
 
         VkVertexInputBindingDescription binding_description{};
         binding_description.binding = 0;
-        binding_description.stride = sizeof(glm::vec3);
+        binding_description.stride = sizeof(Vertex);
         binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
         std::array<VkVertexInputAttributeDescription, 2> vertex_attribute_description{};
         vertex_attribute_description[0].binding = 0;
         vertex_attribute_description[0].location = 0;
         vertex_attribute_description[0].format = VK_FORMAT_R32G32_SFLOAT;
-        vertex_attribute_description[0].offset = 0; // might not be 0
+        vertex_attribute_description[0].offset = offsetof(Vertex, pos);
 
         vertex_attribute_description[1].binding = 0;
         vertex_attribute_description[1].location = 1;
         vertex_attribute_description[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vertex_attribute_description[1].offset = 0; // might not be 0
+        vertex_attribute_description[1].offset = offsetof(Vertex, color);
 
         VkPipelineVertexInputStateCreateInfo vertex_input_info{};
         vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1245,8 +1247,8 @@ namespace Expectre
         VK_CHECK_RESULT(vkBeginCommandBuffer(current_cmd_buffer, &begin_info));
 
         std::array<VkClearValue, 2> clear_col;
-        clear_col[0] = {{{0.2f, 0.1f, 0.2f, 1.0f}}};
-        clear_col[1] = {{{0.1f, 0.2f, 0.2f, 1.0f}}};
+        clear_col[0] = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        clear_col[1] = {{{0.5f, 0.2f, 0.2f, 1.0f}}};
         VkRenderPassBeginInfo renderpass_info = {};
         renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderpass_info.pNext = nullptr;
@@ -1284,7 +1286,7 @@ namespace Expectre
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(current_cmd_buffer, 0, 1, &m_vertices.buffer, offsets);
 
-        vkCmdBindIndexBuffer(current_cmd_buffer, m_indices.buffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(current_cmd_buffer, m_indices.buffer, 0, VK_INDEX_TYPE_UINT32);
 
         vkCmdDrawIndexed(current_cmd_buffer, static_cast<uint32_t>(m_indices.count), 1, 0, 0, 0);
 
