@@ -15,7 +15,15 @@ namespace Expectre
     void cleanup();
     bool isReady();
     void draw_frame();
+
   private:
-    WGPUInstance m_instance;
+    WGPUDevice requestDeviceSync(WGPUAdapter adapter, WGPUDeviceDescriptor const *descriptor);
+    WGPUAdapter requestAdapterSync(WGPUInstance instance, WGPURequestAdapterOptions const *options);
+    void checkAdapterLimits();
+    
+    WGPUInstance m_instance{};
+    WGPUAdapter m_adapter{};
+    WGPUSupportedLimits m_limits{};
+    WGPUDevice m_device{};
   };
 }
