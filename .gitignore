@@ -43,3 +43,7 @@ config.log
 *.dblite
 CMakeFiles/
 build/
+
+
+# Dont ignores
+!lib/**
