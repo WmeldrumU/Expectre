@@ -623,27 +623,44 @@ VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkImageView view,
 }
 
 void RendererVk::create_sync_objects() {
-  m_finished_render_semaphores.resize(m_swapchain_images.size());
-  m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);
-  m_in_flight_fences.resize(MAX_CONCURRENT_FRAMES);
+  // === SYNCHRONIZATION PRIMITIVE COUNTS ===
+  // Different counts because they serve different purposes:
+  // 
+  // Frames-in-flight (typically 2): CPU can prepare frame N+1 while GPU renders frame N
+  // Swapchain images (typically 2-3): The actual framebuffers we render into
+  //
+  // We need:
+  // - Fences per frame-in-flight (CPU waits for GPU to finish frame N before reusing resources)
+  // - Acquire semaphores per frame-in-flight (signals when we get an image from swapchain)
+  // - Render finished semaphores per swapchain IMAGE (each image needs its own to prevent reuse)
+  
+  m_finished_render_semaphores.resize(m_swapchain_images.size());  // Per image
+  m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);       // Per frame
+  m_in_flight_fences.resize(MAX_CONCURRENT_FRAMES);                 // Per frame
 
   VkSemaphoreCreateInfo semaphore_info{};
   semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
   VkFenceCreateInfo fence_info{};
   fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+  fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // Start signaled so first frame doesn't wait
 
+  // Create per-frame synchronization objects
   for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
+    // Acquire semaphore: Signaled when swapchain gives us an image
     auto avail = vkCreateSemaphore(m_device, &semaphore_info, nullptr,
                                    &m_available_image_semaphores[i]);
+    // Fence: CPU waits on this to know when frame is completely done
     auto fences =
         vkCreateFence(m_device, &fence_info, nullptr, &m_in_flight_fences[i]);
     VK_CHECK_RESULT(avail);
     VK_CHECK_RESULT(fences);
   }
 
-  // Create one render finished semaphore per swapchain image
+  // Create per-swapchain-image synchronization objects
+  // Each swapchain image needs its own render finished semaphore because:
+  // - Images can be acquired in any order (e.g., 0,1,0,2,1)
+  // - We must not signal the same semaphore twice while presentation is using it
   for (size_t i = 0; i < m_swapchain_images.size(); i++) {
     auto finished = vkCreateSemaphore(m_device, &semaphore_info, nullptr,
                                       &m_finished_render_semaphores[i]);
@@ -711,39 +728,69 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
       command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1,
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
-  // Calculate index count: (bytes used) / (bytes per index)
-  auto index_count =
-      (m_geometry_buffer.index_offset - m_geometry_buffer.index_begin) /
-      sizeof(uint32_t);
-  vkCmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+  for (const auto &mesh : m_mesh_allocations) {
+    vkCmdDrawIndexed(command_buffer, mesh.index_count, 1, mesh.index_offset,
+                     mesh.vertex_offset, 0);
+  }
 
   vkCmdEndRenderPass(command_buffer);
 
   VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 }
 
+
+
 void RendererVk::draw_frame(const Camera &camera) {
+
+
+
+    /**
+ * The semaphore lifecycle for each image goes like this:
+ * 
+ * 1 - vkAcquireNextImageKHR → signals m_available_image_semaphore[frame] when image is available
+ * 2 - vkQueueSubmit → waits on m_available_image_semaphore[frame], 
+ * signals m_finished_render_semaphore[image_index] when rendering completes
+ * 3 - vkQueuePresentKHR → waits on m_finished_render_semaphore[image_index], presents image (no signal)
+ * Image goes back to swapchain internally
+ * (Later) vkAcquireNextImageKHR → signals m_available_image_semaphore[frame] again when that image is free
+ */
+
+ 
+  // Wait for the GPU to finish rendering frame N before we start frame N+MAX_CONCURRENT_FRAMES
+  // (e.g., with MAX_CONCURRENT_FRAMES=2: wait for frame 0 before starting frame 2)
+  // This prevents us from overwriting command buffers/uniforms that GPU is still using
   vkWaitForFences(m_device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE,
                   UINT64_MAX);
 
+  // Get the next available image from the swapchain to render into
+  // The presentation engine signals available_image_semaphore when image is ready
+  // Note: image_index may not match m_current_frame (e.g., could be 0,1,0,2,1...)
   uint32_t image_index;
   VkResult result =
       vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
                             m_available_image_semaphores[m_current_frame],
                             VK_NULL_HANDLE, &image_index);
   VK_CHECK_RESULT(result);
+  
+  // UPDATE RESOURCES (now safe because we waited on fence)
   update_uniform_buffer(camera);
+  
+  // Reset fence to unsignaled state - GPU will signal it when this frame completes
   vkResetFences(m_device, 1, &m_in_flight_fences[m_current_frame]);
+  
+  // Prepare command buffer for recording
   vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
   record_draw_commands(m_cmd_buffers[m_current_frame], image_index);
 
+  // Prepare rendering work to submit gpu
   VkSubmitInfo submit_info{};
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
+  // GPU WAIT: Don't start rendering until the swapchain image is available
   VkSemaphore wait_semaphores[] = {
       m_available_image_semaphores[m_current_frame]};
   VkPipelineStageFlags wait_stages[] = {
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};  // Wait before writing colors
   submit_info.waitSemaphoreCount = 1;
   submit_info.pWaitSemaphores = wait_semaphores;
   submit_info.pWaitDstStageMask = wait_stages;
@@ -751,19 +798,26 @@ void RendererVk::draw_frame(const Camera &camera) {
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers = &m_cmd_buffers[m_current_frame];
 
-  // Use image_index - each swapchain image needs its own semaphore
+  // GPU SIGNAL: When rendering finishes, signal this image's render finished semaphore
+  // IMPORTANT: Indexed by image_index (not m_current_frame) because semaphores are
+  // tied to swapchain images, and same image could be rendered multiple times
   VkSemaphore signal_semaphores[] = {m_finished_render_semaphores[image_index]};
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = signal_semaphores;
 
+  // Submit work to GPU queue
+  // - Waits on: available_image_semaphore (image ready)
+  // - Signals: finished_render_semaphore (rendering done)
+  // - Signals: in_flight_fence (entire frame done, CPU can reuse resources)
   VK_CHECK_RESULT(vkQueueSubmit(m_graphics_queue, 1, &submit_info,
                                 m_in_flight_fences[m_current_frame]));
 
   VkPresentInfoKHR present_info{};
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
+  // PRESENTATION WAIT: Don't display image until rendering is complete
   present_info.waitSemaphoreCount = 1;
-  present_info.pWaitSemaphores = signal_semaphores;
+  present_info.pWaitSemaphores = signal_semaphores;  // Same as submit's signal
 
   VkSwapchainKHR swapchains[] = {m_swapchain};
   present_info.swapchainCount = 1;
@@ -772,6 +826,8 @@ void RendererVk::draw_frame(const Camera &camera) {
   present_info.pImageIndices = &image_index;
   result = vkQueuePresentKHR(m_present_queue, &present_info);
   VK_CHECK_RESULT(result);
+  
+  // Move to next frame (0 -> 1 -> 0 -> 1 ...)
   m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
 }
 
@@ -944,14 +1000,31 @@ void RendererVk::upload_mesh_to_gpu(const Mesh &mesh) {
   // Verify this won't write outside the geometry buffer
   assert(m_geometry_buffer.index_offset + index_buffer_size <=
          m_geometry_buffer.buffer_size);
+
   // second, copy indices
   ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue,
                        mesh_staging.buffer, m_geometry_buffer.buffer,
                        index_region);
   m_geometry_buffer.index_offset += index_buffer_size;
 
-  // todo - add mesh tracking logic (keep track of where meshes are in the
-  // geoemetry buffer)
+  // Create an entry to keep track of meshes in our geometry buffer
+  MeshAllocation alloc{};
+  alloc.index_count = mesh.indices.size();
+  alloc.vertex_count = mesh.vertices.size();
+  
+  // Calculate where this mesh starts in the buffer (before we incremented the offsets)
+  uint32_t mesh_index_start_bytes = m_geometry_buffer.index_offset - index_buffer_size;
+  uint32_t mesh_vertex_start_bytes = m_geometry_buffer.vertex_offset - vertex_buffer_size;
+  
+  // Convert to position relative to the start of each section
+  uint32_t index_section_offset_bytes = mesh_index_start_bytes - m_geometry_buffer.index_begin;
+  uint32_t vertex_section_offset_bytes = mesh_vertex_start_bytes;  // Vertices start at byte 0
+  
+  // Convert from byte offsets to element counts (what vkCmdDrawIndexed expects)
+  alloc.index_offset = index_section_offset_bytes / sizeof(uint32_t);
+  alloc.vertex_offset = vertex_section_offset_bytes / sizeof(Vertex);
+  
+  m_mesh_allocations.push_back(alloc);
 
   // Cleanup staging
   vmaUnmapMemory(m_allocator, mesh_staging.allocation);
