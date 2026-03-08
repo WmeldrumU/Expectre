@@ -60,6 +60,8 @@ namespace Expectre
         void prepare_depth();
 
         void prepare_render_pass();
+        
+        void prepare_pipeline();
 
         void create_buffers_and_images();
 
@@ -83,6 +85,8 @@ namespace Expectre
         VkBufferView m_buffer_view{};
         VkImageView m_image_view{};
         VkPipelineLayout m_pipeline_layout{};
+        VkPipeline m_pipeline{};
+        VkPipelineCache m_pipeline_cache{};
         VkDescriptorSetLayout m_descriptor_set_layout{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
