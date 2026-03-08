@@ -4,26 +4,18 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 project(Expectre CXX)
 option(USE_WEBGPU "Build with WebGPU support" OFF)
 
-set(COMMON_LIBRARIES
-    SDL2::SDL2
-    SDL2::SDL2main
-    glm::glm
-    spdlog::spdlog
-    stb::stb
-    assimp::assimp
-    fmt::fmt
-)
 
 # use c++ 20, this version is required
 # set(CMAKE_CXX_STANDARD 20)
 # set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-find_package(SDL2 REQUIRED)
+find_package(SDL3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
+find_package(Vulkan REQUIRED)
 
 # message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
 # message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
@@ -36,29 +28,24 @@ message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 # include is needed when using Ninja/MinGW
-# target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+message(STATUS "Vulkan_INCLUDE_DIRS: ${Vulkan_INCLUDE_DIRS}")
 
-if(USE_WEBGPU)
-    include(FetchContent)
-    FetchContent_Declare(
-        webgpu
-        GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
-        GIT_TAG dawn
-    )
-    FetchContent_MakeAvailable(webgpu)
-    message(STATUS "USING WEBGPU")
-    # If not using WebGPU, find Vulkan
-    find_package(Vulkan REQUIRED)
-    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} Vulkan::Vulkan)
-    # If WebGPU provides a CMake target, link it, otherwise adjust as necessary
-    target_link_libraries(${PROJECT_NAME} PUBLIC webgpu)
-else()
-    # If not using WebGPU, find Vulkan
-    find_package(Vulkan REQUIRED)
-    message(STATUS "USING VULKAN")
-    set(COMMON_LIBRARIES ${COMMON_LIBRARIES} Vulkan::Vulkan)
-endif()
+
+set(COMMON_LIBRARIES
+    SDL3::SDL3
+    glm::glm
+    spdlog::spdlog
+    stb::stb
+    assimp::assimp
+    fmt::fmt
+    Vulkan::Vulkan
+)
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(${PROJECT_NAME} PUBLIC
     ${COMMON_LIBRARIES}
+)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    VK_NO_PROTOTYPES
 )

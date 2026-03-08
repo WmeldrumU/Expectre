@@ -1,6 +1,6 @@
 #ifndef EXPECTRE_OBSERVER_H
 #define EXPECTRE_OBSERVER_H
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 namespace Expectre
 {

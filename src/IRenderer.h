@@ -2,7 +2,7 @@
 #define IRENDERER_H
 
 #include <memory>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 class IRenderer {
 public:
@@ -12,7 +12,6 @@ public:
 private:
 
 protected:
-    SDL_Window* m_window;
 };
 
 #endif // IRENDERER_H

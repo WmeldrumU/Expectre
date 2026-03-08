@@ -1,4 +1,5 @@
 ﻿// Library macros
+#define VOLK_IMPLEMENTATION
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
@@ -22,13 +23,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
 
-#include <vulkan/vulkan.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
+#include <spdlog/spdlog.h>
+#include <Volk/volk.h>
 
-#include "rendererVk.h"
 #include "shared.h"
-#include "spdlog/spdlog.h"
 #include "VkTools.h"
 #include "Model.h"
 
@@ -41,77 +41,92 @@ struct UBO
 
 namespace Expectre
 {
+	void check(VkResult r, const char* msg)
+	{
+		if (r != VK_SUCCESS) throw std::runtime_error(msg);
+	}
+
+
+	uint32_t findGraphicsPresentQueue(VkPhysicalDevice gpu,
+		VkSurfaceKHR surface)
+	{
+		uint32_t count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
+		std::vector<VkQueueFamilyProperties> props(count);
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, props.data());
+
+		for (uint32_t i = 0; i < count; ++i) {
+			VkBool32 present = VK_FALSE;
+			vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &present);
+			if (present && (props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+				return i;                  // first family that does both
+		}
+		throw std::runtime_error("no queue family with graphics+present");
+	}
+
+
 	Renderer_Vk::Renderer_Vk()
 	{
 
-		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
-		{
-			SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
-			throw std::runtime_error("failed to initialize SDL!");
-		}
+		//if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+		//{
+		//	SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
+		//	throw std::runtime_error("failed to initialize SDL!");
+		//}
 
-		if (SDL_Vulkan_LoadLibrary(NULL))
-		{
-			SDL_Log("Unable to initialize vulkan lib: %s", SDL_GetError());
-			throw std::runtime_error("SDL failed to load Vulkan Library!");
-		}
-		m_window = SDL_CreateWindow("Expectre",
-			SDL_WINDOWPOS_CENTERED,
-			SDL_WINDOWPOS_CENTERED,
-			RESOLUTION_X, RESOLUTION_Y,
-			SDL_WINDOW_VULKAN | SDL_WINDOW_SHOWN);
 
-		if (!m_window)
-		{
-			SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
-			throw std::runtime_error("Unable to initialize application window!");
-		}
+		//m_window = SDL_CreateWindow("Expectre",
+		//	RESOLUTION_X, RESOLUTION_Y,
+		//	SDL_WINDOW_VULKAN);
 
-		// Core Vulkan setup
-		enumerate_layers();
-		create_instance();
-		create_surface();
-		select_physical_device();
-		create_logical_device_and_queues();
+		//if (!m_window)
+		//{
+		//	SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
+		//	throw std::runtime_error("Unable to initialize application window!");
+		//}
+
+		//VK_CHECK_RESULT(volkInitialize());
+		//m_enable_validation_layers = true;
+
+
+		//// Core Vulkan setup
+		//create_instance();
+
+		//if (!vkDestroyInstance)
+		//	throw std::runtime_error("vkDestroyInstance is still NULL – check load order");
+		//select_physical_device();
+		//create_logical_device_and_queues();
+
+		//create_surface();
 
 		// Command buffers and swapchain
-		create_swapchain();
-		create_image_views();
-		create_depth();
-		create_renderpass();
-		create_descriptor_set_layout();
-		create_pipeline();
-		create_command_pool();
-		create_framebuffers();
-		create_texture_image();
-		create_texture_image_view();
-		create_texture_sampler();
-		create_vertex_buffer(); // and index buffer
-		create_uniform_buffers();
-		create_descriptor_pool_and_sets();
-		create_command_buffers();
+		//create_swapchain();
+		//create_image_views();
+		//create_depth();
+		//create_renderpass();
+		//create_descriptor_set_layout();
+		//create_pipeline();
+		//create_command_pool();
+		//create_framebuffers();
+		//create_texture_image();
+		//create_texture_image_view();
+		//create_texture_sampler();
+		//create_vertex_buffer(); // and index buffer
+		//create_uniform_buffers();
+		//create_descriptor_pool_and_sets();
+		//create_command_buffers();
 
-		// Synchronization
-		create_sync_objects();
+		//// Synchronization
+		//create_sync_objects();
 
 		m_ready = true;
 	}
 
-	Renderer_Vk::~Renderer_Vk()
-	{
-		vkDeviceWaitIdle(m_device);
-
-		// Destroy synchronization objects
-		for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
-			vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
-			vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
-			vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
-		}
-
+	void Renderer_Vk::cleanup_swapchain() {
 		// Destroy depth buffer
-		vkDestroyImageView(m_device, m_depth.view, nullptr);
-		vkDestroyImage(m_device, m_depth.image, nullptr);
-		vkFreeMemory(m_device, m_depth.mem, nullptr);
+		vkDestroyImageView(m_device, m_depth_image_view, nullptr);
+		vkDestroyImage(m_device, m_depth_image, nullptr);
+		vkFreeMemory(m_device, m_depth_image_memory, nullptr);
 
 		for (auto framebuffer : m_swapchain_framebuffers) {
 			vkDestroyFramebuffer(m_device, framebuffer, nullptr);
@@ -121,59 +136,87 @@ namespace Expectre
 			vkDestroyImageView(m_device, imageView, nullptr);
 		}
 
-
-		// Destroy texture resources
-		vkDestroySampler(m_device, m_texture_sampler, nullptr);
-		vkDestroyImageView(m_device, m_texture_image_view, nullptr);
-		vkDestroyImage(m_device, m_texture_image, nullptr);
-		vkFreeMemory(m_device, m_texture_image_memory, nullptr);
-
-
-
-		// Destroy framebuffers
-		for (auto& fb : m_swapchain_framebuffers) {
-			vkDestroyFramebuffer(m_device, fb, nullptr);
-		}
-
-		// Destroy pipeline and related layouts
-		vkDestroyPipeline(m_device, m_pipeline, nullptr);
-		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
-		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-		vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
-
-		// Destroy descriptor pool
-		vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
-
-		// Destroy uniform buffers
-		for (auto& ub : m_uniform_buffers) {
-			vkDestroyBuffer(m_device, ub.buffer, nullptr);
-			vkFreeMemory(m_device, ub.memory, nullptr);
-		}
-
-		// Destroy vertex and index buffers
-		vkDestroyBuffer(m_device, m_vertices.buffer, nullptr);
-		vkFreeMemory(m_device, m_vertices.memory, nullptr);
-		vkDestroyBuffer(m_device, m_indices.buffer, nullptr);
-		vkFreeMemory(m_device, m_indices.memory, nullptr);
-
-		// Destroy command pool
-		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
-
-		// Destroy swapchain
 		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+
+	}
+
+	Renderer_Vk::~Renderer_Vk()
+	{
+
+
+		// ------------------------------------------------------------------
+		// teardown  (reverse order)
+		// ------------------------------------------------------------------
+		vkDeviceWaitIdle(m_device);                 // 1 – stop GPU work
+
+
+
+		//vkDeviceWaitIdle(m_device);
+
+
+		//// Destroy pipeline and related layouts
+		//vkDestroyPipeline(m_device, m_pipeline, nullptr);
+		//vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+		//vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+
+
+		//// Destroy uniform buffers
+		//for (auto& ub : m_uniform_buffers) {
+		//	vkDestroyBuffer(m_device, ub.buffer, nullptr);
+		//	vkFreeMemory(m_device, ub.memory, nullptr);
+		//}
+
+
+		//// Destroy descriptor pool
+		//vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+
+		//// Destroy texture resources
+		//vkDestroySampler(m_device, m_texture_sampler, nullptr);
+		//vkDestroyImageView(m_device, m_texture_image_view, nullptr);
+		//vkDestroyImage(m_device, m_texture_image, nullptr);
+		//vkFreeMemory(m_device, m_texture_image_memory, nullptr);
+
+		//vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+
+		//// Destroy vertex and index buffers
+		//vkDestroyBuffer(m_device, m_indices.buffer, nullptr);
+		//vkFreeMemory(m_device, m_indices.memory, nullptr);
+		//vkDestroyBuffer(m_device, m_vertices.buffer, nullptr);
+		//vkFreeMemory(m_device, m_vertices.memory, nullptr);
+
+		//// Destroy synchronization objects
+		//for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
+		//	vkDestroySemaphore(m_device, m_available_image_semaphores[i], nullptr);
+		//	vkDestroySemaphore(m_device, m_finished_render_semaphores[i], nullptr);
+		//	vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
+		//}
+
+		//// Destroy command pool
+		//vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
+
+		//cleanup_swapchain();
+
 
 		// Destroy device, surface, instance
 		vkDestroyDevice(m_device, nullptr);
+
+		vkDestroyDebugUtilsMessengerEXT(m_instance, m_debug_messenger, nullptr);
 		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+
 		vkDestroyInstance(m_instance, nullptr);
 
 		// SDL cleanup
 		SDL_DestroyWindow(m_window);
-		SDL_Vulkan_UnloadLibrary();
+		//SDL_Vulkan_UnloadLibrary();
 		SDL_Quit();
-		SDL_Log("Cleaned up with errors: %s", SDL_GetError());
-
-		m_window = nullptr;
+		//auto error = SDL_GetError();
+		//if (error) {
+		//	SDL_Log("SDL error: %s", error);
+		//}
+		//else {
+		//	SDL_Log("No SDL errors");
+		//}
+		//m_window = nullptr;
 	}
 
 	void Renderer_Vk::create_instance()
@@ -181,97 +224,83 @@ namespace Expectre
 
 		uint32_t num_extensions = 0;
 
-		if (!SDL_Vulkan_GetInstanceExtensions(nullptr, &num_extensions, nullptr))
-		{
-			SDL_Log("Unable to get number of extensions: %s", SDL_GetError());
-			throw std::runtime_error("Unable to get number of extensions");
-		}
-		std::vector<const char*> extensions(num_extensions);
-		if (!SDL_Vulkan_GetInstanceExtensions(nullptr, &num_extensions, extensions.data()))
-		{
-			SDL_Log("Unable to get vulkan extensions: %s", SDL_GetError());
-			throw std::runtime_error("Unable to get vulkan extension names:");
-		}
+		auto raw_extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
 
-		// print extensions
-		for (const char* ext : extensions)
+		std::vector<const char*> instance_extensions(raw_extensions, raw_extensions + num_extensions);
+
+		if (m_enable_validation_layers)
 		{
-			std::printf("%s", ext);
-			std::cout << "\n"
-				<< std::endl;
+			instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
-		VkApplicationInfo app_info{};
+		VkDebugUtilsMessengerCreateInfoEXT debug_create{ VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
+		debug_create.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		debug_create.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		debug_create.pfnUserCallback = tools::debug_callback;
+
+
+		VkApplicationInfo app_info{ };
 		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		app_info.pApplicationName = "Expectre App";
-		app_info.applicationVersion = 1;
-		app_info.apiVersion = VK_API_VERSION_1_3; // Specify what version of vulkan we want
+		app_info.pApplicationName = "Expectre";
+		app_info.apiVersion = VK_API_VERSION_1_3;
 
-		VkInstanceCreateInfo instance_create_info{};
-		instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		instance_create_info.pNext = nullptr;
-		instance_create_info.pApplicationInfo = &app_info; // create_info depends on app_info
+		const std::vector<const char*> layers = { "VK_LAYER_KHRONOS_validation" };
 
-		uint32_t layer_count = 0;
-		const char** p_layers = nullptr;
-		if (m_layers_supported)
-		{
-			layer_count = static_cast<uint32_t>(m_layers.size());
-			p_layers = m_layers.data();
+		VkInstanceCreateInfo create_info{ };
+		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		create_info.pApplicationInfo = &app_info;
+		create_info.enabledExtensionCount = instance_extensions.size();
+		create_info.ppEnabledExtensionNames = instance_extensions.data();
+		create_info.enabledLayerCount = layers.size();
+		create_info.ppEnabledLayerNames = layers.data();
+		//create_info.pNext = &debug_create;
+		create_info.pNext = nullptr;
+
+		VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
+		volkLoadInstance(m_instance);
+
+
+		//VK_CHECK_RESULT(vkCreateDebugUtilsMessengerEXT(m_instance, &debug_create, nullptr, &m_debug_messenger));
+
+		//auto instance_extensions = tools::get_required_instance_extensions(m_window);
+
+		// Check for validation layer support
+		/*VkApplicationInfo app_info = {};
+		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		app_info.pApplicationName = "Expectre";
+		app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		app_info.pEngineName = "No Engine";
+		app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		app_info.apiVersion = VK_API_VERSION_1_4;
+
+		VkInstanceCreateInfo create_info{};
+		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		create_info.enabledExtensionCount = instance_extensions.size();
+		create_info.ppEnabledExtensionNames = instance_extensions.data();
+		create_info.pApplicationInfo = &app_info;
+
+		VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
+
+		if (m_enable_validation_layers) {
+			tools::populate_debug_messenger_create_info(debug_create_info);
+			create_info.enabledLayerCount = m_validation_layers.size();
+			create_info.ppEnabledLayerNames = m_validation_layers.data();
+			create_info.pNext = &debug_create_info;
 		}
-		instance_create_info.enabledLayerCount = layer_count;
-		instance_create_info.ppEnabledLayerNames = p_layers;
 
-		// Extensions
-		instance_create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-		instance_create_info.ppEnabledExtensionNames = extensions.data();
+		VK_CHECK_RESULT(vkCreateInstance(&create_info, nullptr, &m_instance));
 
-		auto result = vkCreateInstance(&instance_create_info, nullptr, &m_instance);
+		volkLoadInstance(m_instance);*/
 
-		if (result != VK_SUCCESS)
-		{
-			spdlog::error("Could not create instance.");
-		}
-	}
-
-	// Check if the validation layers are supported
-	void Renderer_Vk::enumerate_layers()
-	{
-		VkResult err;
-		uint32_t count = 0;
-		err = vkEnumerateInstanceLayerProperties(&count, nullptr);
-		std::vector<VkLayerProperties> properties(count);
-		if (count == 0)
-		{
-			return;
-		}
-
-		err = vkEnumerateInstanceLayerProperties(&count, properties.data());
-		assert(!err);
-
-		for (const auto& property : properties)
-		{
-			for (const auto& layer_name : m_layers)
-			{
-				if (strcmp(property.layerName, layer_name) == 0)
-				{
-					m_layers_supported = true;
-					spdlog::debug("Validation layers found!");
-					return;
-				}
-			}
-
-			// spdlog::debug(property.layerName);
-			// spdlog::debug(property.description);
-		}
-		if (!m_layers_supported)
-		{
-			spdlog::debug("Validation layers NOT found!");
-		}
 	}
 
 	void Renderer_Vk::create_surface()
 	{
-		auto err = SDL_Vulkan_CreateSurface(m_window, m_instance, static_cast<SDL_vulkanSurface*>(&m_surface));
+		auto err = SDL_Vulkan_CreateSurface(m_window, m_instance, nullptr, &m_surface);
 		// Create a Vulkan surface using SDL
 		if (!err)
 		{
@@ -283,169 +312,148 @@ namespace Expectre
 	void Renderer_Vk::select_physical_device()
 	{
 		// Enumerate physical devices
-		uint32_t physical_device_count = 0;
-		auto err = vkEnumeratePhysicalDevices(m_instance, &physical_device_count, nullptr);
-		if (physical_device_count <= 0)
-		{
-			std::runtime_error("<= 0 physical devices available");
-		}
-		assert(!err);
-		m_physical_devices.resize(physical_device_count);
-		err = vkEnumeratePhysicalDevices(m_instance, &physical_device_count, m_physical_devices.data());
-		assert(!err);
-		// Report available devices
-		for (uint32_t i = 0; i < m_physical_devices.size(); i++)
-		{
-			VkPhysicalDevice& phys_device = m_physical_devices.at(i);
-			VkPhysicalDeviceProperties phys_properties{};
-			vkGetPhysicalDeviceProperties(phys_device, &phys_properties);
-			std::cout << "Physical device: " << std::endl;
-			std::cout << phys_properties.deviceName << std::endl;
-			std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
-			std::cout << "device type: " << phys_properties.deviceType << std::endl;
-			VkPhysicalDeviceFeatures phys_features{};
-			vkGetPhysicalDeviceFeatures(phys_device, &phys_features);
+		uint32_t gpu_count = 0;
+		vkEnumeratePhysicalDevices(m_instance, &gpu_count, nullptr);
+		if (gpu_count == 0) throw std::runtime_error("no GPUs found");
 
-			vkGetPhysicalDeviceMemoryProperties(phys_device, &m_phys_memory_properties);
-			std::cout << "heap count: " << m_phys_memory_properties.memoryHeapCount << std::endl;
-			for (uint32_t j = 0; j < m_phys_memory_properties.memoryHeapCount; j++)
-			{
-				VkMemoryHeap heap{};
-				heap = m_phys_memory_properties.memoryHeaps[j];
+		std::vector<VkPhysicalDevice> gpus(gpu_count);
+		vkEnumeratePhysicalDevices(m_instance, &gpu_count, gpus.data());
 
-				std::cout << "heap size:" << std::endl;
-				std::cout << heap.size << std::endl;
-				std::cout << "flags: " << heap.flags << std::endl;
-			}
-			if (!phys_features.geometryShader)
-			{
-				continue;
-			}
-
-			if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
-				m_chosen_phys_device == VK_NULL_HANDLE)
-			{
-				m_chosen_phys_device = phys_device;
-				spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
-				break;
-			}
-		}
+		m_chosen_phys_device = gpus[0];                // keep it simple
+		m_graphics_queue_family_index = 0;
+		m_present_queue_family_index = m_graphics_queue_family_index;
 
 		assert(m_chosen_phys_device != VK_NULL_HANDLE);
-	}
 
-	void Renderer_Vk::create_logical_device_and_queues()
-	{
-		// Queue family logic
-		uint32_t queue_families_count = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
-			&queue_families_count,
-			nullptr);
-		assert(queue_families_count > 0);
-		std::vector<VkQueueFamilyProperties> family_properties(queue_families_count);
-		vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
-			&queue_families_count,
-			family_properties.data());
 
-		// Check queues for present support
-		std::vector<VkBool32> supports_present(queue_families_count);
-		for (auto i = 0; i < queue_families_count; i++)
-		{
-			vkGetPhysicalDeviceSurfaceSupportKHR(m_chosen_phys_device, i,
-				m_surface, &supports_present.at(i));
-		}
+		//VkPhysicalDeviceProperties phys_properties{};
+		//vkGetPhysicalDeviceProperties(m_chosen_phys_device, &phys_properties);
+		//std::cout << "Physical device: " << std::endl;
+		//std::cout << phys_properties.deviceName << std::endl;
+		//std::cout << "API VERSION: " << VK_API_VERSION_MAJOR(phys_properties.apiVersion) << "." << VK_API_VERSION_MINOR(phys_properties.apiVersion) << std::endl;
+		//std::cout << "device type: " << phys_properties.deviceType << std::endl;
+		//VkPhysicalDeviceFeatures phys_features{};
+		//vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &phys_features);
 
-		// Search for queue that supports transfer, present, and graphics
-		auto family_index = 0;
-		for (auto i = 0; i < queue_families_count; i++)
-		{
-			const auto& properties = family_properties.at(i);
-			if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags &&
-				VK_QUEUE_GRAPHICS_BIT & properties.queueFlags &&
-				supports_present.at(i))
-			{
-				family_index = i;
-				m_graphics_queue_family_index = i;
-				m_present_queue_family_index = i;
-				spdlog::debug("Choosing queue family with flags {} and count {}",
-					std::bitset<8>(properties.queueFlags).to_string(), properties.queueCount);
-				break;
-			}
-		}
-
-		VkDeviceQueueCreateInfo queue_create_info{};
-		queue_create_info.pNext = nullptr;
-		queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_create_info.flags = NULL;
-		queue_create_info.queueCount = 1;
-		queue_create_info.pQueuePriorities = &m_priority;
-		queue_create_info.queueFamilyIndex = family_index;
-
-		VkPhysicalDeviceFeatures supportedFeatures{};
-		vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &supportedFeatures);
-		VkPhysicalDeviceFeatures requiredFeatures{};
-		requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
-		requiredFeatures.tessellationShader = VK_TRUE;
-		requiredFeatures.geometryShader = VK_TRUE;
-		requiredFeatures.samplerAnisotropy = VK_TRUE;
-
-		VkDeviceCreateInfo device_create_info{};
-		device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		device_create_info.pEnabledFeatures = &requiredFeatures;
-		device_create_info.queueCreateInfoCount = 1;
-		device_create_info.pQueueCreateInfos = &queue_create_info;
-		device_create_info.enabledExtensionCount = m_required_device_extensions.size();
-		device_create_info.ppEnabledExtensionNames = m_required_device_extensions.data();
-		// Start creating logical device
-		if (vkCreateDevice(m_chosen_phys_device, &device_create_info, nullptr, &m_device) != VK_SUCCESS)
-		{
-			spdlog::throw_spdlog_ex("Could not create logical device");
-		}
-
-		vkGetDeviceQueue(m_device, family_index, 0, &m_graphics_queue);
-		vkGetDeviceQueue(m_device, family_index, 0, &m_present_queue);
-	}
-
-	void Renderer_Vk::create_buffers_and_images()
-	{
-		VkBufferCreateInfo buffer_info{};
-		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_info.size = RESOLUTION_X * RESOLUTION_Y * 512; // 512MB
-		buffer_info.pNext = nullptr;
-		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-			VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		if (vkCreateBuffer(m_device, &buffer_info, nullptr, &m_buffer) != VK_SUCCESS)
-		{
-			spdlog::throw_spdlog_ex("Could not create buffer");
-		}
-
-		VkFormat format{};
-		VkFormatProperties properties{};
-		vkGetPhysicalDeviceFormatProperties(m_chosen_phys_device, format, &properties);
-
-		// vkGetPhysicalDeviceImageFormatProperties(m_device, )
-
-		//VkImageCreateInfo image_info{};
-		//image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		//image_info.imageType = VK_IMAGE_TYPE_2D;
-		//image_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-		//image_info.extent = { RESOLUTION_X, RESOLUTION_Y, 1 };
-		//image_info.mipLevels = 10;
-		//image_info.arrayLayers = 1;
-		//image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		//image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		//image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		//image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		//image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		//if (vkCreateImage(m_device, &image_info, nullptr, &m_image) != VK_SUCCESS)
+		//vkGetPhysicalDeviceMemoryProperties(m_chosen_phys_device, &m_phys_memory_properties);
+		//std::cout << "heap count: " << m_phys_memory_properties.memoryHeapCount << std::endl;
+		//for (uint32_t j = 0; j < m_phys_memory_properties.memoryHeapCount; j++)
 		//{
-		//	spdlog::throw_spdlog_ex("Could not create image.");
+		//	VkMemoryHeap heap{};
+		//	heap = m_phys_memory_properties.memoryHeaps[j];
+
+		//	std::cout << "heap size:" << std::endl;
+		//	std::cout << heap.size << std::endl;
+		//	std::cout << "flags: " << heap.flags << std::endl;
 		//}
+
+
+		//if (phys_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+		//	m_chosen_phys_device == VK_NULL_HANDLE)
+		//{
+		//	m_chosen_phys_device = m_chosen_phys_device;
+		//	spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
+		//}
+
+		//assert(m_chosen_phys_device != VK_NULL_HANDLE);
 	}
+
+	void Renderer_Vk::create_logical_device_and_queues() {
+
+
+		// 7. Create the logical device + queues -----------------------------
+		float priority = 1.0f;
+		VkDeviceQueueCreateInfo qci{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+		qci.queueFamilyIndex = m_graphics_queue_family_index;
+		qci.queueCount = 1;
+		qci.pQueuePriorities = &priority;
+
+		const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+		VkDeviceCreateInfo dci{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		dci.queueCreateInfoCount = 1;
+		dci.pQueueCreateInfos = &qci;
+		dci.enabledExtensionCount = 1;
+		dci.ppEnabledExtensionNames = devExts;
+
+		check(vkCreateDevice(m_chosen_phys_device, &dci, nullptr, &m_device), "vkCreateDevice");
+		volkLoadDevice(m_device);
+
+		vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
+
+	}
+	//void Renderer_Vk::create_logical_device_and_queues()
+	//{
+	//	// Queue family logic
+	//	uint32_t queue_families_count = 0;
+	//	vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
+	//		&queue_families_count,
+	//		nullptr);
+	//	assert(queue_families_count > 0);
+	//	std::vector<VkQueueFamilyProperties> family_properties(queue_families_count);
+	//	vkGetPhysicalDeviceQueueFamilyProperties(m_chosen_phys_device,
+	//		&queue_families_count,
+	//		family_properties.data());
+
+	//	// Check queues for present support
+	//	std::vector<VkBool32> supports_present(queue_families_count);
+	//	for (auto i = 0; i < queue_families_count; i++)
+	//	{
+	//		vkGetPhysicalDeviceSurfaceSupportKHR(m_chosen_phys_device, i,
+	//			m_surface, &supports_present.at(i));
+	//	}
+
+	//	// Search for queue that supports transfer, present, and graphics
+	//	auto family_index = 0;
+	//	for (auto i = 0; i < queue_families_count; i++)
+	//	{
+	//		const auto& properties = family_properties.at(i);
+	//		if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags &&
+	//			VK_QUEUE_GRAPHICS_BIT & properties.queueFlags &&
+	//			supports_present.at(i))
+	//		{
+	//			family_index = i;
+	//			m_graphics_queue_family_index = i;
+	//			m_present_queue_family_index = i;
+	//			spdlog::debug("Choosing queue family with flags {} and count {}",
+	//				std::bitset<8>(properties.queueFlags).to_string(), properties.queueCount);
+	//			break;
+	//		}
+	//	}
+
+	//	VkDeviceQueueCreateInfo queue_create_info{};
+	//	queue_create_info.pNext = nullptr;
+	//	queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	//	queue_create_info.flags = NULL;
+	//	queue_create_info.queueCount = 1;
+	//	queue_create_info.pQueuePriorities = &m_priority;
+	//	queue_create_info.queueFamilyIndex = m_graphics_queue_family_index;
+
+	//	VkPhysicalDeviceFeatures supportedFeatures{};
+	//	vkGetPhysicalDeviceFeatures(m_chosen_phys_device, &supportedFeatures);
+	//	VkPhysicalDeviceFeatures requiredFeatures{};
+	//	requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
+	//	requiredFeatures.tessellationShader = VK_TRUE;
+	//	requiredFeatures.geometryShader = VK_TRUE;
+	//	requiredFeatures.samplerAnisotropy = VK_TRUE;
+
+	//	std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+	//	VkDeviceCreateInfo device_create_info{};
+	//	device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	//	device_create_info.pEnabledFeatures = &requiredFeatures;
+	//	device_create_info.queueCreateInfoCount = 1;
+	//	device_create_info.pQueueCreateInfos = &queue_create_info;
+	//	device_create_info.enabledExtensionCount = extensions.size();
+	//	device_create_info.ppEnabledExtensionNames = extensions.data();
+	//	// Start creating logical device
+	//	m_device = VK_NULL_HANDLE;
+	//	VK_CHECK_RESULT(vkCreateDevice(m_chosen_phys_device, &device_create_info, nullptr, &m_device));
+
+
+	//	vkGetDeviceQueue(m_device, m_graphics_queue_family_index, 0, &m_graphics_queue);
+	//	vkGetDeviceQueue(m_device, m_present_queue_family_index, 0, &m_present_queue);
+	//}
 
 	uint32_t Renderer_Vk::choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
 		VkMemoryPropertyFlags requiredFlags,
@@ -739,60 +747,15 @@ namespace Expectre
 
 	void Renderer_Vk::create_depth()
 	{
+		m_depth_format = tools::find_depth_format(m_chosen_phys_device);
 
-		m_depth.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+		create_image(m_swapchain_extent.width, m_swapchain_extent.height, m_depth_format,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			m_depth_image, m_depth_image_memory);
+		m_depth_image_view = tools::create_image_view(m_device, m_depth_image, m_depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-		// Create an optimal image used as the depth stencil attachment
-		// const depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT
-		VkImageCreateInfo image_info{};
-		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.format = m_depth.format;
-		// Use example's height and width
-		image_info.extent = { RESOLUTION_X, RESOLUTION_Y, 1 };
-		image_info.mipLevels = 1;
-		image_info.arrayLayers = 1;
-		image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		VK_CHECK_RESULT(vkCreateImage(m_device, &image_info, nullptr, &m_depth.image));
-
-		// Allocate memory for the image (device local) and bind it to our image
-		VkMemoryAllocateInfo mem_alloc{};
-		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		VkMemoryRequirements mem_reqs;
-		vkGetImageMemoryRequirements(m_device, m_depth.image, &mem_reqs);
-		mem_alloc.allocationSize = mem_reqs.size;
-		bool found = tools::find_matching_memory(mem_reqs.memoryTypeBits,
-			m_phys_memory_properties.memoryTypes,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_alloc.memoryTypeIndex);
-		assert(found);
-		VK_CHECK_RESULT(vkAllocateMemory(m_device, &mem_alloc, nullptr, &m_depth.mem));
-		VK_CHECK_RESULT(vkBindImageMemory(m_device, m_depth.image, m_depth.mem, 0));
-
-		// Create a view for the depth stencil image
-		// Images aren't directly accessed in Vulkan, but rather through views described by a subresource range
-		// This allows for multiple views of one image with differing ranges (e.g. for different layers)
-		VkImageViewCreateInfo depth_view_info{};
-		depth_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		depth_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		depth_view_info.format = m_depth.format;
-		depth_view_info.subresourceRange = {};
-		depth_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		// Stencil aspect should only be set on depth + stencil formats (VK_FORMAT_D16_UNORM_S8_UINT..VK_FORMAT_D32_SFLOAT_S8_UINT)
-		if (m_depth.format >= VK_FORMAT_D16_UNORM_S8_UINT)
-		{
-			depth_view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		}
-		depth_view_info.subresourceRange.baseMipLevel = 0;
-		depth_view_info.subresourceRange.levelCount = 1;
-		depth_view_info.subresourceRange.baseArrayLayer = 0;
-		depth_view_info.subresourceRange.layerCount = 1;
-		depth_view_info.image = m_depth.image;
-		VK_CHECK_RESULT(vkCreateImageView(m_device, &depth_view_info, nullptr, &m_depth.view));
-
-		// TODO:consider naming DepthView
 	}
 
 	void Renderer_Vk::create_renderpass()
@@ -815,7 +778,7 @@ namespace Expectre
 		// Depth attachment
 
 		// attachments[1].flags = 0;
-		attachments[1].format = m_depth.format;
+		attachments[1].format = m_depth_format;
 		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;                           // Clear depth at start of first subpass
 		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;                     // We don't need depth after render pass has finished (DONT_CARE may result in better performance)
@@ -1110,7 +1073,7 @@ namespace Expectre
 		for (auto i = 0; i < m_swapchain_image_views.size(); i++)
 		{
 			std::array<VkImageView, MAX_CONCURRENT_FRAMES> attachments{
-				m_swapchain_image_views[i], m_depth.view };
+				m_swapchain_image_views[i], m_depth_image_view };
 
 			// All framebuffers use same renderpass setup
 			VkFramebufferCreateInfo framebuffer_info{};
@@ -1674,43 +1637,46 @@ namespace Expectre
 	{
 
 		// Check for up keys
-		const bool is_up = (event.type == SDL_KEYUP);
+		const bool is_up = (event.type == SDL_EVENT_KEY_UP);
 
-		if (event.type == SDL_KEYUP)
+		if (event.type == SDL_EVENT_KEY_UP)
 		{
-			switch (event.key.keysym.sym)
+			switch (event.key.key)
 			{
-			case SDLK_w:
+			case SDLK_W:
 				m_camera.moveForward = is_up;
 				break;
-			case SDLK_s:
+			case SDLK_S:
 				m_camera.moveBack = is_up;
 				break;
-			case SDLK_a:
+			case SDLK_A:
 				m_camera.moveLeft = is_up;
 				break;
-			case SDLK_d:
+			case SDLK_D:
 				m_camera.moveRight = is_up;
 				break;
 			}
 		}
 
 		// Check for down keys
-		const bool is_down = (event.type == SDL_KEYDOWN);
-		switch (event.key.keysym.sym)
+		const bool is_down = (event.type == SDL_EVENT_KEY_DOWN);
+		if (event.type == SDL_EVENT_KEY_DOWN)
 		{
-		case SDLK_w:
-			m_camera.moveForward = is_down;
-			break;
-		case SDLK_s:
-			m_camera.moveBack = is_down;
-			break;
-		case SDLK_a:
-			m_camera.moveLeft = is_down;
-			break;
-		case SDLK_d:
-			m_camera.moveRight = is_down;
-			break;
+			switch (event.key.key)
+			{
+			case SDLK_W:
+				m_camera.moveForward = is_down;
+				break;
+			case SDLK_S:
+				m_camera.moveBack = is_down;
+				break;
+			case SDLK_A:
+				m_camera.moveLeft = is_down;
+				break;
+			case SDLK_D:
+				m_camera.moveRight = is_down;
+				break;
+			}
 		}
 	}
 

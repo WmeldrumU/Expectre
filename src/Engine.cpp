@@ -29,12 +29,12 @@ namespace Expectre
 		{
 			throw std::runtime_error("renderer could not initialize!");
 		}
-		static uint64_t last_time = SDL_GetTicks64();
+		static uint64_t last_time = SDL_GetTicks();
 		bool quit = false;
 
 		while (!quit)
 		{
-			uint64_t current_time = SDL_GetTicks64();
+			uint64_t current_time = SDL_GetTicks();
 			uint64_t delta_time = current_time - last_time;
 			last_time = current_time;
 
@@ -42,8 +42,8 @@ namespace Expectre
 			quit = process_input();
 
 			// Render frame
-			m_renderer->update(delta_time);
-			m_renderer->draw_frame();
+			//m_renderer->update(delta_time);
+			//m_renderer->draw_frame();
 
 			limit_frame_rate(60, delta_time);
 		}
@@ -59,12 +59,6 @@ namespace Expectre
 			auto sleepTime = std::chrono::milliseconds(desired_frame_time - delta_time);
 			std::this_thread::sleep_for(sleepTime);
 		}
-	}
-
-	Engine::~Engine()
-	{
-		m_observers.clear();
-		//m_renderer.reset();
 	}
 
 	void Engine::draw()
@@ -84,12 +78,12 @@ namespace Expectre
 		while (SDL_PollEvent(&event) != 0)
 		{
 			// User requests quit
-			if (event.type == SDL_QUIT)
+			if (event.type == SDL_EVENT_QUIT)
 			{
 				quit = true;
 			}
 			// Handle input
-			else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+			else if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
 			{
 				for (auto& weak_observer : m_observers)
 				{
