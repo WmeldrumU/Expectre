@@ -1,6 +1,9 @@
 #include "RendererWgpu.h"
 #include "spdlog/spdlog.h"
 #include "../lib/sdl2webgpu/sdl2webgpu.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif // __EMSCRIPTEN__
 
 namespace Expectre
 {
@@ -33,17 +36,38 @@ namespace Expectre
     spdlog::debug("RendererWgpu::RendererWgpu(): instance = {:p}", (void *)m_instance);
     spdlog::debug("RendererWgpu::RendererWgpu(): surface = {:p}", (void *)surface);
 
-   
     WGPURequestAdapterOptions options{};
     // TODO: The second arg will need to change as we take in options for the adapter
     m_adapter = requestAdapterSync(m_instance, &options);
     checkAdapterLimits();
+    WGPUDeviceLostCallbackNew deviceLostCallback =
+        [](WGPUDevice const *device, WGPUDeviceLostReason reason,
+           char const *message, void *userdata)
+    {
+      spdlog::error("Device lost: {}", message);
+    };
+
+    WGPUDeviceLostCallbackInfo deviceLostCallbackInfo{};
+    deviceLostCallbackInfo.nextInChain = nullptr;
+    deviceLostCallbackInfo.callback = deviceLostCallback;
+    deviceLostCallbackInfo.userdata = nullptr;
+    // TODO: WHAT IS THIS?
+    deviceLostCallbackInfo.mode = WGPUCallbackMode::WGPUCallbackMode_AllowSpontaneous;
 
     WGPUDeviceDescriptor device_desc{};
+    device_desc.label = "My Device";
+    device_desc.requiredFeatureCount = 0;
+    device_desc.requiredLimits = nullptr;
+    device_desc.defaultQueue.nextInChain = nullptr;
+    device_desc.defaultQueue.label = "The default queue";
+    device_desc.deviceLostCallbackInfo = deviceLostCallbackInfo;
     m_device = requestDeviceSync(m_adapter, &device_desc);
+    wgpuAdapterRelease(m_adapter);
+    wgpuDeviceSetUncapturedErrorCallback(m_device, [](WGPUErrorType type, char const *message, void *userdata)
+                                         { spdlog::error("Uncaptured error: {}", message); }, nullptr);
+    
     spdlog::info("testing");
   }
-
 
   WGPUAdapter RendererWgpu::requestAdapterSync(WGPUInstance instance, WGPURequestAdapterOptions const *options)
   {
@@ -71,6 +95,12 @@ namespace Expectre
 
     wgpuInstanceRequestAdapter(instance, options, callback, static_cast<void *>(&user_data));
 
+#ifdef __EMSCRIPTEN__
+    while (user_data.request_ended == false)
+    {
+      emscripten_sleep(1);
+    }
+#endif
     return user_data.adapter;
   }
   WGPUDevice RendererWgpu::requestDeviceSync(WGPUAdapter adapter, WGPUDeviceDescriptor const *descriptor)
@@ -99,12 +129,19 @@ namespace Expectre
 
     wgpuAdapterRequestDevice(m_adapter, descriptor, callback, static_cast<void *>(&user_data));
 
+#ifdef __EMSCRIPTEN__
+    while (user_data.request_ended == false)
+    {
+      emscripten_sleep(1);
+    }
+#endif //__EMSCRIPTEN__
+
     return user_data.device;
   }
 
-  void RendererWgpu::checkAdapterLimits() {
+  void RendererWgpu::checkAdapterLimits()
+  {
     bool success = wgpuAdapterGetLimits(m_adapter, &m_limits) == WGPUStatus_Success;
-
     // Show adapter limits
     if (success)
     {
@@ -120,7 +157,7 @@ namespace Expectre
   {
     spdlog::debug("RendererWgpu::~RendererWgpu()");
     wgpuDeviceRelease(m_device);
-    wgpuAdapterRelease(m_adapter);
+    //wgpuAdapterRelease(m_adapter);
     wgpuInstanceRelease(m_instance);
     SDL_DestroyWindow(m_window);
     SDL_Quit();
