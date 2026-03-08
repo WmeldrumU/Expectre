@@ -1,7 +1,7 @@
 ﻿// Excpectre.cpp : Defines the entry point for the application.
 //
 #include <iostream>
-#include "spdlog.h"
+#include "spdlog/spdlog.h"
 
 using namespace std;
 
