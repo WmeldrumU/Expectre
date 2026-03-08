@@ -16,6 +16,7 @@
 
 #include "AppTime.h"
 #include "Mesh.h"
+#include "MeshManager.h"
 #include "RenderContextVk.h"
 #include "ShaderFileWatcher.h"
 #include "ToolsVk.h"
@@ -34,7 +35,8 @@ RendererVk::RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
       m_graphics_queue_index{graphics_queue_index},
       m_present_queue{present_queue},
       m_present_queue_index{present_queue_index},
-      m_extent{RESOLUTION_X, RESOLUTION_Y} {
+      m_extent{RESOLUTION_X, RESOLUTION_Y},
+      m_resource_manager{device, allocator, graphics_queue} {
 
   // Command buffers and swapchain
   create_swapchain();
@@ -84,7 +86,9 @@ RendererVk::RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
       WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
-  create_geometry_buffer();
+  m_resource_manager.create_vertex_buffer(1024 * 1024 *
+                                          48); // 48 MB for vertices
+  m_resource_manager.create_index_buffer(1024 * 1024 * 16); // 16 MB for indices
 
   std::vector<VkDescriptorPoolSize> pool_sizes(2);
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -160,8 +164,8 @@ RendererVk::~RendererVk() {
 
   // Destroy vertex and index buffer
 
-  vmaDestroyBuffer(m_allocator, m_geometry_buffer.buffer,
-                   m_geometry_buffer.allocation);
+  // vmaDestroyBuffer(m_allocator, m_geometry_buffer.buffer,
+  //                  m_geometry_buffer.allocation);
 
   // Destroy pipeline and related layouts
   vkDestroyPipeline(m_device, m_pipeline, nullptr);
@@ -200,7 +204,8 @@ void RendererVk::create_swapchain() {
   // tools::choose_swap_extent(swapchain_support_details.capabilities,
   // m_window);
 
-  // uint32_t image_count = swapchain_support_details.capabilities.minImageCount
+  // uint32_t image_count =
+  // swapchain_support_details.capabilities.minImageCount
   // + 1;
   uint32_t image_count = MAX_CONCURRENT_FRAMES;
   if (swapchain_support_details.capabilities.maxImageCount > 0 &&
@@ -258,29 +263,6 @@ VkImageView RendererVk::create_swapchain_image_views(VkDevice device,
                                           m_swapchain_image_format, flags);
 
   return image_view;
-}
-
-void RendererVk::create_geometry_buffer() {
-
-  static uint32_t geometry_buffer_init_size_bytes = 1024 * 1024 * 64; // 64MB
-  // === STAGING BUFFERS ===
-
-  auto buffer = ToolsVk::create_buffer(
-      m_allocator, geometry_buffer_init_size_bytes,
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-          VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      VMA_MEMORY_USAGE_GPU_ONLY, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-  m_geometry_buffer.allocation = buffer.allocation;
-  m_geometry_buffer.buffer = buffer.buffer;
-  m_geometry_buffer.vertex_offset = 0;
-  m_geometry_buffer.index_begin =
-      static_cast<uint32_t>(geometry_buffer_init_size_bytes * 0.80);
-  // Must be rounded to nearest multiple of 4 for vkCmdBindIndexBuffer
-  m_geometry_buffer.index_begin = (m_geometry_buffer.index_begin + 3) & ~3;
-
-  m_geometry_buffer.index_offset = m_geometry_buffer.index_begin;
-  m_geometry_buffer.buffer_size = geometry_buffer_init_size_bytes;
 }
 
 VkRenderPass RendererVk::create_renderpass(VkDevice device,
@@ -611,17 +593,17 @@ void RendererVk::create_sync_objects() {
   // === SYNCHRONIZATION PRIMITIVE COUNTS ===
   // Different counts because they serve different purposes:
   //
-  // Frames-in-flight (typically 2): CPU can prepare frame N+1 while GPU renders
-  // frame N Swapchain images (typically 2-3): The actual framebuffers we render
-  // into
+  // Frames-in-flight (typically 2): CPU can prepare frame N+1 while GPU
+  // renders frame N Swapchain images (typically 2-3): The actual framebuffers
+  // we render into
   //
   // We need:
   // - Fences per frame-in-flight (CPU waits for GPU to finish frame N before
   // reusing resources)
-  // - Acquire semaphores per frame-in-flight (signals when we get an image from
-  // swapchain)
-  // - Render finished semaphores per swapchain IMAGE (each image needs its own
-  // to prevent reuse)
+  // - Acquire semaphores per frame-in-flight (signals when we get an image
+  // from swapchain)
+  // - Render finished semaphores per swapchain IMAGE (each image needs its
+  // own to prevent reuse)
 
   m_finished_render_semaphores.resize(m_swapchain_images.size()); // Per image
   m_available_image_semaphores.resize(MAX_CONCURRENT_FRAMES);     // Per frame
@@ -709,19 +691,23 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
   VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(command_buffer, 0, 1, &m_geometry_buffer.buffer,
-                         offsets);
+  const auto &index_buffer = m_resource_manager.get_index_buffer();
+  const auto &vertex_buffer = m_resource_manager.get_vertex_buffer();
 
-  vkCmdBindIndexBuffer(command_buffer, m_geometry_buffer.buffer,
-                       m_geometry_buffer.index_begin, VK_INDEX_TYPE_UINT32);
+  vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
+
+  vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0 /*offset*/,
+                       VK_INDEX_TYPE_UINT32);
 
   vkCmdBindDescriptorSets(
       command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1,
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
-  for (const auto &mesh : m_mesh_allocations) {
+  const std::vector<MeshAllocation> &mesh_allocations =
+      m_resource_manager.get_mesh_allocations();
+  for (const auto &mesh : mesh_allocations) {
     vkCmdDrawIndexed(command_buffer, mesh.index_count, 1, mesh.index_offset,
-                     mesh.vertex_offset, 0);
+                     mesh.vertex_offset, 0 /* first instance */);
   }
 
   vkCmdEndRenderPass(command_buffer);
@@ -734,20 +720,20 @@ void RendererVk::draw_frame(const Camera &camera) {
   /**
    * The semaphore lifecycle for each image goes like this:
    *
-   * 1 - vkAcquireNextImageKHR → signals m_available_image_semaphore[frame] when
-   * image is available 2 - vkQueueSubmit → waits on
+   * 1 - vkAcquireNextImageKHR → signals m_available_image_semaphore[frame]
+   * when image is available 2 - vkQueueSubmit → waits on
    * m_available_image_semaphore[frame], signals
    * m_finished_render_semaphore[image_index] when rendering completes 3 -
    * vkQueuePresentKHR → waits on m_finished_render_semaphore[image_index],
-   * presents image (no signal) Image goes back to swapchain internally (Later)
-   * vkAcquireNextImageKHR → signals m_available_image_semaphore[frame] again
-   * when that image is free
+   * presents image (no signal) Image goes back to swapchain internally
+   * (Later) vkAcquireNextImageKHR → signals
+   * m_available_image_semaphore[frame] again when that image is free
    */
 
   // Wait for the GPU to finish rendering frame N before we start frame
-  // N+MAX_CONCURRENT_FRAMES (e.g., with MAX_CONCURRENT_FRAMES=2: wait for frame
-  // 0 before starting frame 2) This prevents us from overwriting command
-  // buffers/uniforms that GPU is still using
+  // N+MAX_CONCURRENT_FRAMES (e.g., with MAX_CONCURRENT_FRAMES=2: wait for
+  // frame 0 before starting frame 2) This prevents us from overwriting
+  // command buffers/uniforms that GPU is still using
   vkWaitForFences(m_device, 1, &m_in_flight_fences[m_current_frame], VK_TRUE,
                   UINT64_MAX);
 
@@ -905,34 +891,24 @@ void RendererVk::update_uniform_buffer(const Camera &camera) {
 
 void RendererVk::update(uint64_t delta_t) {
 
-  // update camera velocity
-  glm::vec3 dir(0.0f);
-
-  if (m_camera.moveForward)
-    dir += glm::vec3(0.0f, 0.0f, -1.0f);
-  if (m_camera.moveBack)
-    dir += glm::vec3(0.0f, 0.0f, 1.0f);
-  if (m_camera.moveLeft)
-    dir += glm::vec3(-1.0f, 0.0f, 0.0f);
-  if (m_camera.moveRight)
-    dir += glm::vec3(1.0f, 0.0f, 0.0f);
-
-  if (glm::length(dir) > 0.0f)
-    dir = glm::normalize(dir);
-
-  m_camera.pos +=
-      dir * m_camera.camera_speed * static_cast<float>(delta_t) / 1000.0f;
-
   // Check if shader files have changed
   const bool frag_shader_changed = m_frag_shader_watcher->check_for_changes();
   const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
   if (frag_shader_changed || vert_shader_changed) {
     m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
   }
+  // upload pending assets to GPU
 
-  // if (m_ui_renderer) {
-  //	m_ui_renderer->Update(Time::Instance().RunningTimeSeconds());
-  // }
+  for (const auto &mesh_handle :
+       MeshManager::Instance().consume_meshes_to_upload_to_gpu()) {
+    const auto &mesh_opt = MeshManager::Instance().get_mesh(mesh_handle);
+    if (mesh_opt.has_value()) {
+      m_resource_manager.upload_mesh_to_gpu(mesh_opt.value(), m_cmd_pool);
+    } else {
+      spdlog::error("Mesh with handle {} not found for GPU upload",
+                    mesh_handle.mesh_id);
+    }
+  }
 }
 
 void RendererVk::upload_texture_to_gpu(const Texture &texture) {

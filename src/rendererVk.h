@@ -18,6 +18,7 @@
 
 #include "IRenderer.h"
 #include "IUIRenderer.h"
+#include "RenderResourceManager.h"
 #include "ShaderFileWatcher.h"
 #include "TextureVk.h"
 #include "ToolsVk.h"
@@ -33,16 +34,6 @@
 namespace Expectre {
 
 class Camera;
-// struct GeometryBuffer {
-//   VmaAllocation allocation{VK_NULL_HANDLE}; // Allocation handle for the buffer
-//   VkBuffer buffer{}; // Handle to the Vulkan buffer object that the memory is
-//                      // bound to
-//   uint32_t vertex_offset = 0; // bytes
-//   uint32_t index_begin = 0;   // bytes
-//   uint32_t index_offset = 0;  // bytes
-//   uint32_t buffer_size = 0;   // Total size of the geometry buffer in bytes
-//   std::unordered_map<MeshHandle, MeshAllocation> mesh_allocations;
-// };
 
 struct MVP_uniform_object {
   glm::mat4 model;
@@ -77,8 +68,6 @@ public:
   bool is_ready() { return m_ready; }
   void update(uint64_t delta_t) override;
   void draw_frame(const Camera &camera) override;
-
-  void upload_mesh_to_gpu(const Mesh &mesh);
   void upload_texture_to_gpu(const Texture &texture);
 
 private:
@@ -86,8 +75,6 @@ private:
 
   VkCommandBuffer create_command_buffer(VkDevice device,
                                         VkCommandPool command_pool);
-
-  void create_geometry_buffer();
 
   VkImageView create_swapchain_image_views(VkDevice device, VkImage image,
                                            VkFormat format,
@@ -163,12 +150,11 @@ private:
   std::vector<VkSemaphore> m_available_image_semaphores{};
   std::vector<VkSemaphore> m_finished_render_semaphores{};
   std::vector<VkFence> m_in_flight_fences{};
-  GeometryBuffer m_geometry_buffer{};
-  
+  RenderResourceManager m_resource_manager;
+
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
   VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
   VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
-  // VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, MAX_CONCURRENT_FRAMES> m_cmd_buffers;
   bool m_ready = false;
 

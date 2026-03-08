@@ -52,9 +52,6 @@ struct AllocatedBuffer {
   AllocatedBuffer(const AllocatedBuffer &) = default;
   AllocatedBuffer &operator=(const AllocatedBuffer &) = default;
 };
-typedef AllocatedBuffer VertexBuffer;
-typedef AllocatedBuffer IndexBuffer;
-
 namespace ToolsVk {
 
 static std::string errorString(VkResult errorCode) {
@@ -349,6 +346,7 @@ get_required_instance_extensions(bool enable_validation_layers) {
     spdlog::debug("- {}", ext);
   }
 
+  extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
   return extensions;
 }
 

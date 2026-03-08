@@ -24,36 +24,15 @@ uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
 
 TextureHandle TextureManager::import_texture(std::string image_dir) {
   int tex_width, tex_height, tex_channels;
+  constexpr int desired_channels = 4; // Force RGBA
   stbi_uc *data = stbi_load(image_dir.c_str(), &tex_width, &tex_height,
-                            &tex_channels, 4); // Force RGBA
+                            &tex_channels, desired_channels); // Force RGBA
 
   if (!data) {
     spdlog::error("Failed to load texture from '{}'", image_dir);
     std::terminate();
   }
-
-  Texture tex{};
-  tex.channels = tex_channels;
-  tex.width = tex_width;
-  tex.height = tex_height;
-  tex.name = image_dir;
-  tex.data = data;
-
-  // Compute hash and check for duplicates
-  uint64_t hash = compute_texture_hash(tex);
-  TextureHandle handle{};
-  handle.texture_id = hash;
-  if (m_texture_map.find(handle) != m_texture_map.end()) {
-    // Texture already exists, return existing ID
-    spdlog::error("Texture '{}' (hash - {}) already cached, reusing", tex.name,
-                  hash);
-    return handle;
-  }
-
-  m_texture_map[handle] = std::move(tex);
-  m_textures_to_upload_to_gpu.push_back(handle);
-
-  return handle;
+  import_texture(image_dir, data, tex_width, tex_height, desired_channels);
 }
 
 TextureHandle TextureManager::import_texture(std::string name, void *data,
@@ -69,7 +48,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   tex.width = width;
   tex.height = height;
   tex.name = name;
-  tex.data = data;
+  tex.data = static_cast<uint8_t *>(data);
 
   // Compute hash and check for duplicates
   uint64_t hash = compute_texture_hash(tex);

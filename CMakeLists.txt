@@ -51,6 +51,8 @@ find_package(xxHash REQUIRED)
     # src/RendererDx.h
     src/RendererVk.cpp
     src/RendererVk.h
+    src/RenderResourceManager.h
+    src/RenderResourceManager.cpp
     # src/RendererWgpu.cpp
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
@@ -79,11 +81,26 @@ message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
 add_executable(ExpectreApp ${SOURCES})
 
-# Noesis Include/Lib Paths
-set(NOESIS_ROOT "C:/noesis")
-include_directories(${NOESIS_ROOT}/Include)
-link_directories(${NOESIS_ROOT}/Lib/windows_x86_64)
 
+# TODO: get rid of this hardcoded path and use Conan to manage Noesis as well
+if(WIN32)
+    set(NOESIS_ROOT "C:/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Bin/windows_x86_64")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.lib")
+elseif(APPLE)
+    set(NOESIS_ROOT "$ENV{HOME}/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Bin/macos")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.dylib")
+else()
+    set(NOESIS_ROOT "/usr/local/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Bin/linux_x86_64")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/libNoesis.so")
+endif()
+
+# Create a clean Noesis target
+add_library(Noesis INTERFACE)
+target_include_directories(Noesis INTERFACE "${NOESIS_ROOT}/Include")
+target_link_libraries(Noesis INTERFACE "${NOESIS_LIB_FILE}")
 set(COMMON_LIBRARIES
     SDL3::SDL3
     glm::glm
