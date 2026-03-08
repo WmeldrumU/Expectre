@@ -2,6 +2,7 @@
 #define RENDERER_VK_H
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <optional>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
@@ -19,21 +20,21 @@ namespace Expectre {
     private:
         void create_instance();
 
-        void create_debug();
+        void enable_layers();
         
         void create_surface();
 
         void select_physical_device();
 
-        void select_queue_family();
         void create_logical_device_and_queues();
 
         SDL_Window* m_window{};
         VkInstance m_instance{};
         VkSurfaceKHR m_surface{};
-        std::vector<const char*> m_validation_layers;
+        std::vector<const char*> m_layers;
         std::vector<VkPhysicalDevice> m_physical_devices;
-        VkPhysicalDevice m_chosen_phys_device;
+        std::optional<VkPhysicalDevice> m_chosen_phys_device;
+        std::vector<VkExtensionProperties> m_supported_extensions;
         VkDevice m_device;
         uint32_t graphics_queue_family_index{UINT32_MAX};
         uint32_t present_queue_family_index{UINT32_MAX};

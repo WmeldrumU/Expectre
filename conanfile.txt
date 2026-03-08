@@ -1,6 +1,6 @@
 [requires]
 sdl/[~2.26]
-
+spdlog/1.11.0
 [generators]
 CMakeToolchain
 CMakeDeps

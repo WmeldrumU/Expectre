@@ -8,7 +8,7 @@ project(Expectre CXX)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 find_package(SDL2 REQUIRED)
 find_package(Vulkan REQUIRED)
-
+find_package(spdlog REQUIRED)
 # message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
 # message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
 file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp)
@@ -16,9 +16,10 @@ file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp)
 # add the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 # include is needed when using Ninja/MinGW
-target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+# target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC
     SDL2::SDL2
     SDL2::SDL2main
     Vulkan::Vulkan
+    spdlog::spdlog
 )
