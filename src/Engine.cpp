@@ -33,8 +33,6 @@ namespace Expectre
             // Render frame 
             m_renderer->draw_frame();
 
-            // Present the frame
-            // ...
         }
     }
 
