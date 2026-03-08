@@ -5,10 +5,14 @@
 #include <optional>
 #include <string>
 #include <stdexcept>
+#include <array>
 
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_vulkan.h"
 
+#define MAX_CONCURRENT_FRAMES 2
+// Default fence timeout in nanoseconds
+#define DEFAULT_FENCE_TIMEOUT 100000000000
 namespace Expectre
 {
     typedef struct _SwapChainBuffers
@@ -23,6 +27,17 @@ namespace Expectre
         float mvp[4][4];
         float position[12 * 3][4];
         float attr[12 * 3][4];
+    };
+
+    typedef struct UniformBuffer
+    {
+        VkDeviceMemory memory;
+        VkBuffer buffer;
+        // The descriptor set stores the resources bound to the binding points in a shader
+        // It connects the binding points of the different shaders with the buffers and images used for those bindings
+        VkDescriptorSet descriptorSet;
+        // We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
+        uint8_t *mapped{nullptr};
     };
 
     class Renderer_Vk
@@ -115,11 +130,13 @@ namespace Expectre
         std::vector<const char *> m_required_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
         std::vector<VkImage> m_swapchain_images{};
         std::vector<SwapChainBuffer> m_swapchain_buffers{};
-        std::vector<VkBuffer> m_swapchain_uniform_buffers{};
-        std::vector<VkDeviceMemory> m_uniform_memories{};
+        // std::vector<VkBuffer> m_swapchain_uniform_buffers{};
+        // std::vector<VkDeviceMemory> m_uniform_memories{};
         std::vector<VkSemaphore> available_image_semaphors{};
         std::vector<VkSemaphore> finished_render_semaphors{};
         std::vector<VkFence> in_flight_fences{};
+
+        std::array<UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
         VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
         VkDevice m_device = VK_NULL_HANDLE;
         VkBuffer m_buffer = VK_NULL_HANDLE;
@@ -138,6 +155,21 @@ namespace Expectre
             VkDeviceMemory mem;
             VkImageView view;
         } m_depth;
+
+        // Index buffer
+        struct
+        {
+            VkDeviceMemory memory{VK_NULL_HANDLE};
+            VkBuffer buffer;
+            uint32_t count{0};
+        } indices;
+
+        // Vertex buffer and attributes
+        struct
+        {
+            VkDeviceMemory memory{VK_NULL_HANDLE}; // Handle to the device memory for this buffer
+            VkBuffer buffer;                       // Handle to the Vulkan buffer object that the memory is bound to
+        } vertices;
 
         VkSurfaceFormatKHR m_surface_format{};
         uint32_t m_graphics_queue_family_index{UINT32_MAX};
