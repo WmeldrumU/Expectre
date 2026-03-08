@@ -14,9 +14,7 @@
 #include <set>
 #include <bitset>
 #include <array>
-#include <chrono>
 #include <cassert>
-
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -822,13 +820,13 @@ namespace Expectre
 
 	void RendererVk::update_uniform_buffer()
 	{
-		static auto startTime = std::chrono::high_resolution_clock::now();
+		//static auto startTime = std::chrono::high_resolution_clock::now();
 
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-		glm::vec3 start{ 0.0f, 3.0f, -2.0f };
-		glm::vec3 end{ 0.0f, 3.0f, -5.0f };
-		float t = sin(time / 4.0f * glm::pi<float>()) * 0.5f + 0.5f;
+		//auto currentTime = std::chrono::high_resolution_clock::now();
+		//float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		//glm::vec3 start{ 0.0f, 3.0f, -2.0f };
+		//glm::vec3 end{ 0.0f, 3.0f, -5.0f };
+		//float t = sin(time / 4.0f * glm::pi<float>()) * 0.5f + 0.5f;
 
 		// glm::vec3 camera_pos = (1.0f - t) * start + t * end;
 

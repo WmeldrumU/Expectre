@@ -1,4 +1,5 @@
 {
+    "C_Cpp.confkigurationProvider": "ms-vscode.cmake-tools",
     "files.associations": {
         "iostream": "cpp",
         "algorithm": "cpp",

@@ -1,7 +1,4 @@
 ﻿#include <iostream>
-#include <SDL3/SDL.h>
-#include "SDL3/SDL_vulkan.h"
-#include "SDL3/SDL_main.h"
 #include "Engine.h"
 #include "spdlog/spdlog.h"
 #include "Time.h"
@@ -12,7 +9,7 @@
 int main(int argc, char *argv[])
 {
 
-#ifdef _MSC_VER && __clang__
+#if defined(_MSC_VER) && defined(__clang__)
 	std::cout << "Compiled with clang-cl\n";
 #else
 	std::cout << "Other compiler\n";
@@ -23,7 +20,7 @@ int main(int argc, char *argv[])
 	{
 		std::cout << "STARTING UP...." << std::endl;
 		Expectre::Engine engine{};
-		engine.run();
+		// engine.run();
 	}
 	catch (std::exception &e)
 	{
