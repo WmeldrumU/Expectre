@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 	/*──── 6. Create VkInstance ───────────────────────────────────────*/
 	VkApplicationInfo app{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
 	app.pApplicationName = "minimal demo";
-	app.apiVersion = VK_API_VERSION_1_3;
+	app.apiVersion = VK_API_VERSION_1_4;
 
 	VkInstanceCreateInfo ici{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 	ici.pApplicationInfo = &app;
