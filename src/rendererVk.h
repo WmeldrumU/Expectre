@@ -103,6 +103,33 @@ namespace Expectre
 
         void update_uniform_buffer();
 
+        void create_texture_image();
+
+        void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                           VkMemoryPropertyFlags properties, VkBuffer &buffer,
+                           VkDeviceMemory &buffer_memory);
+
+        void create_image(uint32_t width, uint32_t height,
+                          VkFormat format, VkImageTiling tiling,
+                          VkImageUsageFlags usage,
+                          VkMemoryPropertyFlags properties,
+                          VkImage &image,
+                          VkDeviceMemory &image_memory);
+
+        void end_single_time_commands(VkCommandBuffer cmd_buffer);
+
+        void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+
+        VkCommandBuffer begin_single_time_commands();
+
+        void transition_image_layout(VkImage image,
+                                     VkFormat format, VkImageLayout old_layout,
+                                     VkImageLayout new_layout);
+
+        void create_texture_image_view();
+
+        void create_texture_sampler();
+
         uint32_t choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements,
                                         VkMemoryPropertyFlags requiredFlags,
                                         VkMemoryPropertyFlags prefferedFlags);
@@ -117,7 +144,7 @@ namespace Expectre
         VkPipelineLayout m_pipeline_layout{};
         VkPipeline m_pipeline{};
         VkDescriptorPool m_descriptor_pool{};
-        //std::vector<VkDescriptorSet> m_descriptor_sets{};
+        // std::vector<VkDescriptorSet> m_descriptor_sets{};
         VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_descriptor_set_layout{VK_NULL_HANDLE};
         std::vector<VkFramebuffer> m_framebuffers{};
@@ -170,6 +197,10 @@ namespace Expectre
             VkBuffer buffer;                       // Handle to the Vulkan buffer object that the memory is bound to
         } m_vertices;
 
+        VkImage m_texture_image;
+        VkImageView m_texture_image_view;
+        VkSampler m_texture_sampler;
+        VkDeviceMemory m_texture_image_memory;
         VkSurfaceFormatKHR m_surface_format{};
         uint32_t m_graphics_queue_family_index{UINT32_MAX};
         uint32_t m_present_queue_family_index{UINT32_MAX};
