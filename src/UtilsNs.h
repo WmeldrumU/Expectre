@@ -2006,70 +2006,79 @@ namespace Expectre {
 				}
 			};
 
+#define DESCRIPTOR_POOL_MAX_SETS 128
 
+		//static void UploadUniforms(uint32_t i, const UniformData* data, uint32_t& hash,
+			//	BaseVector<uint32_t>& offsets)
+			//{
+			//	NS_ASSERT(data != 0);
+			//	NS_ASSERT(data->numDwords > 0);
 
-		static void CreateNsShaders()
-		{
-			/*uint8_t* shaders = (uint8_t*)Alloc(NoesisApp::FastLZ::DecompressBufferSize(Shaders));
-			NoesisApp::FastLZ::Decompress(Shaders, sizeof(Shaders), shaders);
+			//	if (mCachedConstantHash[i] != data->hash)
+			//	{
+			//		VkDeviceSize alignment = mDeviceProperties.limits.minUniformBufferOffsetAlignment;
+			//		uint32_t size = data->numDwords * sizeof(uint32_t);
+			//		void* ptr = MapBuffer(mConstants[i], Align(size, (uint32_t)alignment));
+			//		memcpy(ptr, data->values, size);
 
-			for (uint32_t i = 0; i < Shader::Vertex::Count; i++)
-			{
-				const ShaderVS& vShader = ShadersVS(i, mCaps.linearRendering, mStereoSupport);
+			//		mCachedConstantHash[i] = data->hash;
+			//	}
 
-				VkShaderModuleCreateInfo createInfo{};
-				createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-				createInfo.codeSize = vShader.size;
-				createInfo.pCode = (uint32_t*)(shaders + vShader.start);
+			//	hash = Hash(hash, mConstants[i].currentPage->hash | (data->numDwords << 16));
+			//	offsets.PushBack(mConstants[i].drawPos);
+			//}
 
-				VK_CHECK_RESULT(vkCreateShaderModule(mDevice, &createInfo, nullptr, &mVertexShaders[i]));
-				VK_NAME(mVertexShaders[i], SHADER_MODULE, "Noesis_%s", vShader.label);
-			}
+			////////////////////////////////////////////////////////////////////////////////////////////////////
+			//static void TextureHash(uint32_t& hash, Texture* texture_, uint8_t sampler)
+			//{
+			//	NS_ASSERT(texture_ != 0);
+			//	VKTexture* texture = (VKTexture*)texture_;
 
-			for (uint32_t i = 0; i < Shader::Count; i++)
-			{
-				const ShaderPS& pShader = ShadersPS(i);
-				mPixelShaders[i] = VK_NULL_HANDLE;
+			//	if (NS_UNLIKELY(texture->hash == 0))
+			//	{
+			//		// This is the first use of a wrapped texture
+			//		texture->hash = mLastTextureHashValue++;
 
-				if (pShader.label != nullptr)
-				{
-					VkShaderModuleCreateInfo createInfo{};
-					createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-					createInfo.codeSize = pShader.size;
-					createInfo.pCode = (uint32_t*)(shaders + pShader.start);
+			//		VkImageViewCreateInfo viewInfo{};
+			//		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			//		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			//		viewInfo.format = texture->format;
+			//		viewInfo.image = texture->image;
+			//		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			//		viewInfo.subresourceRange.levelCount = texture->levels;
+			//		viewInfo.subresourceRange.layerCount = 1;
 
-					VK_CHECK_RESULT(vkCreateShaderModule(mDevice, &createInfo, nullptr, &mPixelShaders[i]));
-					VK_NAME(mPixelShaders[i], SHADER_MODULE, "Noesis_%s", pShader.label);
-				}
-			}
+			//		V(vkCreateImageView(mDevice, &viewInfo, nullptr, &texture->view));
+			//	}
 
-			Dealloc(shaders);*/
-		}
+			//	hash = Hash(hash, texture->hash | sampler << 24);
+			//}
+
 
 		static uint32_t GetSignature(const Batch& batch)
 		{
-			uint32_t signature = 0;
+			//	uint32_t signature = 0;
 
-			if (batch.pattern)
-				signature |= PS_T0;
-			if (batch.ramps)
-				signature |= PS_T1;
-			if (batch.image)
-				signature |= PS_T2;
-			if (batch.glyphs)
-				signature |= PS_T3;
-			if (batch.shadow)
-				signature |= PS_T4;
-			if (batch.vertexUniforms[0].values)
-				signature |= VS_CB0;
-			if (batch.vertexUniforms[1].values)
-				signature |= VS_CB1;
-			if (batch.pixelUniforms[0].values)
-				signature |= PS_CB0;
-			if (batch.pixelUniforms[1].values)
-				signature |= PS_CB1;
+			//	if (batch.pattern)
+			//		signature |= PS_T0;
+			//	if (batch.ramps)
+			//		signature |= PS_T1;
+			//	if (batch.image)
+			//		signature |= PS_T2;
+			//	if (batch.glyphs)
+			//		signature |= PS_T3;
+			//	if (batch.shadow)
+			//		signature |= PS_T4;
+			//	if (batch.vertexUniforms[0].values)
+			//		signature |= VS_CB0;
+			//	if (batch.vertexUniforms[1].values)
+			//		signature |= VS_CB1;
+			//	if (batch.pixelUniforms[0].values)
+			//		signature |= PS_CB0;
+			//	if (batch.pixelUniforms[1].values)
+			//		signature |= PS_CB1;
 
-			return signature;
+			//	return signature;
 		}
 
 		struct LayoutNs
@@ -2094,6 +2103,13 @@ namespace Expectre {
 		};
 
 		struct RenderStateNs {
+			VkDevice* device;
+
+			VkSampler samplers[64];
+			VkRenderPass render_passses[6][2] = {};
+
+			uint32_t queue_family_index;
+
 			Noesis::Ptr<Noesis::IView> view;
 
 			VkRenderPass   rp = VK_NULL_HANDLE;
@@ -2129,7 +2145,12 @@ namespace Expectre {
 
 			//NsDynUboFrame nsUboFrames[2	]{};
 			//VkDeviceSize  nsUboAlign = 256; // will query from device limits
-			VkSampler sampler = VK_NULL_HANDLE;
+			//VkSampler sampler = VK_NULL_HANDLE;
+			VkCommandPool command_pool;
+			VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+			Noesis::Vector<Noesis::Pair<VkDescriptorPool, uint64_t>> free_descritor_pools;
+
+
 		};
 
 		////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2243,19 +2264,58 @@ namespace Expectre {
 		}
 
 		////////////////////////////////////////////////////////////////////////////////////////////////////
-		static void CreateLayouts(VkDevice device, RenderStateNs& state)
+		static void CreateLayouts(RenderStateNs& state)
 		{
 			for (uint32_t i = 0; i < Shader::Count; i++)
 			{
 				const ShaderPS& pShader = ShadersPS(i);
-				CreateLayout(device, pShader.signature, state.layoutMap, state.layouts[i]);
-				ToolsVk::set_object_name(device, (uint64_t)state.layouts[i].pipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+				CreateLayout(*state.device, pShader.signature, state.layoutMap, state.layouts[i]);
+				ToolsVk::set_object_name(*state.device, (uint64_t)state.layouts[i].pipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
 					(std::string("ns pipeline layout - ") + std::to_string(i)).c_str());
-				ToolsVk::set_object_name(device, (uint64_t)state.layouts[i].setLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+				ToolsVk::set_object_name(*state.device, (uint64_t)state.layouts[i].setLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
 					(std::string("ns descriptor set layout - ") + std::to_string(i)).c_str());
 			}
 		}
 
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void CreateShaders(RenderStateNs& state)
+		{
+			uint8_t* shaders = (uint8_t*)Alloc(FastLZ::DecompressBufferSize(Shaders));
+			FastLZ::Decompress(Shaders, sizeof(Shaders), shaders);
+
+			for (uint32_t i = 0; i < Shader::Vertex::Count; i++)
+			{
+				//const ShaderVS& vShader = ShadersVS(i, mCaps.linearRendering, mStereoSupport);
+				const ShaderVS& vShader = ShadersVS(i, true, false);
+
+				VkShaderModuleCreateInfo createInfo{};
+				createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+				createInfo.codeSize = vShader.size;
+				createInfo.pCode = (uint32_t*)(shaders + vShader.start);
+
+				VK_CHECK_RESULT(vkCreateShaderModule(*state.device, &createInfo, nullptr, &state.vert_shaders[i]));
+				VK_NAME(mVertexShaders[i], SHADER_MODULE, "Noesis_%s", vShader.label);
+			}
+
+			for (uint32_t i = 0; i < Shader::Count; i++)
+			{
+				const ShaderPS& pShader = ShadersPS(i);
+				state.pix_shaders[i] = VK_NULL_HANDLE;
+
+				if (pShader.label != nullptr)
+				{
+					VkShaderModuleCreateInfo createInfo{};
+					createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+					createInfo.codeSize = pShader.size;
+					createInfo.pCode = (uint32_t*)(shaders + pShader.start);
+
+					VK_CHECK_RESULT(vkCreateShaderModule(*state.device, &createInfo, nullptr, &state.pix_shaders[i]));
+					VK_NAME(state.pix_shaders[i], SHADER_MODULE, "Noesis_%s", pShader.label);
+				}
+			}
+
+			Dealloc(shaders);
+		}
 
 
 		static VkRenderPass CreateRenderPass(VkDevice device, VkSampleCountFlagBits samples, bool needsStencil, VkFormat color_format, VkFormat stencil_format)
@@ -2340,7 +2400,7 @@ namespace Expectre {
 
 		static void BindDescriptors(const Batch& batch, const LayoutNs& layout)
 		{
-			//uint32_t signature = layout.signature;
+			uint32_t signature = layout.signature;
 
 			//VKTexture* pattern = (VKTexture*)batch.pattern;
 			//VKTexture* ramps = (VKTexture*)batch.ramps;
@@ -2485,6 +2545,209 @@ namespace Expectre {
 			Dealloc(decompressed);
 		}
 
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void SetMinMagFilter(MinMagFilter::Enum minmag, VkSamplerCreateInfo& samplerInfo)
+		{
+			switch (minmag)
+			{
+			case MinMagFilter::Nearest:
+			{
+				samplerInfo.minFilter = VK_FILTER_NEAREST;
+				samplerInfo.magFilter = VK_FILTER_NEAREST;
+				break;
+			}
+			case MinMagFilter::Linear:
+			{
+				samplerInfo.minFilter = VK_FILTER_LINEAR;
+				samplerInfo.magFilter = VK_FILTER_LINEAR;
+				break;
+			}
+			default:
+			{
+				NS_ASSERT_UNREACHABLE;
+			}
+			}
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void SetMipFilter(MipFilter::Enum mip, VkSamplerCreateInfo& samplerInfo)
+		{
+			switch (mip)
+			{
+			case MipFilter::Disabled:
+			{
+				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+				samplerInfo.maxLod = 0.0f;
+				break;
+			}
+			case MipFilter::Nearest:
+			{
+				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+				samplerInfo.maxLod = FLT_MAX;
+				break;
+			}
+			case MipFilter::Linear:
+			{
+				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+				samplerInfo.maxLod = FLT_MAX;
+				break;
+			}
+			default:
+			{
+				NS_ASSERT_UNREACHABLE;
+			}
+			}
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void SetAddress(WrapMode::Enum mode, VkSamplerCreateInfo& samplerInfo)
+		{
+			switch (mode)
+			{
+			case WrapMode::ClampToEdge:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+				break;
+			}
+			case WrapMode::ClampToZero:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+				break;
+			}
+			case WrapMode::Repeat:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				break;
+			}
+			case WrapMode::MirrorU:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				break;
+			}
+			case WrapMode::MirrorV:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+				break;
+			}
+			case WrapMode::Mirror:
+			{
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+				break;
+			}
+			default:
+			{
+				NS_ASSERT_UNREACHABLE;
+			}
+			}
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void CreateSamplers(RenderStateNs& state)
+		{
+			memset(state.samplers, 0, sizeof(state.samplers));
+
+			VkSamplerCreateInfo samplerInfo{};
+			samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+
+			samplerInfo.mipLodBias = -0.75f;
+
+			const char* MinMagStr[] = { "Nearest", "Linear" };
+			const char* MipStr[] = { "Disabled", "Nearest", "Linear" };
+			const char* WrapStr[] = { "ClampToEdge", "ClampToZero", "Repeat", "MirrorU", "MirrorV", "Mirror" };
+
+			for (uint8_t minmag = 0; minmag < MinMagFilter::Count; minmag++)
+			{
+				for (uint8_t mip = 0; mip < MipFilter::Count; mip++)
+				{
+					SetMinMagFilter(MinMagFilter::Enum(minmag), samplerInfo);
+					SetMipFilter(MipFilter::Enum(mip), samplerInfo);
+
+					for (uint8_t uv = 0; uv < WrapMode::Count; uv++)
+					{
+						SetAddress(WrapMode::Enum(uv), samplerInfo);
+
+						SamplerState s = { { uv, minmag, mip } };
+						VK_CHECK_RESULT(vkCreateSampler(*state.device, &samplerInfo, nullptr, &state.samplers[s.v]));
+						VK_NAME(mSamplers[s.v], SAMPLER, "Noesis_%s_%s_%s", MinMagStr[minmag], MipStr[mip],
+							WrapStr[uv]);
+					}
+				}
+			}
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void DestroySamplers(RenderStateNs& state)
+		{
+			for (VkSampler sampler : state.samplers)
+			{
+				vkDestroySampler(*state.device, sampler, nullptr);
+			}
+		}
+
+		static void CreateTransferCommandPool(RenderStateNs& state)
+		{
+			VkCommandPoolCreateInfo poolInfo{};
+			poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+			poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+			poolInfo.queueFamilyIndex = state.queue_family_index;
+
+			VK_CHECK_RESULT(vkCreateCommandPool(*state.device, &poolInfo, nullptr, &state.command_pool));
+			VK_NAME(mTransferCommandPool, COMMAND_POOL, "%s", "Noesis_Transfer_CommandPool");
+		}
+
+		static void CreateDescriptorPool(RenderStateNs& state)
+		{
+			//if (NS_LIKELY(state.descriptor_pool))
+			//{
+			//	// Current pool is exhausted
+			//	state.free_descritor_pools.PushBack(MakePair(state.descriptor_pool, mFrameNumber));
+
+			//	// If possible, recycle a previously created pool
+			//	if (state.free_descritor_pools.Size() > 1)
+			//	{
+			//		if (state.free_descritor_pools.Front().second <= mSafeFrameNumber)
+			//		{
+			//			state.descriptor_pool = state.free_descritor_pools.Front().first;
+			//			VK_CHECK_RESULT(vkResetDescriptorPool(*state.device, state.descriptor_pool, 0));
+			//			state.free_descritor_pools.Erase(state.free_descritor_pools.Begin());
+			//			return;
+			//		}
+			//	}
+			//}
+
+			//VkDescriptorPoolSize poolSizes[2] =
+			//{
+			//	{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTOR_POOL_MAX_SETS * 4 },
+			//	{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, DESCRIPTOR_POOL_MAX_SETS * 3 }
+			//};
+
+			//VkDescriptorPoolCreateInfo poolInfo{};
+			//poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			//poolInfo.poolSizeCount = 2;
+			//poolInfo.pPoolSizes = poolSizes;
+			//poolInfo.maxSets = DESCRIPTOR_POOL_MAX_SETS;
+
+			//VK_CHECK_RESULT(vkCreateDescriptorPool(*state.device, &poolInfo, nullptr, &state.descriptor_pool));
+			//VK_NAME(mDescriptorPool, DESCRIPTOR_POOL, "Noesis_Pool_%d", mFreeDescriptorPools.Size());
+		}
+
+		////////////////////////////////////////////////////////////////////////////////////////////////////
+		static void DestroyDescriptorPool(RenderStateNs& state)
+		{
+			vkDestroyDescriptorPool(*state.device, state.descriptor_pool, nullptr);
+
+			for (auto& v : state.free_descritor_pools)
+			{
+				vkDestroyDescriptorPool(*state.device, v.first, nullptr);
+			}
+		}
 	} // namespace UtilsNs
 
 } // namespace Expectre
