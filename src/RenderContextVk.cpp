@@ -21,7 +21,7 @@
 
 namespace Expectre {
 
-RenderContextVk::RenderContextVk(SDL_Window *window) : m_window{window} {
+RenderContextVk::RenderContextVk(SDL_Window *window, InputManager &input_manager) : m_window{window} {
   // SDL_Vulkan_LoadLibrary();
   create_instance();
   create_surface();
@@ -31,7 +31,7 @@ RenderContextVk::RenderContextVk(SDL_Window *window) : m_window{window} {
   m_renderer = std::make_shared<RendererVk>(
       m_instance, m_physical_device, m_device, m_allocator, m_surface,
       m_graphics_queue, m_graphics_queue_index, m_present_queue,
-      m_present_queue_index);
+      m_present_queue_index, input_manager);
   m_ready = true;
 }
 

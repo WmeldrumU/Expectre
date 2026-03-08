@@ -29,7 +29,7 @@ Engine::Engine() : m_scene("Main Scene") {
 #elif defined(USE_DIRECTX)
   // m_render_context = std::make_unique<RenderContextDx>(m_window);
 #else
-  m_render_context = std::make_unique<RenderContextVk>(m_window);
+  m_render_context = std::make_unique<RenderContextVk>(m_window, m_input_manager);
 #endif
 }
 
