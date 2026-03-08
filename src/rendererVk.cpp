@@ -22,23 +22,7 @@
 #include "shared.h"
 #include "spdlog/spdlog.h"
 #include "VkTools.h"
-
-struct Vertex
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 tex_coord;
-
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
-        VkVertexInputBindingDescription binding_description{};
-        binding_description.binding = 0;
-        binding_description.stride = sizeof(Vertex);
-        binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return binding_description;
-    }
-};
+#include "model.h"
 
 struct UBO
 {
@@ -343,6 +327,7 @@ namespace Expectre
             {
                 m_chosen_phys_device = phys_device;
                 spdlog::debug("chose physical device: " + std::string(phys_properties.deviceName));
+                break;
             }
         }
 
@@ -672,15 +657,21 @@ namespace Expectre
         //     {1.0, 1.0, 0.0},
         //     {-1.0, 1.0, 0.0f},
         //     {0.0, -1.0, 0.0}};
-        const std::vector<Vertex> vertices = {
-            {{-0.5f, -1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-            {{0.5f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-            {{0.5f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-            {{-0.5f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}};
+
+        Model model = tools::import_model("../../assets/bunny.obj");
+        
+        //spdlog::debug()
+        // const std::vector<Vertex> vertices = {
+        //     {{-0.5f, -1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+        //     {{0.5f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+        //     {{0.5f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+        //     {{-0.5f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}};
+        const std::vector<Vertex> vertices = model.vertices;
         uint32_t vertex_buffer_size =
             static_cast<uint32_t>((vertices.size() * sizeof(Vertex)));
         // Setup indices
-        std::vector<uint32_t> index_buffer{0, 1, 2, 2, 3, 0};
+        // std::vector<uint32_t> index_buffer{0, 1, 2, 2, 3, 0};
+        std::vector<uint32_t> index_buffer = model.indices;
         m_indices.count = static_cast<uint32_t>(index_buffer.size());
         uint32_t index_buffer_size = m_indices.count * sizeof(index_buffer[0]);
 
@@ -1009,7 +1000,7 @@ namespace Expectre
         binding_description.stride = sizeof(Vertex);
         binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        std::array<VkVertexInputAttributeDescription, 3> vertex_attribute_description{};
+        std::array<VkVertexInputAttributeDescription, 4> vertex_attribute_description{};
         vertex_attribute_description[0].binding = 0;
         vertex_attribute_description[0].location = 0;
         vertex_attribute_description[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -1022,8 +1013,13 @@ namespace Expectre
 
         vertex_attribute_description[2].binding = 0;
         vertex_attribute_description[2].location = 2;
-        vertex_attribute_description[2].format = VK_FORMAT_R32G32_SFLOAT;
-        vertex_attribute_description[2].offset = offsetof(Vertex, tex_coord);
+        vertex_attribute_description[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertex_attribute_description[2].offset = offsetof(Vertex, normal);
+
+        vertex_attribute_description[3].binding = 0;
+        vertex_attribute_description[3].location = 3;
+        vertex_attribute_description[3].format = VK_FORMAT_R32G32_SFLOAT;
+        vertex_attribute_description[3].offset = offsetof(Vertex, tex_coord);
 
         VkPipelineVertexInputStateCreateInfo vertex_input_info{};
         vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1476,8 +1472,8 @@ namespace Expectre
         glm::vec3 camera_pos = (1.0f - t) * start + t*end;
 
         UBO ubo{};
-        //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.model = glm::mat4(1.0f);
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        //ubo.model = glm::mat4(1.0f);
         ubo.view = glm::lookAt(camera_pos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         ubo.projection = glm::perspective(glm::radians(45.0f), static_cast<float>(RESOLUTION_X) / RESOLUTION_Y, 0.1f, 1000.0f);
 
@@ -1509,7 +1505,7 @@ namespace Expectre
                       staging_buffer, staging_buffer_memory);
 
         void *data;
-        vkMapMemory(m_device, staging_buffer_memory, 0, image_size, 0, &data);
+        VK_CHECK_RESULT(vkMapMemory(m_device, staging_buffer_memory, 0, image_size, 0, &data));
         memcpy(data, pixels, static_cast<size_t>(image_size));
         vkUnmapMemory(m_device, staging_buffer_memory);
 

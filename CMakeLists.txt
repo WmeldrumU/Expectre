@@ -11,6 +11,7 @@ find_package(Vulkan REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
+find_package(assimp REQUIRED)
 
 # message(STATUS "SDL LIBRARIES: ${SDL2_LIBRARIES}")
 # message(STATUS "SDL INCLUDES: ${SDL2_INCLUDE_DIRS}")
@@ -27,4 +28,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     Vulkan::Vulkan
     spdlog::spdlog
     stb::stb
+    assimp::assimp
 )
