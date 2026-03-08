@@ -1,18 +1,22 @@
 #include "Engine.h"
-namespace expectre {
-    Engine::Engine() {
+#include "rendererVk.h"
 
+namespace Expectre
+{
+    Engine::Engine(Renderer_Vk *renderer)
+    {
+        m_renderer = renderer;
     }
 
-    void Engine::run() {
-
-    }
-    
-    void Engine::cleanup() {
-
+    void Engine::run()
+    {
     }
 
-    void Engine::draw() {
+    void Engine::cleanup()
+    {
+    }
 
+    void Engine::draw()
+    {
     }
 }

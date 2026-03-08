@@ -14,7 +14,7 @@ struct {
     } uboVS;
 
 
-namespace expectre {
+namespace Expectre {
     Renderer_Vk::Renderer_Vk() {
 
 
@@ -38,19 +38,19 @@ namespace expectre {
 			throw std::runtime_error("Unable to initialize application window!");
 		}
 
-        create_instance();
+        // create_instance();
 
         //create_debug();
 
-        create_surface();
+        //create_surface();
 
         //cnumeratePhysicalDevices();
 
-        select_physical_device();
+        //select_physical_device();
 
-        select_queue_family();
+        //select_queue_family();
 
-        create_logical_device_and_queues(); //problem function
+        //screate_logical_device_and_queues(); //problem function
 
         //createSemaphores();
 
@@ -247,5 +247,8 @@ namespace expectre {
         vkGetDeviceQueue(m_device, graphics_queue_family_index, 0, &graphics_queue);
         vkGetDeviceQueue(m_device, present_queue_family_index, 0, &present_queue);
 
+    }
+    void Renderer_Vk::cleanup() {
+        
     }
 }

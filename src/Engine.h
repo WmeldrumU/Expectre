@@ -1,12 +1,15 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 #include <cstdint>
+#include "rendererVk.h"
 
-namespace expectre {
+namespace Expectre {
     
     class Engine {
     public:
-        Engine();
+        Engine() = delete;
+        Engine(Renderer_Vk* renderer);
+        void start();
         void run();
         void cleanup();
         void draw();
@@ -15,6 +18,7 @@ namespace expectre {
     private:
         bool m_isIntialized{false};
         uint32_t m_frameNumber{0};
+        Renderer_Vk* m_renderer;
     };
     
 }
