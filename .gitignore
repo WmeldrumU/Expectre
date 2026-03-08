@@ -39,3 +39,4 @@
 config.log
 .sconf_temp
 #/SCONS
+.sconsign.dblite
