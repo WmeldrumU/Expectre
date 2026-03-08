@@ -5,8 +5,8 @@
 #define VMA_STATS_STRING_ENABLED 1
 
 #include "Engine.h"
-#include "MeshManager.h"
 #include "MaterialManager.h"
+#include "MeshManager.h"
 #include "TextureManager.h"
 #include "ToolsVk.h"
 #include "scene/SceneObject.h"
@@ -27,6 +27,8 @@ RenderContextVk::RenderContextVk(SDL_Window *window) : m_window{window} {
   create_surface();
   create_device();
   create_memory_allocator();
+  MeshManager::Instance().init(m_device, m_allocator, m_cmd_pool,
+                               m_graphics_queue);
 
   m_renderer = std::make_shared<RendererVk>(
       m_physical_device, m_device, m_allocator, m_surface, m_graphics_queue,
@@ -180,40 +182,44 @@ void RenderContextVk::create_memory_allocator() {
 void RenderContextVk::UpdateAndRender(uint64_t delta_time, Scene &scene) {
 
   // Upload meshes that have been added since last frame
-  const auto meshes_to_upload =
-      MeshManager::Instance().consume_meshes_to_upload_to_gpu();
-  for (const auto &mesh_handle : meshes_to_upload) {
+  // const auto meshes_to_upload =
+  //     MeshManager::Instance().consume_meshes_to_upload_to_gpu();
+  // for (const auto &mesh_handle : meshes_to_upload) {
 
-    if (auto mesh_opt = MeshManager::Instance().get_mesh(mesh_handle)) {
-      const Mesh &mesh = mesh_opt->get(); // mesh_opt->get() returns const Mesh&
-      // use mesh without copying
-      spdlog::debug("Uploading mesh {} with {} vertices and {} indices",
-                    mesh.name, mesh.vertices.size(), mesh.indices.size());
-      // Upload mesh to GPU via renderer
-      m_renderer->upload_mesh_to_gpu(mesh);
-    } else {
-      spdlog::error("Mesh with hash {} not found in MeshManager!",
-                    mesh_handle.mesh_id);
-    }
-  }
+  //   if (auto mesh_opt = MeshManager::Instance().get_mesh(mesh_handle)) {
+  //     const Mesh &mesh = mesh_opt->get(); // mesh_opt->get() returns const
+  //     Mesh&
+  //     // use mesh without copying
+  //     spdlog::debug("Uploading mesh {} with {} vertices and {} indices",
+  //                   mesh.name, mesh.vertices.size(), mesh.indices.size());
+  //     // Upload mesh to GPU via renderer
+  //     m_renderer->upload_mesh_to_gpu(mesh);
+  //   } else {
+  //     spdlog::error("Mesh with hash {} not found in MeshManager!",
+  //                   mesh_handle.mesh_id);
+  //   }
+  // }
 
-  // Textures
-  const auto& textures_to_upload = TextureManager::Instance().consume_textures_to_upload_to_gpu();
+  // // Textures
+  // const auto& textures_to_upload =
+  // TextureManager::Instance().consume_textures_to_upload_to_gpu();
 
-  for (const auto& tex_handle: textures_to_upload) {
-        if (auto tex_opt = TextureManager::Instance().get_texture(tex_handle)) {
-      const Texture &texture = tex_opt->get(); // tex_opt->get() returns const Texture&
-      // use texture without copying
-      spdlog::debug("Uploading texture {} with dimensions {} x {}",
-                    texture.name, texture.width, texture.height);
-      // Upload texture to GPU via renderer
-      m_renderer->upload_texture_to_gpu(texture);
+  // for (const auto& tex_handle: textures_to_upload) {
+  //       if (auto tex_opt =
+  //       TextureManager::Instance().get_texture(tex_handle)) {
+  //     const Texture &texture = tex_opt->get(); // tex_opt->get() returns
+  //     const Texture&
+  //     // use texture without copying
+  //     spdlog::debug("Uploading texture {} with dimensions {} x {}",
+  //                   texture.name, texture.width, texture.height);
+  //     // Upload texture to GPU via renderer
+  //     m_renderer->upload_texture_to_gpu(texture);
 
-    } else {
-      spdlog::error("Texture with hash {} not found in TextureManager!",
-                    tex_handle.texture_id);
-    }
-  }
+  //   } else {
+  //     spdlog::error("Texture with hash {} not found in TextureManager!",
+  //                   tex_handle.texture_id);
+  //   }
+  // }
   m_renderer->update(delta_time);
   m_renderer->draw_frame(scene.get_camera());
 }
