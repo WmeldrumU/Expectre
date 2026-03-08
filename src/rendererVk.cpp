@@ -13,9 +13,6 @@
 #include <chrono>
 #include <cassert>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <stb_image.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -62,7 +59,7 @@ namespace Expectre
 		create_command_pool();
 		create_framebuffers();
 		// std::ignore = create_texture_from_file(WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-		m_texture = TextureVk::create_texture_from_file(m_allocator, WORKSPACE_DIR + std::string("assest/teapot/brick/png"));
+		m_texture = TextureVk::create_texture_from_file(m_device, m_cmd_pool, m_graphics_queue, m_allocator, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
 		create_texture_sampler();
 		load_model(WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj"));
 		load_model(WORKSPACE_DIR + std::string("/assets/bunny.obj"));
@@ -70,6 +67,7 @@ namespace Expectre
 		create_uniform_buffers();
 		create_descriptor_pool_and_sets();
 		create_command_buffers();
+
 		// create_ui_renderer();
 
 		// Synchronization
@@ -82,7 +80,7 @@ namespace Expectre
 
 	void RendererVk::load_model(std::string dir)
 	{
-		const Model& model = ToolsVk::import_model(dir, m_all_vertices, m_all_indices);
+		const Model& model = Model::import_model(dir, m_all_vertices, m_all_indices);
 		m_models.push_back(model);
 	}
 
@@ -142,11 +140,10 @@ namespace Expectre
 		vkDestroyPipeline(m_device, m_pipeline, nullptr);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 
 		// Destroy texture resources
 		vkDestroySampler(m_device, m_texture_sampler, nullptr);
-		vkDestroyImageView(m_device, m_texture.image_view, nullptr);
+		vkDestroyImageView(m_device, m_texture.view, nullptr);
 		vkDestroyImage(m_device, m_texture.image, nullptr);
 		vmaFreeMemory(m_allocator, m_texture.allocation);
 
@@ -444,17 +441,6 @@ namespace Expectre
 		}
 	}
 
-	void RendererVk::copy_buffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
-	{
-		VkCommandBuffer commandBuffer = ToolsVk::begin_single_time_commands(m_device, m_cmd_pool);
-
-		VkBufferCopy copyRegion{};
-		copyRegion.size = size;
-		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-		ToolsVk::end_single_time_commands(m_device, m_cmd_pool, commandBuffer, m_graphics_queue);
-	}
-
 	void RendererVk::create_geometry_buffer()
 	{
 		VkDeviceSize vertex_buffer_size = sizeof(Vertex) * m_all_vertices.size();
@@ -494,8 +480,8 @@ namespace Expectre
 		m_geometry_buffer.indices = ToolsVk::create_buffer(m_allocator, index_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VMA_MEMORY_USAGE_GPU_ONLY);
 		// === COPY ===
-		copy_buffer(vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
-		copy_buffer(index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
+		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, vertex_staging.buffer, m_geometry_buffer.vertices.buffer, vertex_buffer_size);
+		ToolsVk::copy_buffer(m_device, m_cmd_pool, m_graphics_queue, index_staging.buffer, m_geometry_buffer.indices.buffer, index_buffer_size);
 
 		// Cleanup staging
 		vmaDestroyBuffer(m_allocator, vertex_staging.buffer, vertex_staging.allocation);
@@ -592,6 +578,8 @@ namespace Expectre
 		assert(!err);
 
 		VK_CHECK_RESULT(err);
+		ToolsVk::set_object_name(m_device, (uint64_t)m_render_pass, VK_OBJECT_TYPE_RENDER_PASS, "MainRenderPass");
+
 	}
 
 	void RendererVk::create_pipeline()
@@ -794,7 +782,7 @@ namespace Expectre
 
 			VkDescriptorImageInfo image_info{};
 			image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_info.imageView = m_texture.image_view;
+			image_info.imageView = m_texture.view;
 			image_info.sampler = m_texture_sampler;
 
 			std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
@@ -1055,7 +1043,7 @@ namespace Expectre
 		for (int i = 0; i < MAX_CONCURRENT_FRAMES; ++i)
 		{
 			AllocatedBuffer& allocated_buffer = m_uniform_buffers[i].allocated_buffer;
-			allocated_buffer = create_buffer(
+			allocated_buffer = ToolsVk::create_buffer(m_allocator,
 				sizeof(UBO),
 				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 				VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -1318,11 +1306,12 @@ namespace Expectre
 	}
 
 
-	Noesis::Ptr<::Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
+	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CreateRenderTarget(const char* label, uint32_t width, uint32_t height, uint32_t sampleCount, bool needsStencil)
 	{
-		//Noesis::Ptr<VKRenderTarget> surface = Noesis::MakePtr<VKRenderTarget>();
+		//Noesis::Ptr<Noesis::RenderTarget> surface = Noesis::MakePtr<Noesis::RenderTarget>();
+		return nullptr;
 		//surface->samples = VK_SAMPLE_COUNT_1_BIT;
-
+		//TextureVk texture = TextureVk::create_texture(m_device, m_cmd_pool, m_graphics_queue, m_allocator, nullptr, 
 		//// EnsureTransferCommands();
 
 		//Noesis::Vector<VkImageView, 3> attachments;
@@ -1367,7 +1356,7 @@ namespace Expectre
 		//VK_CHECK_RESULT(vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &surface->framebuffer));
 		//VK_NAME(surface->framebuffer, FRAMEBUFFER, "Noesis_%s_FrameBuffer", label);
 		//return surface;
-		return nullptr;
+		//return nullptr;
 	}
 
 	Noesis::Ptr<Noesis::RenderTarget> RendererVk::CloneRenderTarget(const char* label, Noesis::RenderTarget* surface)
