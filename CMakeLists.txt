@@ -55,11 +55,11 @@ find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
     src/AppTime.h
     src/TextureVk.h
     # src/UtilsNs.h
-    # src/scene/Scene.h
-    # src/scene/Scene.cpp
+    src/scene/Scene.h
+    src/scene/Scene.cpp
     src/scene/SceneObject.cpp
     src/scene/SceneObject.h
-    # src/scene/SceneRoot.h
+    src/scene/SceneRoot.h
     # src/scene/Camera.h
     # src/scene/Camera.cpp
 )

@@ -1,5 +1,6 @@
 
 #include "scene/Scene.h"
+#include "scene/SceneRoot.h"
 
 #include <stdexcept>
 
@@ -9,6 +10,7 @@ namespace Expectre
     {
         create_root();
     }
+
     void Scene::Update(uint64_t delta_time, const InputManager &input_manager)
     {
         // Update scene logic here, e.g., traverse scene graph, update animations, etc.
@@ -23,7 +25,7 @@ namespace Expectre
         {
             throw std::logic_error("Root already exists");
         }
-        m_root = std::make_unique<SceneObject>(nullptr, "root");
+        m_root = std::make_unique<SceneRoot>("root");
     }
 
 }

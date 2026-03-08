@@ -8,6 +8,7 @@
 #include "RenderContextVk.h"
 #include "observer.h"
 #include "input/InputManager.h"
+#include "scene/Scene.h"
 
 #ifdef NDEBUG
 /**

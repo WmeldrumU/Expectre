@@ -1,14 +1,13 @@
 #ifndef RENDER_CONTEXT_VK
 #define RENDER_CONTEXT_VK
 
-
 #include <vulkan/vulkan.h>
-#include <SDL3/SDL.h>              // for SDL_Window
-#include <vma/vk_mem_alloc.h>      // for VmaAllocator
-#include <memory>                  // for std::shared_ptr
+#include <SDL3/SDL.h>					// for SDL_Window
+#include <vma/vk_mem_alloc.h> // for VmaAllocator
+#include <memory>							// for std::shared_ptr
 
 #include "IRenderer.h"
-
+#include "scene/SceneObject.h"
 namespace Expectre
 {
 
@@ -19,16 +18,16 @@ namespace Expectre
 	{
 	public:
 		RenderContextVk() = delete;
-		RenderContextVk(SDL_Window* window);
+		RenderContextVk(SDL_Window *window);
 		~RenderContextVk();
 
-		const VkDevice& get_device() { return m_device; }
-		const VkPhysicalDevice& get_phys_device() { return m_physical_device; }
+		const VkDevice &get_device() { return m_device; }
+		const VkPhysicalDevice &get_phys_device() { return m_physical_device; }
 		uint32_t graphics_queue_index() { return m_graphics_queue_index; }
 		uint32_t present_queue_index() { return m_present_queue_index; }
-		const VmaAllocator& get_allocator() { return m_allocator; }
-		const VkSurfaceKHR& get_surface() { return m_surface; }
-		void UpdateAndRender(uint64_t delta_time, SceneObject& object);
+		const VmaAllocator &get_allocator() { return m_allocator; }
+		const VkSurfaceKHR &get_surface() { return m_surface; }
+		void UpdateAndRender(uint64_t delta_time, SceneObject &object);
 		bool is_ready() { return m_ready; }
 
 	private:
@@ -37,9 +36,8 @@ namespace Expectre
 		void create_surface();
 		void create_memory_allocator();
 
-
 		VkInstance m_instance;
-		SDL_Window* m_window{};
+		SDL_Window *m_window{};
 		VkSurfaceKHR m_surface{};
 		VmaAllocator m_allocator{};
 		VkPhysicalDevice m_physical_device{};
@@ -49,15 +47,15 @@ namespace Expectre
 		// make queues/indeces part of a device class?
 		VkCommandPool m_cmd_pool;
 
-		uint32_t m_graphics_queue_index{ UINT32_MAX };
-		uint32_t m_present_queue_index{ UINT32_MAX };
+		uint32_t m_graphics_queue_index{UINT32_MAX};
+		uint32_t m_present_queue_index{UINT32_MAX};
 		VkQueue m_graphics_queue{};
 		VkQueue m_present_queue{};
 		float m_priority = 1.0;
 
-		bool m_ready{ false };
+		bool m_ready{false};
 	};
 
 } // namespace Expectre
 
-#endif //RENDER_CONTEXT_VK
+#endif // RENDER_CONTEXT_VK
