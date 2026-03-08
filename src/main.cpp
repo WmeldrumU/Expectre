@@ -4,6 +4,7 @@
 #include "SDL3/SDL_main.h"
 #include "Engine.h"
 #include "spdlog/spdlog.h"
+#include "Time.h"
 
 #include <crtdbg.h>
 
@@ -16,6 +17,7 @@ int main(int argc, char *argv[])
 #else
 	std::cout << "Other compiler\n";
 #endif
+	Time::Instance().Update();
 	spdlog::set_level(spdlog::level::debug);
 	try
 	{

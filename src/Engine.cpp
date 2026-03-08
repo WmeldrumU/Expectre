@@ -3,6 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <spdlog/spdlog.h>
+#include "Time.h"
 
 //#include <NsGui/IntegrationAPI.h>
 //#include <NsGui/IRenderer.h>
@@ -89,6 +90,7 @@ namespace Expectre
 			m_renderer->draw_frame();
 
 			limit_frame_rate(60, delta_time);
+			Time::Instance().Update();
 		}
 
 		// SDL cleanup

@@ -4,6 +4,7 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <functional>
+#include <vma/vk_mem_alloc.h>
 
 namespace Expectre
 {
@@ -21,6 +22,7 @@ namespace Expectre
 		uint32_t queue_family_index{};
 		VkPipelineCache m_pipeline_cache{};
 		std::function<void(VkCommandBuffer)> queue_submit_function = nullptr;
+		VmaAllocator allocator;
 	};
 }
 #endif

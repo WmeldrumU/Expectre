@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 set(CMAKE_VERBOSE_MAKEFILE ON)
+cmake_policy(SET CMP0091 NEW)
+
 # set the project name
-project(Expectre CXX)
+project(ExpectreProject CXX)
 option(USE_WEBGPU "Build with WebGPU support" OFF)
 
 # Noesis Include/Lib Paths
@@ -19,16 +21,44 @@ find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
-find_package( Vulkan REQUIRED COMPONENTS shaderc_combined )
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 
-file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp ${PROJECT_SOURCE_DIR}/lib/*.cpp 
-${PROJECT_SOURCE_DIR}/lib/*.c 
-${PROJECT_SOURCE_DIR}/lib/*.h 
-${PROJECT_SOURCE_DIR}/src/*.h)
+set(SOURCES
+    src/Engine.cpp
+    src/Engine.h
+    src/IRenderer.h
+    src/IRendererInfo.h
+    src/IUIRenderer.h
+    src/main.cpp
+    src/model.h
+    src/NoesisShaders.h
+    src/observer.h
+    src/ProvidersApi.h
+    src/RendererDx.cpp
+    src/RendererDx.h
+    src/rendererVk.cpp
+    src/rendererVk.h
+    src/RendererWgpu.cpp
+    src/RendererWgpu.h
+    src/RenderGraph.cpp
+    src/RenderGraph.h
+    src/RenderPass.cpp
+    src/RenderPass.h
+    src/ShaderFileWatcher.h
+    src/shared.h
+    src/UIRendererVkNoesis.cpp
+    src/UIRendererVkNoesis.h
+    src/UIRendererVkNoesis_2.h
+    src/UIRendererVkNoesis_2.cpp
+    src/VkTools.h
+    src/FastLZ.h
+    src/FastLZ.cpp
+    src/Time.h
+)
 
 message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(ExpectreApp ${SOURCES})
 
 set(COMMON_LIBRARIES
     SDL3::SDL3
@@ -42,9 +72,11 @@ set(COMMON_LIBRARIES
     Noesis
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(ExpectreApp PUBLIC
     ${COMMON_LIBRARIES}
 )
+target_include_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
+target_link_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
 
 # Define it as a macro so it can be used in C++
 add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
