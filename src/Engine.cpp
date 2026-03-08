@@ -3,10 +3,53 @@
 #include <chrono>
 #include <thread>
 #include <spdlog/spdlog.h>
+
+//#include <NsGui/IntegrationAPI.h>
+//#include <NsGui/IRenderer.h>
+//#include <NsGui/IView.h>
+//#include <NsGui/Grid.h>
+//#include <NsGui/Uri.h>
+// Renderer macros
+#define RESOLUTION_X 1280
+#define RESOLUTION_Y 720
+
+#define EXTENT { RESOLUTION_X, RESOLUTION_Y }
+
 namespace Expectre
 {
 	Engine::Engine()
 	{
+		//Noesis::SetLogHandler([](const char *, uint32_t, uint32_t level, const char *, const char *msg)
+		//					  {
+  //     // [TRACE] [DEBUG] [INFO] [WARNING] [ERROR]
+  //     const char* prefixes[] = { "T", "D", "I", "W", "E" };
+  //     printf("[NOESIS/%s] %s\n", prefixes[level], msg); });
+
+		//Noesis::GUI::Init();
+
+		//using namespace Noesis;
+
+		//Ptr<FrameworkElement> xaml = Noesis::GUI::LoadXaml<FrameworkElement>("Reflections.xaml");
+		//Ptr<IView> view = Noesis::GUI::CreateView(xaml);
+		//view->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
+		//view->SetSize(1024, 768);
+		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+		{
+			SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
+			throw std::runtime_error("failed to initialize SDL!");
+		}
+
+
+		m_window = SDL_CreateWindow("Expectre",
+			RESOLUTION_X, RESOLUTION_Y,
+			SDL_WINDOW_VULKAN);
+
+		if (!m_window)
+		{
+			SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
+			throw std::runtime_error("Unable to initialize application window!");
+		}
+
 #if defined(USE_WEBGPU)
 		spdlog::debug("Using WebGPU");
 		m_renderer =
@@ -15,7 +58,7 @@ namespace Expectre
 		m_renderer = std::make_shared<Renderer_Dx>();
 #else
 		m_renderer =
-			std::make_shared<Renderer_Vk>();
+			std::make_shared<RendererVk>(m_window, RESOLUTION_X, RESOLUTION_Y);
 #endif
 		// make a weak ptr for observer input notifications
 		std::weak_ptr<InputObserver> input_observer(m_renderer);
@@ -38,7 +81,7 @@ namespace Expectre
 			uint64_t delta_time = current_time - last_time;
 			last_time = current_time;
 
-			// Handle events on queue
+			// Handle events on input queue
 			quit = process_input();
 
 			// Render frame
@@ -47,6 +90,12 @@ namespace Expectre
 
 			limit_frame_rate(60, delta_time);
 		}
+
+		// SDL cleanup
+		SDL_DestroyWindow(m_window);
+		//SDL_Vulkan_UnloadLibrary();
+		SDL_Quit();
+
 		return;
 	}
 

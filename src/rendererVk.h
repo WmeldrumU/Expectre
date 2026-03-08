@@ -68,12 +68,13 @@ namespace Expectre
 		VkImageViewCreateInfo image_view_info;
 	};
 
-	class Renderer_Vk : public IRenderer, public InputObserver
+	class RendererVk : public IRenderer, public InputObserver
 	{
 
 	public:
-		Renderer_Vk();
-		~Renderer_Vk();
+		RendererVk() = delete;
+		RendererVk(SDL_Window* window, uint32_t resolution_x, uint32_t resolution_y);
+		~RendererVk();
 
 		bool m_enable_validation_layers{ true };
 		bool isReady();
@@ -175,7 +176,7 @@ namespace Expectre
 		VkSwapchainKHR m_swapchain{};
 		std::vector<VkImage> m_swapchain_images{};
 		VkFormat m_swapchain_image_format{};
-		VkExtent2D m_swapchain_extent{};
+		VkExtent2D m_extent{};
 		std::vector<VkFramebuffer> m_swapchain_framebuffers{};
 		std::vector<VkImageView> m_swapchain_image_views{};
 
