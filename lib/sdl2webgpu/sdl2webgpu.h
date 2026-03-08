@@ -31,7 +31,7 @@
 #define _sdl2_webgpu_h_
 
 #include <webgpu/webgpu.h>
-#include "SDL2/SDL.h"
+#include <SDL2/SDL.h>
 
 #ifdef __cplusplus
 extern "C" {
