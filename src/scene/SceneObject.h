@@ -4,10 +4,7 @@
 #include <vector>
 #include <memory>
 #include <string>
-
-#include "Model.h"
-
-struct Mesh;
+#include "Mesh.h"
 
 namespace Expectre
 {
@@ -24,7 +21,6 @@ namespace Expectre
         // Delete the copy assignment operator as well for consistency
         SceneObject &operator=(const SceneObject &other) = delete;
 
-        void create_child(std::string name);
         void set_transform(const glm::mat4x3 &transform)
         {
             m_world_transform = transform;

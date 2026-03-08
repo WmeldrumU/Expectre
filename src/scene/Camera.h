@@ -7,6 +7,8 @@
 namespace Expectre {
 class Camera : SceneObject {
 public:
+  Camera() = delete;
+
   Camera(SceneObject *parent, std::string name);
 
   // Delete the copy constructor

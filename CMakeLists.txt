@@ -35,6 +35,7 @@ find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
     src/main.cpp
     src/MathUtils.h
     src/Model.h
+    src/Mesh.h
     # src/NoesisShaders.h
     src/observer.h
     src/RenderContextVk.cpp
