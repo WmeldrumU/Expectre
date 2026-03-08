@@ -20,6 +20,7 @@
 #include "observer.h"
 #include "model.h"
 #include "ShaderFileWatcher.h"
+#include "IUIRenderer.h"
 
 #define MAX_CONCURRENT_FRAMES 2
 
@@ -80,6 +81,7 @@ namespace Expectre
 		bool isReady();
 		void update(uint64_t delta_t);
 		void draw_frame();
+		void end_single_time_commands(VkCommandBuffer cmd_buffer);
 
 	private:
 
@@ -137,7 +139,6 @@ namespace Expectre
 			VkImage& image,
 			VkDeviceMemory& image_memory);
 
-		void end_single_time_commands(VkCommandBuffer cmd_buffer);
 
 		void copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
@@ -161,7 +162,7 @@ namespace Expectre
 
 		void load_model(std::string dir);
 
-		void create_ui_pipeline();
+		void create_ui_renderer();
 
 		SDL_Window* m_window{};
 		VkInstance m_instance{};
@@ -248,6 +249,7 @@ namespace Expectre
 		std::unique_ptr<ShaderFileWatcher> m_vert_shader_watcher = nullptr;
 		std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
 
+		std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
 	};
 }
 #endif // RENDERER_VK_H

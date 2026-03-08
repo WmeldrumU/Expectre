@@ -49,6 +49,7 @@ TODOS
 - runtime shader compilation
 - noesis integration
 - zoom to fit
+<<<<<<< HEAD
 =======
 SCRATCH
 
@@ -56,3 +57,8 @@ Should shader watcher return the module?
 Shader watcher needs to return true/false if a new module was created. Or return null or something like that
 We need to rebuild the pipeline (possibilty more) once recompiled.
 >>>>>>> 011e948 (Scratch notes)
+=======
+- Create separate VkQueue for layout transitions so graphic's queue isn't blocked by resource loading
+- Add cmake logic to copy Noesis.dll to build directory
+- Move end_single_time_commands out of rendererVk to some utility/tools class
+>>>>>>> c02f530 (Work on noesis integration)
