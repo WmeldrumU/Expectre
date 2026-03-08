@@ -7,20 +7,24 @@
 #define RESOLUTION_X 620
 #define RESOLUTION_Y 480
 
-#include "RendererVk.h"
+#include "rendererVk.h"
 
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <set>
 #include <bitset>
-#include <assert.h>
-#include <vulkan/vulkan.h>
 #include <array>
 #include <chrono>
+#include <cassert>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
 
+#include <vulkan/vulkan.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_vulkan.h>
+
+#include "rendererVk.h"
 #include "shared.h"
 #include "spdlog/spdlog.h"
 #include "VkTools.h"
@@ -226,7 +230,7 @@ namespace Expectre
 
         // Extensions
         instance_create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-        instance_create_info.ppEnabledExtensionNames = &extensions.at(0);
+        instance_create_info.ppEnabledExtensionNames = extensions.data();
 
         auto result = vkCreateInstance(&instance_create_info, nullptr, &m_instance);
 
@@ -236,6 +240,7 @@ namespace Expectre
         }
     }
 
+    // Check if the validation layers are supported
     void Renderer_Vk::enumerate_layers()
     {
         VkResult err;
@@ -654,20 +659,10 @@ namespace Expectre
     void Renderer_Vk::create_vertex_buffer()
     {
         VkResult err;
-        // Setup vertices
-        // std::vector<glm::vec3> vertices_pos{
-        //     {1.0, 1.0, 0.0},
-        //     {-1.0, 1.0, 0.0f},
-        //     {0.0, -1.0, 0.0}};
 
-        Model model = tools::import_model("../../assets/bunny.obj");
+        Model model = tools::import_model("C:/Expectre/assets/bunny.obj");
         
-        //spdlog::debug()
-        // const std::vector<Vertex> vertices = {
-        //     {{-0.5f, -1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-        //     {{0.5f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-        //     {{0.5f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-        //     {{-0.5f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}};
+
         const std::vector<Vertex> vertices = model.vertices;
         uint32_t vertex_buffer_size =
             static_cast<uint32_t>((vertices.size() * sizeof(Vertex)));
@@ -679,7 +674,7 @@ namespace Expectre
 
         VkMemoryAllocateInfo mem_alloc{};
         mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        VkMemoryRequirements mem_reqs;
+        VkMemoryRequirements mem_reqs{};
 
         struct StagingBuffer
         {
@@ -785,13 +780,13 @@ namespace Expectre
 
         // Buffer copies have to be submitted to a queue, so we need a command buffer for them
         // Note: Some devices offer a dedicated transfer queue (with only the transfer bit set) that may be faster when doing lots of copies
-        VkCommandBuffer copy_cmd;
+        VkCommandBuffer copy_cmd{};
 
         VkCommandBufferAllocateInfo command_buffer_alloc_info{};
         command_buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         command_buffer_alloc_info.commandPool = m_cmd_pool;
         command_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        command_buffer_alloc_info.commandBufferCount = static_cast<uint32_t>(m_cmd_buffers.size());
+        command_buffer_alloc_info.commandBufferCount = 1;
         VK_CHECK_RESULT(vkAllocateCommandBuffers(m_device, &command_buffer_alloc_info, &copy_cmd));
 
         VkCommandBufferBeginInfo cmd_buffer_info{};
@@ -979,8 +974,8 @@ namespace Expectre
 
     void Renderer_Vk::create_pipeline()
     {
-        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, "../../shaders/vert.vert.spv");
-        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, "../../shaders/frag.frag.spv");
+        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, "C:/Expectre/shaders/vert.vert.spv");
+        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, "C:/Expectre/shaders/frag.frag.spv");
 
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
         vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1487,7 +1482,7 @@ namespace Expectre
     void Renderer_Vk::create_texture_image()
     {
         int tex_width, tex_height, tex_channels;
-        stbi_uc *pixels = stbi_load("../../assets/textures/hello4.jpg",
+        stbi_uc *pixels = stbi_load("C:/Expectre/assets/textures/hello4.jpg",
                                     &tex_width, &tex_height,
                                     &tex_channels, STBI_rgb_alpha);
         VkDeviceSize image_size = tex_width * tex_height * 4;
