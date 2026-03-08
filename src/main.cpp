@@ -1,27 +1,19 @@
 ﻿// Excpectre.cpp : Defines the entry point for the application.
 //
 #include <iostream>
-#include <vulkan/vulkan.h>
-//#include <chrono.h>
 
-#include "spdlog/spdlog.h"
-#include "SDL2/SDL.h"
-#include "SDL2/SDL_vulkan.h"
-
-#define SCREEN_WIDTH 640
-#define SCREEN_HEIGHT 480
-
-using namespace std;
-
-static bool userExit = true;
+#include "rendererVk.h"
 
 int main(int argc, char *argv[])
 {
 	try
 	{
-		// setup
+		std::cout << "STARTING UP...." << std::endl;
+		//vkCreateInstance(NULL, NULL, NULL);
+		// setup window
+		expectre::Renderer_Vk renderer{};
+
 		// create renderer, pass to "engine"
-		
 		// start engine -- engine.run()
 
 
@@ -30,10 +22,10 @@ int main(int argc, char *argv[])
 
 		//engine.cleanup()
 	}
-	catch (exception &e)
+	catch (std::exception &e)
 	{
-		cout << "EXCEPTION: \n"
-			 << e.what() << endl;
+		std::cout << "EXCEPTION: \n"
+			 << e.what() << std::endl;
 		return 1;
 	}
 
