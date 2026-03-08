@@ -47,7 +47,7 @@ namespace Expectre
 
         create_instance();
 
-        // enumeratePhysicalDevices();
+        create_surface();
 
         select_physical_device();
 
@@ -83,7 +83,7 @@ namespace Expectre
 
     Renderer_Vk::~Renderer_Vk()
     {
-        // vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
         vkDeviceWaitIdle(m_device);
         vkDestroyImageView(m_device, m_image_view, nullptr);
         vkDestroyImage(m_device, m_image, nullptr);
@@ -111,6 +111,12 @@ namespace Expectre
             throw std::runtime_error("Unable to get vulkan extension names:");
         }
 
+        // print extensions
+        // for (auto ext : extensions) {
+        //     std::printf(ext);
+        //     std::cout << "\n" << std::endl;
+        // }
+
         VkApplicationInfo app_info{};
         app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         app_info.pApplicationName = "Expectre App";
@@ -121,6 +127,7 @@ namespace Expectre
         instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instance_create_info.pNext = nullptr;
         instance_create_info.pApplicationInfo = &app_info; // create_info depends on app_info
+
         uint32_t layer_count = 0;
         const char **p_layers = nullptr;
         if (m_layers_supported)
@@ -130,6 +137,10 @@ namespace Expectre
         }
         instance_create_info.enabledLayerCount = layer_count;
         instance_create_info.ppEnabledLayerNames = p_layers;
+
+        // Extensions
+        instance_create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        instance_create_info.ppEnabledExtensionNames = &extensions.at(0);
 
         auto result = vkCreateInstance(&instance_create_info, nullptr, &m_instance);
 
@@ -174,17 +185,29 @@ namespace Expectre
 
     void Renderer_Vk::create_surface()
     {
-        SDL_Vulkan_CreateSurface(m_window, m_instance, &m_surface);
+        auto err = SDL_Vulkan_CreateSurface(m_window, m_instance, static_cast<SDL_vulkanSurface*>(&m_surface));
+        // Create a Vulkan surface using SDL
+        if (!err)
+        {
+            // Handle surface creation error
+            throw std::runtime_error("Failed to create Vulkan surface");
+        }
     }
 
     void Renderer_Vk::select_physical_device()
     {
+        // Enumerate physical devices
         uint32_t physical_device_count = 0;
-        vkEnumeratePhysicalDevices(m_instance, &physical_device_count, nullptr);
-        assert(physical_device_count > 0);
+        auto err = vkEnumeratePhysicalDevices(m_instance, &physical_device_count, nullptr);
+        if (physical_device_count <= 0)
+        {
+            std::runtime_error("<= 0 physical devices available");
+        }
+        assert(!err);
         m_physical_devices.resize(physical_device_count);
         vkEnumeratePhysicalDevices(m_instance, &physical_device_count, m_physical_devices.data());
 
+        // Report available devices
         for (uint32_t i = 0; i < m_physical_devices.size(); i++)
         {
             const VkPhysicalDevice &phys_device = m_physical_devices.at(i);
@@ -238,11 +261,22 @@ namespace Expectre
                                                  &queue_families_count,
                                                  family_properties.data());
 
+        // Check queues for present support
+        std::vector<VkBool32> supports_present(queue_families_count);
+        for (auto i = 0; i < queue_families_count; i++)
+        {
+            vkGetPhysicalDeviceSurfaceSupportKHR(m_chosen_phys_device.value(), i,
+                                                 m_surface, &supports_present.at(i));
+        }
+
+        // Search for queue that supports transfer, present, and graphics
         auto family_index = 0;
         for (auto i = 0; i < queue_families_count; i++)
         {
             const auto &properties = family_properties.at(i);
-            if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags && VK_QUEUE_GRAPHICS_BIT & properties.queueFlags)
+            if (VK_QUEUE_TRANSFER_BIT & properties.queueFlags &&
+                VK_QUEUE_GRAPHICS_BIT & properties.queueFlags &&
+                supports_present.at(i))
             {
                 family_index = i;
                 spdlog::debug("Choosing queue family with flags {} and count {}",
@@ -250,6 +284,7 @@ namespace Expectre
                 break;
             }
         }
+
         VkDeviceQueueCreateInfo queue_create_info{};
         queue_create_info.pNext = nullptr;
         queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -276,6 +311,8 @@ namespace Expectre
         {
             spdlog::throw_spdlog_ex("Could not create logical device");
         }
+
+        vkGetDeviceQueue(m_device, family_index, 0, &m_graphics_queue);
     }
 
     void Renderer_Vk::create_buffers_and_images()
@@ -398,18 +435,19 @@ namespace Expectre
         return selected_type;
     }
 
-    void Renderer_Vk::create_swap_chain() {
+    void Renderer_Vk::create_swap_chain()
+    {
 
         VkSurfaceCapabilitiesKHR capabilities{};
         std::vector<VkSurfaceFormatKHR> formats{};
         std::vector<VkPresentModeKHR> present_modes;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_chosen_phys_device.value(), m_surface, &capabilities);
-        
+
         // Choose format and mode from above vectors
         VkSurfaceFormatKHR surface_format{};
         VkPresentModeKHR present_mode{};
         VkExtent2D extent{};
 
-        //uint32_t image_count = 
+        // uint32_t image_count =
     }
 }
