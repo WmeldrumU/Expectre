@@ -30,16 +30,35 @@
 namespace Expectre
 {
 
-	typedef struct _UniformBuffer
+	// Vertex buffer and attributes
+	struct AllocatedBuffer
 	{
 		VmaAllocation allocation{ VK_NULL_HANDLE }; // Allocation handle for the buffer
-		VkBuffer buffer{};
+		VkBuffer buffer{};                       // Handle to the Vulkan buffer object that the memory is bound to
+		// Allow copying (optional but safe if you're careful)
+		AllocatedBuffer() = default;
+		AllocatedBuffer(const AllocatedBuffer&) = default;
+		AllocatedBuffer& operator=(const AllocatedBuffer&) = default;
+	};
+	typedef AllocatedBuffer VertexBuffer;
+	typedef AllocatedBuffer IndexBuffer;
+
+	struct GeometryBuffer {
+		AllocatedBuffer vertices;
+		uint32_t vertex_count{ 0 }; // Number of vertices in the buffer
+		AllocatedBuffer indices;
+		uint32_t index_count{ 0 }; // Number of indices in the buffer
+	};
+
+	struct UniformBuffer
+	{
+		AllocatedBuffer allocated_buffer{};
 		// The descriptor set stores the resources bound to the binding points in a shader
 		// It connects the binding points of the different shaders with the buffers and images used for those bindings
 		VkDescriptorSet descriptorSet{};
 		// We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
 		uint8_t* mapped{ nullptr };
-	} UniformBuffer;
+	};
 
 	struct TextureVk {
 		VkImage image;
@@ -108,9 +127,7 @@ namespace Expectre
 
 		void cleanup_swapchain();
 
-		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
-			VkMemoryPropertyFlags properties, VkBuffer& buffer,
-			VkDeviceMemory& buffer_memory);
+		AllocatedBuffer create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
 
 		void create_image(uint32_t width, uint32_t height,
 			VkFormat format, VkImageTiling tiling,
@@ -143,6 +160,8 @@ namespace Expectre
 
 		void load_model(std::string dir);
 
+		void create_ui_pipeline();
+
 		SDL_Window* m_window{};
 		VkInstance m_instance{};
 		VkSurfaceKHR m_surface{};
@@ -163,7 +182,9 @@ namespace Expectre
 
 		VkRenderPass m_render_pass{};
 		VkPipelineLayout m_pipeline_layout{};
+		VkPipelineLayout m_ui_pipeline_layout{};
 		VkPipeline m_pipeline{};
+		VkPipeline m_ui_pipeline{};
 		VkDescriptorPool m_descriptor_pool{};
 		// std::vector<VkDescriptorSet> m_descriptor_sets{};
 		VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
@@ -174,7 +195,7 @@ namespace Expectre
 		std::vector<VkSemaphore> m_finished_render_semaphores{};
 		std::vector<VkFence> m_in_flight_fences{};
 
-		std::array<UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
+		std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
 		VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
 		VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
 		// VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
@@ -223,8 +244,8 @@ namespace Expectre
 
 		} m_camera{};
 
-		ShaderFileWatcher *m_vert_shader_watcher = nullptr;
-		ShaderFileWatcher *m_frag_shader_watcher = nullptr;
+		std::unique_ptr<ShaderFileWatcher> m_vert_shader_watcher = nullptr;
+		std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
 
 	};
 }

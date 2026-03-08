@@ -32,25 +32,6 @@ namespace Expectre
 		std::string type;
 	};
 
-	struct IndexBuffer
-	{
-		VmaAllocation allocation{ VK_NULL_HANDLE }; // Allocation handle for the buffer
-		VkBuffer buffer{};
-		uint32_t count{ 0 };
-	};
-
-	// Vertex buffer and attributes
-	struct VertexBuffer
-	{
-		VmaAllocation allocation{ VK_NULL_HANDLE }; // Allocation handle for the buffer
-		VkBuffer buffer{};                       // Handle to the Vulkan buffer object that the memory is bound to
-		uint32_t count{ 0 };
-	};
-
-	struct GeometryBuffer {
-		VertexBuffer vertices;
-		IndexBuffer indices;
-	};
 
 	struct Mesh
 	{

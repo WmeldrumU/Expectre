@@ -28,18 +28,22 @@ namespace Expectre {
 				m_shader_kind = shaderc_shader_kind::shaderc_vertex_shader;
 			}
 			else if (m_path.ends_with(".frag")) {
+				std::cout << "It's a fragment shader.\n";
 				m_shader_kind = shaderc_shader_kind::shaderc_fragment_shader;
 			}
 
 		}
 
-		void check_for_changes() {
+		bool check_for_changes() {
 			auto write_time = fs::last_write_time(m_path);
 
 			if (write_time != m_last_write_time) {
 				compile();
 				m_last_write_time = write_time;
+				return true;
 			}
+
+			return false;
 		}
 
 
@@ -72,8 +76,10 @@ namespace Expectre {
 				throw std::runtime_error("Shader compilation failed: " + result.GetErrorMessage());
 			}
 
-			std::string filename = std::filesystem::path(m_path).filename().string();
-			std::ofstream out(filename + ".spv", std::ios::binary);
+			auto stem = std::filesystem::path(m_path).stem().string(); // removes extension
+			std::string filename = WORKSPACE_DIR + std::string("/shaders/") + stem + ".spv";
+
+			std::ofstream out(filename, std::ios::binary | std::ios::trunc);
 			out.write(reinterpret_cast<const char*>(result.cbegin()),
 				std::distance(result.cbegin(), result.cend()) * sizeof(uint32_t));
 			out.close();
