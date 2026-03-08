@@ -44,7 +44,15 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE="Debug/generators/conan_toolchain.cmake"
 cmake --build build --config Debug
 ```
 
+<<<<<<< HEAD
 TODOS
 - runtime shader compilation
 - noesis integration
 - zoom to fit
+=======
+SCRATCH
+
+Should shader watcher return the module?
+Shader watcher needs to return true/false if a new module was created. Or return null or something like that
+We need to rebuild the pipeline (possibilty more) once recompiled.
+>>>>>>> 011e948 (Scratch notes)
