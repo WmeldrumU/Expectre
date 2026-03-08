@@ -2,18 +2,27 @@
 #define UI_RENDERER_VK_NOESIS
 
 #include <NsRender/RenderDevice.h>
-#include <vulkan/vulkan.h>
-#include <vma/vk_mem_alloc.h>
 #include <vector>
-namespace Expectre{
+#include <vma/vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
+namespace Expectre {
+
+
+  struct class RenderTargetVk : public Noesis::RenderTarget
+{
+    VkImage image;
+    VkImageView view;
+    VkFramebuffer framebuffer;
+    uint32_t width;
+    uint32_t height;
+};
 class UIRendererVkNoesis : public Noesis::RenderDevice {
 public:
   UIRendererVkNoesis() = delete;
   UIRendererVkNoesis(VkPhysicalDevice phys_device, VkDevice device,
                      VmaAllocator allocator);
 
-private:
-  // NOESIS RENDERDEVICE INTERFACE
+  void BeginRender(uint32_t frame_index);
 
 private:
   /// From RenderDevice
@@ -54,7 +63,21 @@ private:
   VkDevice m_device;
   VmaAllocator m_allocator;
   std::vector<AllocatedBuffer> m_allocations;
-  
+
+  struct StreamPerFrame {
+    AllocatedBuffer vb, ib;
+    uint8_t *vbMapped = nullptr;
+    uint8_t *ibMapped = nullptr;
+    uint32_t vbHead = 0;
+    uint32_t ibHead = 0;
+
+    // “last pointer returned” base offsets for the current mapping
+    uint32_t lastVBBase = 0;
+    uint32_t lastIBBase = 0;
+  };
+
+  StreamPerFrame m_frames[2];
+  uint32_t m_frameIndex = 0;
 };
 } // namespace Expectre
 #endif // UI_RENDERER_VK_NOESIS
