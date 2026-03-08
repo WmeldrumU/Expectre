@@ -2,11 +2,10 @@
 #define NDEBUG
 
 #include <iostream>
+#include <webgpu/webgpu.h>
 #include "SDL2/SDL.h"
 #include "Engine.h"
-#include "rendererVk.h"
 #include "spdlog/spdlog.h"
-
 
 
 int main(int argc, char *argv[])
@@ -17,7 +16,7 @@ int main(int argc, char *argv[])
 		std::cout << "STARTING UP...." << std::endl;
 		Expectre::Engine engine{};
 		engine.run();
-		engine.cleanup();
+		// engine.cleanup();
 	}
 	catch (std::exception &e)
 	{

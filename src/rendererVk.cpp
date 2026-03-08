@@ -18,11 +18,11 @@
 #include <chrono>
 #include <stb_image.h>
 
-#include "rendererVk.h"
+#include "RendererVk.h"
 #include "shared.h"
 #include "spdlog/spdlog.h"
 #include "VkTools.h"
-#include "model.h"
+#include "Model.h"
 
 struct UBO
 {

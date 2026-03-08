@@ -1,8 +1,9 @@
 #include "Engine.h"
-#include "rendererVk.h"
+#include "RendererWgpu.h"
 #include <chrono>
 #include <thread>
-
+#include <spdlog/spdlog.h>
+#define USE_WEBGPU
 namespace Expectre
 {
     Engine::Engine()
@@ -11,8 +12,16 @@ namespace Expectre
 
     void Engine::run()
     {
-        std::shared_ptr<Renderer_Vk> m_renderer =
-            std::make_shared<Renderer_Vk>();
+        #if defined(USE_WEBGPU)
+        spdlog::debug("Using WebGPU");
+                m_renderer =
+                    std::make_shared<RendererWgpu>();
+        #elif defined(USE_DIRECTX)
+                m_renderer = std::make_shared<Renderer_Dx>();
+        #else
+                m_renderer =
+                    std::make_shared<Renderer_Vk>();
+        #endif
         // if (!m_renderer->isReady())
         // {
         //     throw std::runtime_error("renderer could not initialize!");

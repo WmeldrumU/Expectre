@@ -2,11 +2,19 @@
 #define ENGINE_H
 #include <cstdint>
 #include <memory>
-#include "rendererVk.h"
+#if defined(USE_WEBGPU)
+#include "RendererWgpu.h"
+#elif defined(USE_DIRECTX)
+#include "RendererDx.h"
+#else
+#include "RendererVk.h"
+#endif
 
-namespace Expectre {
-    
-    class Engine {
+namespace Expectre
+{
+
+    class Engine
+    {
     public:
         Engine();
         void start();
@@ -16,11 +24,12 @@ namespace Expectre {
         bool isInitialized();
         void limit_frame_rate(uint32_t);
         uint32_t frameNumber();
+
     private:
         bool m_isIntialized{false};
         uint32_t m_frameNumber{0};
-        std::shared_ptr<Renderer_Vk> m_renderer = nullptr;
+        std::shared_ptr<IRenderer> m_renderer;
     };
-    
+
 }
 #endif // ENGINE_H
