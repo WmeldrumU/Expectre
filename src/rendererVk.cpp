@@ -47,7 +47,7 @@ namespace Expectre
 
         create_instance();
 
-        // cnumeratePhysicalDevices();
+        // enumeratePhysicalDevices();
 
         select_physical_device();
 
@@ -348,5 +348,68 @@ namespace Expectre
 
         // mapping.r =
         // image_view_info.components.r
+    }
+
+    uint32_t Renderer_Vk::choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements,
+                                                 VkMemoryPropertyFlags requiredFlags,
+                                                 VkMemoryPropertyFlags preferredFlags)
+    {
+        VkPhysicalDeviceMemoryProperties device_memory_properties;
+
+        vkGetPhysicalDeviceMemoryProperties(m_chosen_phys_device.value(), &device_memory_properties);
+
+        uint32_t selected_type = ~0u; // All 1's
+        uint32_t memory_type;
+
+        for (memory_type = 0; memory_type < 32; memory_type++)
+        {
+
+            if (memoryRequirements.memoryTypeBits & (1 << memory_type))
+            {
+                const VkMemoryType &type = device_memory_properties.memoryTypes[memory_type];
+
+                // If type has all our preferred flags
+                if ((type.propertyFlags & preferredFlags) == preferredFlags)
+                {
+                    selected_type = memory_type;
+                    break;
+                }
+            }
+        }
+
+        if (selected_type != ~0u)
+        {
+            for (memory_type = 0; memory_type < 32; memory_type++)
+            {
+
+                if (memoryRequirements.memoryTypeBits & (1 << memory_type))
+                {
+                    const VkMemoryType &type = device_memory_properties.memoryTypes[memory_type];
+
+                    // If type has all our required flags
+                    if ((type.propertyFlags & requiredFlags) == requiredFlags)
+                    {
+                        selected_type = memory_type;
+                        break;
+                    }
+                }
+            }
+        }
+        return selected_type;
+    }
+
+    void Renderer_Vk::create_swap_chain() {
+
+        VkSurfaceCapabilitiesKHR capabilities{};
+        std::vector<VkSurfaceFormatKHR> formats{};
+        std::vector<VkPresentModeKHR> present_modes;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_chosen_phys_device.value(), m_surface, &capabilities);
+        
+        // Choose format and mode from above vectors
+        VkSurfaceFormatKHR surface_format{};
+        VkPresentModeKHR present_mode{};
+        VkExtent2D extent{};
+
+        //uint32_t image_count = 
     }
 }

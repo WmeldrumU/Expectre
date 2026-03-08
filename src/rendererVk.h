@@ -26,6 +26,8 @@ namespace Expectre
 
         void create_surface();
 
+        void create_swap_chain();
+
         void select_physical_device();
 
         void create_logical_device_and_queues();
@@ -33,6 +35,9 @@ namespace Expectre
         void create_buffers_and_images();
 
         void create_views();
+        uint32_t choose_heap_from_flags(const VkMemoryRequirements &memoryRequirements, 
+        VkMemoryPropertyFlags requiredFlags, 
+        VkMemoryPropertyFlags prefferedFlags);
 
         SDL_Window *m_window{};
         VkInstance m_instance{};
