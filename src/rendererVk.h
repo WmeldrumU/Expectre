@@ -63,6 +63,14 @@ namespace Expectre
         
         void prepare_pipeline();
 
+        void prepare_present_cmd_pool_and_buffers();
+
+        void create_descriptor_pool_and_sets();
+
+        void create_framebuffers();
+
+        void demo_draw_build_cmd();
+
         void create_buffers_and_images();
 
         void create_views();
@@ -86,8 +94,11 @@ namespace Expectre
         VkImageView m_image_view{};
         VkPipelineLayout m_pipeline_layout{};
         VkPipeline m_pipeline{};
+        VkDescriptorPool m_descriptor_pool{};
+        std::vector<VkDescriptorSet> m_descriptor_sets{};
         VkPipelineCache m_pipeline_cache{};
         VkDescriptorSetLayout m_descriptor_set_layout{};
+        std::vector<VkFramebuffer> m_framebuffers{};
         std::vector<const char *> m_layers{"VK_LAYER_KHRONOS_validation"};
         std::vector<VkPhysicalDevice> m_physical_devices;
         std::optional<VkPhysicalDevice> m_chosen_phys_device;
@@ -102,6 +113,7 @@ namespace Expectre
         VkBuffer m_buffer = VK_NULL_HANDLE;
         VkImage m_image = VK_NULL_HANDLE;
         VkCommandPool m_cmd_pool = VK_NULL_HANDLE;
+        VkCommandPool m_present_cmd_pool = VK_NULL_HANDLE;
         VkCommandBuffer m_cmd_buffer = VK_NULL_HANDLE;
 
         struct
