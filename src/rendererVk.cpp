@@ -85,6 +85,7 @@ namespace Expectre
     {
         // vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
         vkDeviceWaitIdle(m_device);
+        vkDestroyImageView(m_device, m_image_view, nullptr);
         vkDestroyImage(m_device, m_image, nullptr);
         vkDestroyBuffer(m_device, m_buffer, nullptr);
         vkDestroyDevice(m_device, nullptr);
@@ -329,6 +330,7 @@ namespace Expectre
         // buffer_view_info.range = ;
 
         // TODO: needs swapchaini info first
+        VkComponentMapping mapping{}; // mapping is automatically set to VK_COMPONENT_SWIZZLE_IDENTITY
         VkImageViewCreateInfo image_view_info{};
         image_view_info.format = VK_FORMAT_R8G8B8A8_UNORM;
         image_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -336,6 +338,15 @@ namespace Expectre
         image_view_info.subresourceRange.levelCount = 1;
         image_view_info.subresourceRange.baseArrayLayer = 0;
         image_view_info.subresourceRange.layerCount = 1;
-        //image_view_info.components.r
+        image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        image_view_info.components = mapping;
+        image_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        image_view_info.subresourceRange.baseArrayLayer = 0;
+        image_view_info.subresourceRange.layerCount = 1;
+        image_view_info.subresourceRange.baseMipLevel = 0;
+        image_view_info.subresourceRange.levelCount = 1;
+
+        // mapping.r =
+        // image_view_info.components.r
     }
 }
