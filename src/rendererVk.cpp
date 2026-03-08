@@ -31,7 +31,8 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
                        VkDevice &device, VmaAllocator &allocator,
                        VkSurfaceKHR &surface, VkQueue &graphics_queue,
                        uint32_t &graphics_queue_index, VkQueue &present_queue,
-                       uint32_t &present_queue_index)
+                       uint32_t &present_queue_index,
+                       InputManager &input_manager)
     : m_instance{instance}, m_physical_device{physical_device},
       m_device{device}, m_allocator{allocator}, m_surface{surface},
       m_graphics_queue{graphics_queue},
@@ -54,8 +55,17 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_depth_stencil =
       TextureVk::create_depth_stencil(m_physical_device, device, m_cmd_pool,
                                       m_graphics_queue, allocator, m_extent);
-  m_render_pass = create_renderpass(device, m_swapchain_image_format,
-                                    m_depth_stencil.image_info.format, true);
+  RenderPassConfig rp_config{};
+  rp_config.colorFormat = m_swapchain_image_format,
+  rp_config.depthFormat = m_depth_stencil.image_info.format,
+  rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+  rp_config.colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  rp_config.colorFinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  rp_config.depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+  rp_config.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+  rp_config.depthInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  // Single render pass: clears everything, presents at the end
+      m_render_pass = create_renderpass(device, rp_config);
 
   VkDescriptorSetLayoutBinding ubo_layout_binding{};
   ubo_layout_binding.binding = 0;
@@ -78,7 +88,6 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_pipeline = create_pipeline(device, m_render_pass, m_pipeline_layout);
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
-    VkImageView view = m_swapchain_image_views[i];
     m_swapchain_framebuffers[i] = create_framebuffer(
         device, m_swapchain_image_views[i], m_depth_stencil.view);
   }
@@ -122,18 +131,24 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
       ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 
   NoesisUI::InitInfo nsInit{};
-  nsInit.instance          = m_instance;
-  nsInit.physicalDevice    = m_physical_device;
-  nsInit.device            = m_device;
-  nsInit.graphicsQueue     = m_graphics_queue;
-  nsInit.queueFamilyIndex  = m_graphics_queue_index;
-  nsInit.renderPass        = m_render_pass;
-  nsInit.sampleCount       = VK_SAMPLE_COUNT_1_BIT;
-  nsInit.width             = m_extent.width;
-  nsInit.height            = m_extent.height;
+  nsInit.instance = m_instance;
+  nsInit.physicalDevice = m_physical_device;
+  nsInit.device = m_device;
+  nsInit.graphicsQueue = m_graphics_queue;
+  nsInit.queueFamilyIndex = m_graphics_queue_index;
+  nsInit.renderPass = m_render_pass;
+  nsInit.sampleCount = VK_SAMPLE_COUNT_1_BIT;
+  nsInit.width = m_extent.width;
+  nsInit.height = m_extent.height;
   nsInit.maxFramesInFlight = MAX_CONCURRENT_FRAMES;
 
   m_noesisUI = std::make_unique<NoesisUI>(nsInit);
+
+  // Register Noesis input adapter with the engine's InputManager.
+  // The adapter is an InputObserver (SDL-only interface) — no Noesis types
+  // leak into the core engine.
+  m_ns_input_adapter = m_noesisUI->CreateInputAdapter();
+  input_manager.AddObserver(m_ns_input_adapter);
 
   m_ready = true;
 }
@@ -286,30 +301,26 @@ VkImageView RendererVk::create_swapchain_image_views(VkDevice device,
 }
 
 VkRenderPass RendererVk::create_renderpass(VkDevice device,
-                                           VkFormat color_format,
-                                           VkFormat depth_format,
-                                           bool is_presenting_pass) {
+                                           const RenderPassConfig &config) {
   VkAttachmentDescription color{};
-  color.format = color_format;
+  color.format = config.colorFormat;
   color.samples = VK_SAMPLE_COUNT_1_BIT;
-  color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  color.loadOp = config.colorLoadOp;
   color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
   color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  color.finalLayout = is_presenting_pass
-                          ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-                          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  color.initialLayout = config.colorInitialLayout;
+  color.finalLayout = config.colorFinalLayout;
 
   VkAttachmentDescription depth{};
-  depth.format = depth_format;
+  depth.format = config.depthFormat;
   depth.samples = VK_SAMPLE_COUNT_1_BIT;
-  depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  depth.loadOp = config.depthLoadOp;
   depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  depth.stencilLoadOp = config.stencilLoadOp;
   depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  depth.initialLayout = config.depthInitialLayout;
+  depth.finalLayout = config.depthFinalLayout;
 
   VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
   VkAttachmentReference depthRef{
@@ -320,10 +331,10 @@ VkRenderPass RendererVk::create_renderpass(VkDevice device,
   sub.colorAttachmentCount = 1;
   sub.pColorAttachments = &colorRef;
   sub.pDepthStencilAttachment =
-      (depth_format != VK_FORMAT_UNDEFINED) ? &depthRef : nullptr;
+      (config.depthFormat != VK_FORMAT_UNDEFINED) ? &depthRef : nullptr;
 
   std::vector<VkAttachmentDescription> atts = {color};
-  if (depth_format != VK_FORMAT_UNDEFINED)
+  if (config.depthFormat != VK_FORMAT_UNDEFINED)
     atts.push_back(depth);
 
   VkRenderPass render_pass;
@@ -671,11 +682,13 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
 
   VK_CHECK_RESULT(vkBeginCommandBuffer(command_buffer, &begin_info));
 
-  // --- Noesis pre-pass (offscreen effects, texture uploads) ---
+  // === Noesis pre-pass (offscreen effects, texture uploads) ===
+  // Must run BEFORE the render pass so Noesis can do its offscreen work.
   if (m_noesisUI) {
     m_noesisUI->PreRender(command_buffer, m_frameCounter, m_totalTimeSeconds);
   }
 
+  // === Single render pass: 3D scene + UI overlay ===
   std::array<VkClearValue, 2> clear_col;
   clear_col[0] = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
   clear_col[1].depthStencil = {1.0f, 0};
@@ -735,7 +748,7 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
                      mesh.vertex_offset, 0 /* first instance */);
   }
 
-  // --- Noesis on-screen render (inside our render pass) ---
+  // --- Noesis UI (rendered inside the same render pass) ---
   if (m_noesisUI) {
     m_noesisUI->Render();
   }

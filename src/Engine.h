@@ -36,7 +36,6 @@ namespace Expectre
 		bool isInitialized();
 		void limit_frame_rate(uint32_t desired_fps, uint64_t delta_time);
 		bool process_input();
-		void add_observer(std::weak_ptr<InputObserver> observer);
 		void create_surface();
 		uint32_t frameNumber();
 

@@ -23,6 +23,7 @@
 #include "TextureVk.h"
 #include "ToolsVk.h"
 #include "observer.h"
+#include "input/InputManager.h"
 #include "scene/SceneObject.h"
 
 #include <memory>
@@ -65,7 +66,8 @@ public:
   RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
              VkDevice &device, VmaAllocator &allocator, VkSurfaceKHR &surface,
              VkQueue &graphics_queue, uint32_t &graphics_queue_index,
-             VkQueue &present_queue, uint32_t &present_queue_index);
+             VkQueue &present_queue, uint32_t &present_queue_index,
+             InputManager &input_manager);
   ~RendererVk();
 
   bool is_ready() { return m_ready; }
@@ -87,9 +89,20 @@ private:
   VkCommandPool create_command_pool(VkDevice device,
                                     uint32_t graphics_queue_family_index);
 
-  VkRenderPass create_renderpass(VkDevice device, VkFormat color_format,
-                                 VkFormat depth_format,
-                                 bool is_presenting_pass);
+  /// Configuration for a single render pass.
+  struct RenderPassConfig {
+    VkFormat          colorFormat;
+    VkFormat          depthFormat;
+    VkAttachmentLoadOp  colorLoadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkImageLayout       colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout       colorFinalLayout   = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentLoadOp  depthLoadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkAttachmentLoadOp  stencilLoadOp    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkImageLayout       depthInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout       depthFinalLayout   = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  };
+
+  VkRenderPass create_renderpass(VkDevice device, const RenderPassConfig &config);
 
   VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass,
                              VkPipelineLayout pipeline_layout);
@@ -145,9 +158,7 @@ private:
 
   VkRenderPass m_render_pass{};
   VkPipelineLayout m_pipeline_layout{};
-  VkPipelineLayout m_ui_pipeline_layout{};
   VkPipeline m_pipeline{};
-  VkPipeline m_ui_pipeline{};
   VkDescriptorPool m_descriptor_pool{};
   VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
   VkDescriptorSetLayout m_descriptor_set_layout{VK_NULL_HANDLE};
@@ -191,6 +202,7 @@ private:
   std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
 
   std::unique_ptr<NoesisUI> m_noesisUI;
+  std::shared_ptr<InputObserver> m_ns_input_adapter;
   uint64_t m_frameCounter = 0;
   double m_totalTimeSeconds = 0.0;
 

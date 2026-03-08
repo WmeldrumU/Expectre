@@ -12,6 +12,7 @@
 namespace Expectre
 {
 class Scene;
+class InputManager;
 
 #define RESOLUTION_X 1280
 #define RESOLUTION_Y 720
@@ -20,7 +21,7 @@ class Scene;
 	{
 	public:
 		RenderContextVk() = delete;
-		RenderContextVk(SDL_Window *window);
+		RenderContextVk(SDL_Window *window, InputManager &input_manager);
 		~RenderContextVk();
 
 		const VkDevice &get_device() { return m_device; }

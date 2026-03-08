@@ -11,8 +11,7 @@
 
 namespace Expectre {
 
-class TextureVk /*: public Noesis::Texture*/
-{
+class TextureVk {
 public:
   VkImage image;
   VkImageView view;
