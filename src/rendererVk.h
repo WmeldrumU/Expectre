@@ -25,6 +25,8 @@
 #include "observer.h"
 #include "scene/SceneObject.h"
 
+#include <memory>
+
 #define MAX_CONCURRENT_FRAMES 2
 
 // Default fence timeout in nanoseconds
@@ -34,6 +36,7 @@
 namespace Expectre {
 
 class Camera;
+class NoesisUI;  // forward-declared from noesis/NoesisUI.h
 
 struct MVP_uniform_object {
   glm::mat4 model;
@@ -59,8 +62,8 @@ public:
   RendererVk(const RendererVk &) = delete;
   // Delete the copy assignment operator
   RendererVk &operator=(const RendererVk &) = delete;
-  RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
-             VmaAllocator &allocator, VkSurfaceKHR &surface,
+  RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
+             VkDevice &device, VmaAllocator &allocator, VkSurfaceKHR &surface,
              VkQueue &graphics_queue, uint32_t &graphics_queue_index,
              VkQueue &present_queue, uint32_t &present_queue_index);
   ~RendererVk();
@@ -69,6 +72,7 @@ public:
   void update(uint64_t delta_t) override;
   void draw_frame(const Camera &camera) override;
   void upload_texture_to_gpu(const Texture &texture);
+  NoesisUI* GetNoesisUI() { return m_noesisUI.get(); }
 
 private:
   void create_swapchain();
@@ -125,6 +129,7 @@ private:
 
   void update_geometry_buffer(SceneObject &object);
 
+  VkInstance &m_instance;
   VkPhysicalDevice &m_physical_device;
   VkDevice &m_device;
 
@@ -185,7 +190,9 @@ private:
   std::unique_ptr<ShaderFileWatcher> m_vert_shader_watcher = nullptr;
   std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
 
-  std::unique_ptr<IUIRenderer> m_ui_renderer = nullptr;
+  std::unique_ptr<NoesisUI> m_noesisUI;
+  uint64_t m_frameCounter = 0;
+  double m_totalTimeSeconds = 0.0;
 
   VmaAllocator &m_allocator;
   VkSurfaceKHR &m_surface;

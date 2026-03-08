@@ -23,14 +23,17 @@
 
 #include "scene/Camera.h"
 
+#include "noesis/NoesisUI.h"
+
 namespace Expectre {
 
-RendererVk::RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
-                       VmaAllocator &allocator, VkSurfaceKHR &surface,
-                       VkQueue &graphics_queue, uint32_t &graphics_queue_index,
-                       VkQueue &present_queue, uint32_t &present_queue_index)
-    : m_physical_device{physical_device}, m_device{device},
-      m_allocator{allocator}, m_surface{surface},
+RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
+                       VkDevice &device, VmaAllocator &allocator,
+                       VkSurfaceKHR &surface, VkQueue &graphics_queue,
+                       uint32_t &graphics_queue_index, VkQueue &present_queue,
+                       uint32_t &present_queue_index)
+    : m_instance{instance}, m_physical_device{physical_device},
+      m_device{device}, m_allocator{allocator}, m_surface{surface},
       m_graphics_queue{graphics_queue},
       m_graphics_queue_index{graphics_queue_index},
       m_present_queue{present_queue},
@@ -118,6 +121,20 @@ RendererVk::RendererVk(VkPhysicalDevice &physical_device, VkDevice &device,
   m_vert_shader_watcher = std::make_unique<ShaderFileWatcher>(
       ShaderFileWatcher(std::string(WORKSPACE_DIR) + "/shaders/vert.vert"));
 
+  NoesisUI::InitInfo nsInit{};
+  nsInit.instance          = m_instance;
+  nsInit.physicalDevice    = m_physical_device;
+  nsInit.device            = m_device;
+  nsInit.graphicsQueue     = m_graphics_queue;
+  nsInit.queueFamilyIndex  = m_graphics_queue_index;
+  nsInit.renderPass        = m_render_pass;
+  nsInit.sampleCount       = VK_SAMPLE_COUNT_1_BIT;
+  nsInit.width             = m_extent.width;
+  nsInit.height            = m_extent.height;
+  nsInit.maxFramesInFlight = MAX_CONCURRENT_FRAMES;
+
+  m_noesisUI = std::make_unique<NoesisUI>(nsInit);
+
   m_ready = true;
 }
 
@@ -141,6 +158,9 @@ void RendererVk::cleanup_swapchain() {
 RendererVk::~RendererVk() {
 
   vkDeviceWaitIdle(m_device);
+
+  // Noesis cleanup (before Vulkan resource destruction)
+  m_noesisUI.reset();
 
   // Destroy synchronization objects
   for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; ++i) {
@@ -651,6 +671,11 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
 
   VK_CHECK_RESULT(vkBeginCommandBuffer(command_buffer, &begin_info));
 
+  // --- Noesis pre-pass (offscreen effects, texture uploads) ---
+  if (m_noesisUI) {
+    m_noesisUI->PreRender(command_buffer, m_frameCounter, m_totalTimeSeconds);
+  }
+
   std::array<VkClearValue, 2> clear_col;
   clear_col[0] = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
   clear_col[1].depthStencil = {1.0f, 0};
@@ -708,6 +733,11 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
   for (const auto &mesh : mesh_allocations) {
     vkCmdDrawIndexed(command_buffer, mesh.index_count, 1, mesh.index_offset,
                      mesh.vertex_offset, 0 /* first instance */);
+  }
+
+  // --- Noesis on-screen render (inside our render pass) ---
+  if (m_noesisUI) {
+    m_noesisUI->Render();
   }
 
   vkCmdEndRenderPass(command_buffer);
@@ -808,6 +838,7 @@ void RendererVk::draw_frame(const Camera &camera) {
 
   // Move to next frame (0 -> 1 -> 0 -> 1 ...)
   m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
+  m_frameCounter++;
 }
 
 VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
@@ -890,6 +921,7 @@ void RendererVk::update_uniform_buffer(const Camera &camera) {
 }
 
 void RendererVk::update(uint64_t delta_t) {
+  m_totalTimeSeconds += delta_t / 1000.0;
 
   // Check if shader files have changed, if so, create a new pipeline
   // This allow for hot reloading of shaders while the app is running!

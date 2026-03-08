@@ -29,8 +29,9 @@ RenderContextVk::RenderContextVk(SDL_Window *window) : m_window{window} {
   create_memory_allocator();
 
   m_renderer = std::make_shared<RendererVk>(
-      m_physical_device, m_device, m_allocator, m_surface, m_graphics_queue,
-      m_graphics_queue_index, m_present_queue, m_present_queue_index);
+      m_instance, m_physical_device, m_device, m_allocator, m_surface,
+      m_graphics_queue, m_graphics_queue_index, m_present_queue,
+      m_present_queue_index);
   m_ready = true;
 }
 
