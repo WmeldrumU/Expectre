@@ -470,8 +470,8 @@ namespace Expectre
     {
 
 
-
-        Model model = tools::import_model("C:/src/Expectre/assets/bunny.obj");
+        std::string dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
+        Model model = tools::import_model(dir);
         const std::vector<Vertex>& vertices = model.vertices;
         const std::vector<uint32_t>& indices = model.indices;
         m_indices.count = static_cast<uint32_t>(indices.size());
@@ -631,8 +631,9 @@ namespace Expectre
 
     void Renderer_Vk::create_pipeline()
     {
-        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, "C:/src/Expectre/shaders/vert.vert.spv");
-        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, "C:/src/Expectre/shaders/frag.frag.spv");
+
+        VkShaderModule vert_shader_module = tools::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/vert.vert.spv")));
+        VkShaderModule frag_shader_module = tools::createShaderModule(m_device, (WORKSPACE_DIR + std::string("/shaders/frag.frag.spv")));
 
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
         vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1126,7 +1127,8 @@ namespace Expectre
     void Renderer_Vk::create_texture_image()
     {
         int tex_width, tex_height, tex_channels;
-        stbi_uc* pixels = stbi_load("C:/src/Expectre/assets/textures/hello4.jpg",
+        std::string dir = WORKSPACE_DIR + std::string("/assets/textures/hello4.jpg");
+        stbi_uc* pixels = stbi_load(dir.c_str(),
             &tex_width, &tex_height,
             &tex_channels, STBI_rgb_alpha);
 
@@ -1456,44 +1458,41 @@ namespace Expectre
     {
 
         // Check for up keys
-        const bool is_up = (event.type == SDL_EVENT_KEY_UP);
-
         if (event.type == SDL_EVENT_KEY_UP)
         {
             switch (event.key.key)
             {
             case SDLK_W:
-                m_camera.moveForward = is_up;
+                m_camera.moveForward = false;
                 break;
             case SDLK_S:
-                m_camera.moveBack = is_up;
+                m_camera.moveBack = false;
                 break;
             case SDLK_A:
-                m_camera.moveLeft = is_up;
+                m_camera.moveLeft = false;
                 break;
             case SDLK_D:
-                m_camera.moveRight = is_up;
+                m_camera.moveRight = false;
                 break;
             }
         }
 
         // Check for down keys
-        const bool is_down = (event.type == SDL_EVENT_KEY_DOWN);
         if (event.type == SDL_EVENT_KEY_DOWN)
         {
             switch (event.key.key)
             {
             case SDLK_W:
-                m_camera.moveForward = is_down;
+                m_camera.moveForward = true;
                 break;
             case SDLK_S:
-                m_camera.moveBack = is_down;
+                m_camera.moveBack = true;
                 break;
             case SDLK_A:
-                m_camera.moveLeft = is_down;
+                m_camera.moveLeft = true;
                 break;
             case SDLK_D:
-                m_camera.moveRight = is_down;
+                m_camera.moveRight = true;
                 break;
             }
         }
