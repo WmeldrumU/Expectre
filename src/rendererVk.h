@@ -102,7 +102,7 @@ namespace Expectre
 
 		void create_sync_objects();
 
-		void record_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index);
+		void record_draw_commands(VkCommandBuffer command_buffer, uint32_t image_index);
 
 		void create_descriptor_set_layout();
 
@@ -112,22 +112,9 @@ namespace Expectre
 
 		void cleanup_swapchain();
 
-		void create_image(uint32_t width, uint32_t height,
-			VkFormat format, VkImageTiling tiling,
-			VkImageUsageFlags usage,
-			VkMemoryPropertyFlags properties,
-			VkImage& image,
-			VkDeviceMemory& image_memory);
-
-		void create_texture_sampler();
-
-		uint32_t choose_heap_from_flags(const VkMemoryRequirements& memoryRequirements,
-			VkMemoryPropertyFlags requiredFlags,
-			VkMemoryPropertyFlags prefferedFlags);
-
 		void on_input_event(const SDL_Event& event) override;
 		void create_memory_allocator();
-		void load_model(std::string dir);
+		std::unique_ptr<Model> load_model(std::string dir);
 
 		void create_ui_renderer();
 
@@ -171,8 +158,7 @@ namespace Expectre
 		std::vector<VkCommandBuffer> m_cmd_buffers;
 		bool m_ready = false;
 
-		VkImage m_depth_image{};
-		VkDeviceMemory m_depth_image_memory{};
+		ToolsVk::ImageAlloc m_depth_image;
 		VkImageView m_depth_image_view{};
 		VkFormat m_depth_format{};
 
@@ -183,7 +169,7 @@ namespace Expectre
 		std::vector<uint32_t> m_all_indices{};
 
 
-		std::vector<Model> m_models{};
+		std::vector<std::unique_ptr<Model>> m_models{};
 		//std::vector<GeometryBuffer> m_geometry_buffers{};
 		GeometryBuffer m_geometry_buffer{};
 
@@ -243,6 +229,10 @@ namespace Expectre
 		void UnmapIndices() override;
 		void DrawBatch(const Noesis::Batch& batch) override;
 		//@}
+
+		Noesis::Ptr<Noesis::Texture> WrapTexture(VkImage image, uint32_t width, uint32_t height,
+			uint32_t levels, VkFormat format, VkImageLayout layout, bool isInverted, bool hasAlpha);
+
 	};
 }
 #endif // RENDERER_VK_H

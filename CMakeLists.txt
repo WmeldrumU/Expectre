@@ -30,14 +30,14 @@ set(SOURCES
     src/IRendererInfo.h
     src/IUIRenderer.h
     src/main.cpp
-    src/model.h
+    src/Model.h
     src/NoesisShaders.h
     src/observer.h
     src/ProvidersApi.h
     src/RendererDx.cpp
     src/RendererDx.h
-    src/rendererVk.cpp
-    src/rendererVk.h
+    src/RendererVk.cpp
+    src/RendererVk.h
     src/RendererWgpu.cpp
     src/RendererWgpu.h
     src/RenderGraph.cpp
@@ -45,7 +45,7 @@ set(SOURCES
     src/RenderPass.cpp
     src/RenderPass.h
     src/ShaderFileWatcher.h
-    src/shared.h
+    src/Shared.h
     src/UIRendererVkNoesis.cpp
     src/UIRendererVkNoesis.h
     src/UIRendererVkNoesis_2.h

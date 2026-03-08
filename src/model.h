@@ -54,7 +54,7 @@ namespace Expectre
 		//glm::vec3 center{ 0.0f, 0.0f, 0.0f };
 		//float radius{ 1.0f };
 
-		static Model import_model(const std::string& file_path, std::vector<Expectre::Vertex>& vertices, std::vector<uint32_t>& indices)
+		static std::unique_ptr<Model> import_model(const std::string& file_path, std::vector<Expectre::Vertex>& vertices, std::vector<uint32_t>& indices)
 		{
 			Assimp::Importer importer;
 			const aiScene* scene = importer.ReadFile(file_path,
@@ -69,8 +69,8 @@ namespace Expectre
 			const aiNode* root = scene->mRootNode;
 			glm::mat4 model_transform = ToolsVk::to_glm(root->mTransformation);
 
-			Expectre::Model model{};
-			model.transform = model_transform;
+			std::unique_ptr<Expectre::Model >model =  std::make_unique<Expectre::Model>();
+			model->transform = model_transform;
 
 			uint32_t running_vertex_offset = static_cast<uint32_t>(vertices.size());
 			uint32_t running_index_offset = static_cast<uint32_t>(indices.size());
@@ -127,9 +127,9 @@ namespace Expectre
 				}
 				mesh.index_offset = static_cast<uint32_t>(indices.size()) - mesh.index_offset;
 				mesh.name = std::string(ai_mesh->mName.C_Str());
-				model.meshes.push_back(mesh);
-				model.vertex_count += static_cast<uint32_t>(vertices.size());
-				model.index_count += static_cast<uint32_t>(indices.size());
+				model->meshes.push_back(mesh);
+				model->vertex_count += static_cast<uint32_t>(vertices.size());
+				model->index_count += static_cast<uint32_t>(indices.size());
 			}
 			return model;
 		}
