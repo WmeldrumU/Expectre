@@ -50,7 +50,7 @@ namespace expectre {
 
         select_queue_family();
 
-        create_logical_device_and_queues();
+        create_logical_device_and_queues(); //problem function
 
         //createSemaphores();
 
@@ -241,7 +241,8 @@ namespace expectre {
         //     std::cout << info. << std::endl;
         // }
         //TODO: change physical device picking logic!!
-        vkCreateDevice(m_physical_devices[1], &device_create_info, nullptr, &m_device);
+        // TODO: check if index should be 0 or 1
+        vkCreateDevice(m_physical_devices[0], &device_create_info, nullptr, &m_device);
 
         vkGetDeviceQueue(m_device, graphics_queue_family_index, 0, &graphics_queue);
         vkGetDeviceQueue(m_device, present_queue_family_index, 0, &present_queue);

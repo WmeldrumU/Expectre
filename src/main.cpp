@@ -9,7 +9,6 @@ int main(int argc, char* argv[])
 	try
 	{
 		std::cout << "STARTING UP...." << std::endl;
-		//vkCreateInstance(NULL, NULL, NULL);
 		// setup window
 		expectre::Renderer_Vk renderer{};
 

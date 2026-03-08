@@ -31,7 +31,7 @@ clang-cl profile
 [settings]
 os=Windows
 arch=x86_64
-build_type=Release
+build_type=Debug
 compiler=clang
 compiler.version=14
 compiler.cppstd=gnu14
@@ -46,6 +46,6 @@ tools.cmake.cmaketoolchain:generator=Visual Studio 16
 conan2 install . --output-folder=build --build=missing -pr clang-cl 
 cd ./build/
 cmake ../ -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DCMAKE_BUILD_TYPE="Debug"
-cmake --build . --config Release
+cmake --build . --config Debug
 
 
