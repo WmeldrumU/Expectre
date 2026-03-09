@@ -1,6 +1,8 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include "Material.h"
+
 #include <assimp/Importer.hpp>
 #include <assimp/defs.h>
 #include <assimp/mesh.h>
@@ -30,9 +32,8 @@ struct MeshHandle {
 struct Mesh {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  std::string name; // Name of the mesh
-                    // std::vector<Texture> textures; // Textures associated
-                    // with the mesh
+  std::string name;              // Name of the mesh
+  MaterialHandle material;       // Material associated with this mesh
 };
 
 } // namespace Expectre

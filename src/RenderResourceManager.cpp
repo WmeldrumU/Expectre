@@ -109,6 +109,7 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh,
   alloc.index_count = static_cast<uint32_t>(mesh.indices.size());
   alloc.vertex_offset = vertex_dst_start_bytes / sizeof(Vertex);
   alloc.index_offset = index_dst_start_bytes / sizeof(uint32_t);
+  alloc.material = mesh.material;
   m_mesh_allocations.push_back(alloc);
 
   // Destroy staging

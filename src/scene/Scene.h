@@ -81,6 +81,10 @@ private:
         material_handle = MaterialManager::Instance().get_default_material();
       }
 
+      // Associate material with the mesh so the renderer can query it at
+      // draw time (the mesh was auto-queued for GPU upload by import_mesh).
+      MeshManager::Instance().set_mesh_material(mesh_handle, material_handle);
+
       // Set mesh and material on scene object
       mesh_as_child_scene_object->set_mesh(mesh_handle);
       mesh_as_child_scene_object->set_material(material_handle);

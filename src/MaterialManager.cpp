@@ -31,7 +31,9 @@ TextureHandle MaterialManager::load_texture_from_material(
     const aiMaterial *ai_material, aiTextureType texture_type,
     const std::string &model_directory) {
 
-  if (ai_material->GetTextureCount(texture_type) == 0) {
+  auto count = ai_material->GetTextureCount(texture_type);
+  spdlog::debug("[TEXLOAD] type={} count={} dir='{}'", (int)texture_type, count, model_directory);
+  if (count == 0) {
     return TextureHandle{}; // Return invalid handle if no texture
   }
 
@@ -42,13 +44,18 @@ TextureHandle MaterialManager::load_texture_from_material(
   std::filesystem::path full_path =
       std::filesystem::path(model_directory) / texture_path.C_Str();
 
-  if (!std::filesystem::exists(full_path)) {
+  bool exists = std::filesystem::exists(full_path);
+  spdlog::debug("[TEXLOAD] path='{}' exists={}", full_path.string(), exists);
+
+  if (!exists) {
     spdlog::warn("Texture file not found: {}", full_path.string());
     return TextureHandle{};
   }
 
   // Load texture through TextureManager
-  return TextureManager::Instance().import_texture(full_path.string());
+  auto handle = TextureManager::Instance().import_texture(full_path.string());
+  spdlog::debug("[TEXLOAD] result texture_id={} valid={}", handle.texture_id, (bool)handle);
+  return handle;
 }
 
 MaterialHandle
@@ -66,6 +73,8 @@ MaterialManager::import_material(const aiScene *scene,
   // Load PBR textures
   material.albedo = load_texture_from_material(
       ai_material, aiTextureType_DIFFUSE, model_directory);
+  spdlog::debug("[MAT] '{}' albedo texture_id={} valid={}",
+               material.name, material.albedo.texture_id, (bool)material.albedo);
 
   material.normal = load_texture_from_material(
       ai_material, aiTextureType_NORMALS, model_directory);

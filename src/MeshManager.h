@@ -37,6 +37,14 @@ public:
     return std::nullopt;
   }
 
+  /// Associate a material with an already-imported mesh.
+  void set_mesh_material(MeshHandle mesh, MaterialHandle material) {
+    auto it = m_mesh_map.find(mesh);
+    if (it != m_mesh_map.end()) {
+      it->second.material = material;
+    }
+  }
+
 private:
   MeshManager() = default;
   ~MeshManager() = default;

@@ -14,6 +14,7 @@ struct MeshAllocation {
   uint32_t vertex_count;
   uint32_t index_offset; // in indices (not bytes)
   uint32_t index_count;
+  MaterialHandle material; // material associated with this mesh
 };
 
 struct VertexBuffer {

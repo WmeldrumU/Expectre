@@ -17,12 +17,15 @@ layout(location = 2) out vec3 fragNorm;
 layout(location = 3) out vec2 fragTexCoord;
 
 void main() {
-    //TODO CREATE NORMAL MATRIX, 
-    //gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0);
-    //gl_Position = vec4(inPosition, 0.0, 1.0);
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    vec4 worldPos = ubo.model * vec4(inPosition, 1.0);
+    fragPos = worldPos.xyz;
+
+    // Normal matrix: inverse-transpose of upper-left 3x3 of model
+    mat3 normalMatrix = transpose(inverse(mat3(ubo.model)));
+    fragNorm = normalMatrix * inNorm;
+
     fragColor = inColor;
     fragTexCoord = inTexCoord;
-    fragNorm = inNorm;
-    
+
+    gl_Position = ubo.proj * ubo.view * worldPos;
 }

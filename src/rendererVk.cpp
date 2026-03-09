@@ -15,6 +15,7 @@
 #include <spdlog/spdlog.h>
 
 #include "AppTime.h"
+#include "MaterialManager.h"
 #include "Mesh.h"
 #include "MeshManager.h"
 #include "RenderContextVk.h"
@@ -743,9 +744,28 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
 
   const std::vector<MeshAllocation> &mesh_allocations =
       m_resource_manager.get_mesh_allocations();
-  for (const auto &mesh : mesh_allocations) {
-    vkCmdDrawIndexed(command_buffer, mesh.index_count, 1, mesh.index_offset,
-                     mesh.vertex_offset, 0 /* first instance */);
+  for (const auto &alloc : mesh_allocations) {
+    // Check if this mesh's material has an albedo texture
+    uint32_t useTexture = 0u;
+    auto mat = MaterialManager::Instance().get_material(alloc.material);
+    if (mat.has_value() && mat->get().albedo) {
+      useTexture = 1u;
+    }
+    static bool logged = false;
+    if (!logged) {
+      for (const auto &a : mesh_allocations) {
+        auto m = MaterialManager::Instance().get_material(a.material);
+        spdlog::info("[DRAW] mat_id={} found={} albedo_valid={}",
+                     a.material.material_id, m.has_value(),
+                     m.has_value() ? (bool)m->get().albedo : false);
+      }
+      logged = true;
+    }
+    vkCmdPushConstants(command_buffer, m_pipeline_layout,
+                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
+                       &useTexture);
+    vkCmdDrawIndexed(command_buffer, alloc.index_count, 1, alloc.index_offset,
+                     alloc.vertex_offset, 0 /* first instance */);
   }
 
   // --- Noesis UI (rendered inside the same render pass) ---
@@ -868,12 +888,19 @@ VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
 
 VkPipelineLayout RendererVk::create_pipeline_layout(
     VkDevice device, VkDescriptorSetLayout descriptor_set_layout) {
+  // Push constant: uint useTexture for per-mesh material differentiation
+  VkPushConstantRange push_range{};
+  push_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  push_range.offset = 0;
+  push_range.size = sizeof(uint32_t);
+
   VkPipelineLayoutCreateInfo pipeline_layout_info{};
   pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_info.pNext = nullptr;
   pipeline_layout_info.setLayoutCount = 1;
-  // pipeline_layout_info.pushConstantRangeCount = 0;
   pipeline_layout_info.pSetLayouts = &descriptor_set_layout;
+  pipeline_layout_info.pushConstantRangeCount = 1;
+  pipeline_layout_info.pPushConstantRanges = &push_range;
 
   VkPipelineLayout pipeline_layout{};
   VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr,
@@ -948,7 +975,10 @@ void RendererVk::update(uint64_t delta_t) {
        MeshManager::Instance().consume_meshes_to_upload_to_gpu()) {
     const auto &mesh_opt = MeshManager::Instance().get_mesh(mesh_handle);
     if (mesh_opt.has_value()) {
-      m_resource_manager.upload_mesh_to_gpu(mesh_opt.value(), m_cmd_pool);
+      const auto& m = mesh_opt.value().get();
+      spdlog::info("[UPLOAD] mesh='{}' material_id={} valid={}",
+                   m.name, m.material.material_id, (bool)m.material);
+      m_resource_manager.upload_mesh_to_gpu(m, m_cmd_pool);
     } else {
       spdlog::error("Mesh with handle {} not found for GPU upload",
                     mesh_handle.mesh_id);

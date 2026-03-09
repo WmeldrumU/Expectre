@@ -23,7 +23,7 @@ public:
 
 private:
   float m_camera_speed = 3.0f;
-  glm::vec3 m_position = {0.0f, 1.0f, 2.0f};
+  glm::vec3 m_position = {2.0f, 1.0f, 8.0f};
   glm::vec3 m_forward_dir = {0.0f, 0.0f, -1.0f};
 };
 } // namespace Expectre

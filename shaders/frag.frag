@@ -9,27 +9,37 @@ layout(location = 3) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
 
-
 void main() {
-    //outColor = vec4(fragTexCoord, 0.0, 1.0);
+    // Material color from brick texture
+    vec3 meshColor = texture(texSampler, fragTexCoord).rgb;
+
+    // Light properties
+    vec3 lightColor = vec3(1.0, 1.0, 1.0);
+    vec3 lightPos   = vec3(10.0, 10.0, 5.0);
+
+    // Camera at origin (view space) — approximate eye position in world space.
+    // For a proper solution, pass the camera position via a uniform.
+    vec3 viewPos = vec3(0.0, 1.0, 2.0);
+
+    vec3 N = normalize(fragNorm);
+    vec3 L = normalize(lightPos - fragPos);
+    vec3 V = normalize(viewPos - fragPos);
+    vec3 H = normalize(L + V);  // Blinn-Phong half-vector
+
     // Ambient
-    vec3 light_color = vec3(1.0, 1.0, 1.0);
-    vec3 mesh_color = vec3 (0.4, 0.4, 0.43);
-    //vec3 mesh_color = texture(texSampler, fragTexCoord).rgb; // Use texture if available
+    float ambientStrength = 0.15;
+    vec3 ambient = ambientStrength * lightColor;
 
-    float ambient_coef = 0.8;
-    vec3 ambient = ambient_coef * light_color;
+    // Diffuse (Lambertian)
+    float diff = max(dot(N, L), 0.0);
+    vec3 diffuse = diff * lightColor;
 
-    // Diffuse
-    // vec3 normal = normalize(vec3(0.0, 1.0, 1.0));
-    vec3 normal = normalize(fragNorm);
-    vec3 light_dir = normalize(vec3(10.0, 10.0, 0.0) - fragPos);
-    float diffuse_coef = max(dot(normal, light_dir), 0.0);
-    vec3 diffuse = diffuse_coef * light_color;
+    // Specular (Blinn-Phong)
+    float shininess = 32.0;
+    float spec = pow(max(dot(N, H), 0.0), shininess);
+    float specularStrength = 0.5;
+    vec3 specular = specularStrength * spec * lightColor;
 
-    // Specular
-
-    outColor = vec4(normal, 1.0);
-    //outColor = vec4((ambient + diffuse) * mesh_color, 1.0);
-    //outColor = texture(texSampler, fragTexCoord);
+    vec3 result = (ambient + diffuse + specular) * meshColor;
+    outColor = vec4(result, 1.0);
 }

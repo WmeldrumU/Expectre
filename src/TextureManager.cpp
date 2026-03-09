@@ -11,15 +11,14 @@ uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
   XXH64_state_t *state = XXH64_createState();
   XXH64_reset(state, 0);
 
-  // Hash vertex data
+  // Hash pixel data (width * height * channels bytes)
   XXH64_update(state, texture.data,
-               sizeof(Texture::data) * texture.width * texture.height);
+               static_cast<size_t>(texture.width) * texture.height * texture.channels);
 
   uint64_t hash = XXH64_digest(state);
   XXH64_freeState(state);
 
   return hash;
-  return 0;
 }
 
 TextureHandle TextureManager::import_texture(std::string image_dir) {
@@ -32,7 +31,7 @@ TextureHandle TextureManager::import_texture(std::string image_dir) {
     spdlog::error("Failed to load texture from '{}'", image_dir);
     std::terminate();
   }
-  import_texture(image_dir, data, tex_width, tex_height, desired_channels);
+  return import_texture(image_dir, data, tex_width, tex_height, desired_channels);
 }
 
 TextureHandle TextureManager::import_texture(std::string name, void *data,
