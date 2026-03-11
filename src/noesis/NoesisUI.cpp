@@ -164,6 +164,7 @@ void NoesisUI::PreRender(VkCommandBuffer cmd, uint64_t frameNumber,
                             : 0;
 
   m_device->SetCommandBuffer(rec);
+  m_lastRecordingInfo = rec;
 
   m_view->Update(timeSeconds);
   m_view->GetRenderer()->UpdateRenderTree();
@@ -172,6 +173,11 @@ void NoesisUI::PreRender(VkCommandBuffer cmd, uint64_t frameNumber,
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 void NoesisUI::Render() {
+  // Re-call SetCommandBuffer to invalidate VKRenderDevice's internal dynamic
+  // state cache.  Between RenderOffscreen() and the onscreen pass our 3D
+  // pipeline binds different state; without this the cached pipeline/stencil
+  // values inside VKRenderDevice are stale.
+  m_device->SetCommandBuffer(m_lastRecordingInfo);
   m_device->SetRenderPass(m_renderPass, m_sampleCount);
   m_view->GetRenderer()->Render();
 }

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "noesis/VKRenderDevice.h"
-#include "noesis/VKFactory.h"
+#include "VKRenderDevice.h"
+#include <NsRender/VKFactory.h>
 #include "observer.h"
 
 #include <NsCore/Ptr.h>
@@ -65,6 +65,7 @@ private:
 
     Noesis::Ptr<NoesisApp::VKRenderDevice> m_device;
     Noesis::Ptr<Noesis::IView>             m_view;
+    NoesisApp::VKFactory::RecordingInfo    m_lastRecordingInfo{};
 
     VkQueue      m_graphicsQueue = VK_NULL_HANDLE;
     VkRenderPass m_renderPass    = VK_NULL_HANDLE;

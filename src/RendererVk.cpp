@@ -40,15 +40,17 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
       m_graphics_queue_index{graphics_queue_index},
       m_present_queue{present_queue},
       m_present_queue_index{present_queue_index},
-      m_extent{RESOLUTION_X, RESOLUTION_Y},
-      m_resource_manager{device, allocator, graphics_queue} {
+      m_extent{STARTING_RESOLUTION_X, STARTING_RESOLUTION_Y},
+      m_pending_extent{STARTING_RESOLUTION_X, STARTING_RESOLUTION_Y},
+      m_resource_manager{device, allocator, graphics_queue},
+      m_input_manager{input_manager} {
 
   // Command buffers and swapchain
   create_swapchain();
 
   m_swapchain_image_views.resize(m_swapchain_images.size());
   for (auto i = 0; i < m_swapchain_images.size(); i++) {
-    m_swapchain_image_views[i] = create_swapchain_image_views(
+    m_swapchain_image_views[i] = create_swapchain_and_image_views(
         device, m_swapchain_images[i], m_swapchain_image_format,
         VK_IMAGE_ASPECT_COLOR_BIT);
   }
@@ -154,7 +156,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_ready = true;
 }
 
-void RendererVk::cleanup_swapchain() {
+void RendererVk::cleanup_swapchain_and_depth_stencil() {
   // Destroy depth buffer
   vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
   vmaDestroyImage(m_allocator, m_depth_stencil.image,
@@ -217,7 +219,11 @@ RendererVk::~RendererVk() {
   // Destroy command pool
   vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
 
-  cleanup_swapchain();
+  // vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
+  // vmaDestroyImage(m_allocator, m_depth_stencil.image,
+  //                 m_depth_stencil.allocation);
+
+  cleanup_swapchain_and_depth_stencil();
 
   VmaTotalStatistics stats{};
   vmaCalculateStatistics(m_allocator, &stats);
@@ -236,9 +242,18 @@ void RendererVk::create_swapchain() {
 
   m_surface_format =
       ToolsVk::choose_swap_surface_format(swapchain_support_details.formats);
-  // VkExtent2D extent =
-  // tools::choose_swap_extent(swapchain_support_details.capabilities,
-  // m_window);
+
+  // Clamp extent to surface capabilities (defensive check)
+  // clamped to max(minimum_supported, min(desired, max_supported))
+  VkExtent2D clamped_extent = m_extent;
+  clamped_extent.width = std::max(
+      swapchain_support_details.capabilities.minImageExtent.width,
+      std::min(m_extent.width,
+               swapchain_support_details.capabilities.maxImageExtent.width));
+  clamped_extent.height = std::max(
+      swapchain_support_details.capabilities.minImageExtent.height,
+      std::min(m_extent.height,
+               swapchain_support_details.capabilities.maxImageExtent.height));
 
   // uint32_t image_count =
   // swapchain_support_details.capabilities.minImageCount
@@ -255,7 +270,7 @@ void RendererVk::create_swapchain() {
   create_info.minImageCount = image_count;
   create_info.imageFormat = m_surface_format.format;
   create_info.imageColorSpace = m_surface_format.colorSpace;
-  create_info.imageExtent = m_extent;
+  create_info.imageExtent = clamped_extent;
   create_info.imageArrayLayers = 1;
   create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
@@ -289,10 +304,8 @@ void RendererVk::create_swapchain() {
   m_swapchain_image_format = m_surface_format.format;
 }
 
-VkImageView RendererVk::create_swapchain_image_views(VkDevice device,
-                                                     VkImage image,
-                                                     VkFormat format,
-                                                     VkImageAspectFlags flags) {
+VkImageView RendererVk::create_swapchain_and_image_views(
+    VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags flags) {
   VkImageView image_view;
 
   image_view = ToolsVk::create_image_view(device, image,
@@ -809,7 +822,13 @@ void RendererVk::draw_frame(const Camera &camera) {
       vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
                             m_available_image_semaphores[m_current_frame],
                             VK_NULL_HANDLE, &image_index);
-  VK_CHECK_RESULT(result);
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    recreate_swapchain_and_depth_stencil();
+    return;
+  } else {
+    VK_CHECK_RESULT(result);
+  }
 
   // UPDATE RESOURCES (now safe because we waited on fence)
   update_uniform_buffer(camera);
@@ -866,8 +885,14 @@ void RendererVk::draw_frame(const Camera &camera) {
   present_info.pSwapchains = swapchains;
 
   present_info.pImageIndices = &image_index;
+
   result = vkQueuePresentKHR(m_present_queue, &present_info);
-  VK_CHECK_RESULT(result);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+      m_input_manager.resize_pending()) {
+    recreate_swapchain_and_depth_stencil();
+  } else {
+    VK_CHECK_RESULT(result);
+  }
 
   // Move to next frame (0 -> 1 -> 0 -> 1 ...)
   m_current_frame = (m_current_frame + 1) % MAX_CONCURRENT_FRAMES;
@@ -975,9 +1000,9 @@ void RendererVk::update(uint64_t delta_t) {
        MeshManager::Instance().consume_meshes_to_upload_to_gpu()) {
     const auto &mesh_opt = MeshManager::Instance().get_mesh(mesh_handle);
     if (mesh_opt.has_value()) {
-      const auto& m = mesh_opt.value().get();
-      spdlog::info("[UPLOAD] mesh='{}' material_id={} valid={}",
-                   m.name, m.material.material_id, (bool)m.material);
+      const auto &m = mesh_opt.value().get();
+      spdlog::info("[UPLOAD] mesh='{}' material_id={} valid={}", m.name,
+                   m.material.material_id, (bool)m.material);
       m_resource_manager.upload_mesh_to_gpu(m, m_cmd_pool);
     } else {
       spdlog::error("Mesh with handle {} not found for GPU upload",
@@ -1025,5 +1050,54 @@ void RendererVk::upload_texture_to_gpu(const Texture &texture) {
 
   // Cleanup staging buffer
   vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+}
+
+void RendererVk::recreate_swapchain_and_depth_stencil() {
+  vkDeviceWaitIdle(m_device);
+
+  cleanup_swapchain_and_depth_stencil();
+
+  // Query surface capabilities and clamp pending extent
+  VkSurfaceCapabilitiesKHR capabilities;
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface,
+                                            &capabilities);
+  m_pending_extent.width = std::max(
+      capabilities.minImageExtent.width,
+      std::min(m_pending_extent.width, capabilities.maxImageExtent.width));
+  m_pending_extent.height = std::max(
+      capabilities.minImageExtent.height,
+      std::min(m_pending_extent.height, capabilities.maxImageExtent.height));
+
+  m_extent = m_pending_extent;
+
+  create_swapchain();
+
+  m_swapchain_image_views.resize(m_swapchain_images.size());
+  for (auto i = 0; i < m_swapchain_images.size(); i++) {
+    m_swapchain_image_views[i] = create_swapchain_and_image_views(
+        m_device, m_swapchain_images[i], m_swapchain_image_format,
+        VK_IMAGE_ASPECT_COLOR_BIT);
+  }
+
+  // Recreate depth stencil (destroyed in cleanup_swapchain)
+  m_depth_stencil =
+      TextureVk::create_depth_stencil(m_physical_device, m_device, m_cmd_pool,
+                                      m_graphics_queue, m_allocator, m_extent);
+
+  m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
+  for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
+    m_swapchain_framebuffers[i] = create_framebuffer(
+        m_device, m_swapchain_image_views[i], m_depth_stencil.view);
+  }
+
+  if (m_noesisUI) {
+    m_noesisUI->SetSize(m_extent.width, m_extent.height);
+  }
+  m_window_resize_is_pending = false;
+}
+
+void RendererVk::OnWindowResize(glm::uvec2 new_dims) {
+  m_pending_extent = {new_dims.x, new_dims.y};
+  m_window_resize_is_pending = true;
 }
 } // namespace Expectre
