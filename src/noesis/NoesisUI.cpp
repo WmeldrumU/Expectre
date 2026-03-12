@@ -2,6 +2,7 @@
 #include "noesis/NoesisInputAdapter.h"
 
 #include <NsCore/Init.h>
+#include <spdlog/spdlog.h>
 #include <NsGui/CachedFontProvider.h>
 #include <NsGui/FrameworkElement.h>
 #include <NsGui/IRenderer.h>
@@ -32,8 +33,10 @@ public:
         Noesis::String uriPath;
         uri.GetPath(uriPath);
         std::string path = m_root + uriPath.Str();
-        printf("[NoesisUI] LoadXaml: %s\n", path.c_str());
-        return Noesis::OpenFileStream(path.c_str());
+        spdlog::info("[NoesisUI] LoadXaml: '{}'", path);
+        auto stream = Noesis::OpenFileStream(path.c_str());
+        spdlog::info("[NoesisUI] LoadXaml result: {}", stream ? "OK" : "NULL");
+        return stream;
     }
 
 private:
@@ -93,8 +96,27 @@ NoesisUI::NoesisUI(const InitInfo &info)
     : m_graphicsQueue(info.graphicsQueue), m_renderPass(info.renderPass),
       m_sampleCount(info.sampleCount),
       m_maxFramesInFlight(info.maxFramesInFlight) {
-  // Note: VKRenderDevice constructor calls SetLicense + GUI::Init internally,
-  // so we must NOT call them here (double-init is undefined behavior).
+
+  // Install Noesis log handler to capture errors during initialization
+  Noesis::SetLogHandler([](const char* file, uint32_t line, uint32_t level,
+      const char* channel, const char* message) {
+    const char* levelStr = "TRACE";
+    if (level == 1) levelStr = "DEBUG";
+    else if (level == 2) levelStr = "INFO";
+    else if (level == 3) levelStr = "WARNING";
+    else if (level >= 4) levelStr = "ERROR";
+    spdlog::info("[Noesis][{}][{}] {}:{} {}", levelStr, channel, file, line, message);
+  });
+
+  Noesis::SetErrorHandler([](const char* file, uint32_t line,
+      const char* message, bool fatal) {
+    spdlog::error("[Noesis][{}] {}:{} {}", fatal ? "FATAL" : "ERROR", file, line, message);
+  });
+
+  // Initialize Noesis GUI framework — registers all built-in XAML types
+  // (UserControl, Grid, ResourceDictionary, etc.). Must be called before
+  // loading any XAML or creating views.
+  Noesis::GUI::Init();
 
   // --- Create VKRenderDevice ---
   NoesisApp::VKFactory::InstanceInfo nsInfo{};
@@ -134,8 +156,14 @@ NoesisUI::NoesisUI(const InitInfo &info)
 
   // --- Load our own XAML via URI so providers get proper context ---
   auto root = Noesis::GUI::LoadXaml<Noesis::FrameworkElement>("Page0.xaml");
+  if (!root) {
+    spdlog::error("[NoesisUI] Failed to load Page0.xaml!");
+  } else {
+    spdlog::info("[NoesisUI] Page0.xaml loaded OK, root type: {}", root->GetClassType()->GetName());
+  }
 
   m_view = Noesis::GUI::CreateView(root);
+  m_view->SetFlags(Noesis::RenderFlags_PPAA | Noesis::RenderFlags_LCD);
   m_view->SetSize(info.width, info.height);
   m_view->GetRenderer()->Init(m_device);
 
@@ -177,6 +205,12 @@ void NoesisUI::Render() {
   // state cache.  Between RenderOffscreen() and the onscreen pass our 3D
   // pipeline binds different state; without this the cached pipeline/stencil
   // values inside VKRenderDevice are stale.
+  static bool logged = false;
+  if (!logged) {
+    spdlog::info("[NoesisUI::Render] renderPass={:#x} sampleCount={} view={}",
+                 (uint64_t)m_renderPass, (int)m_sampleCount, (void*)m_view.GetPtr());
+    logged = true;
+  }
   m_device->SetCommandBuffer(m_lastRecordingInfo);
   m_device->SetRenderPass(m_renderPass, m_sampleCount);
   m_view->GetRenderer()->Render();

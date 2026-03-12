@@ -120,7 +120,8 @@ private:
                                         VkBuffer buffer, VkImageView image_view,
                                         VkSampler sampler);
 
-  VkFramebuffer create_framebuffer(VkDevice device, VkImageView view,
+  VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass renderpass,
+                                   VkImageView view,
                                    VkImageView depth_view = VK_NULL_HANDLE);
 
   void create_sync_objects();
@@ -162,6 +163,8 @@ private:
   std::vector<VkImageView> m_swapchain_image_views{};
 
   VkRenderPass m_render_pass{};
+  VkRenderPass m_ui_render_pass{};  // Separate render pass for UI overlay
+  std::vector<VkFramebuffer> m_ui_swapchain_framebuffers{};  // UI-specific framebuffers
   VkPipelineLayout m_pipeline_layout{};
   VkPipeline m_pipeline{};
   VkDescriptorPool m_descriptor_pool{};
