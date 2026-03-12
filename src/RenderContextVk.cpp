@@ -187,4 +187,9 @@ void RenderContextVk::UpdateAndRender(uint64_t delta_time, Scene &scene) {
   m_renderer->update(delta_time);
   m_renderer->draw_frame(scene.get_camera());
 }
+
+void RenderContextVk::OnWindowResize(glm::uvec2 new_dims) {
+  m_renderer->OnWindowResize(new_dims);
+  
+}
 } // namespace Expectre

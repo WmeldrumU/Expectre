@@ -15,8 +15,9 @@ Engine::Engine() : m_scene("Main Scene") {
     throw std::runtime_error("failed to initialize SDL!");
   }
 
-  m_window = SDL_CreateWindow("Expectre", RESOLUTION_X, RESOLUTION_Y,
-                              SDL_WINDOW_VULKAN);
+  m_window =
+      SDL_CreateWindow("Expectre", STARTING_RESOLUTION_X, STARTING_RESOLUTION_Y,
+                       SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
   if (!m_window) {
     SDL_Log("Unable to initialize application window!: %s", SDL_GetError());
@@ -29,8 +30,14 @@ Engine::Engine() : m_scene("Main Scene") {
 #elif defined(USE_DIRECTX)
   // m_render_context = std::make_unique<RenderContextDx>(m_window);
 #else
-  m_render_context = std::make_unique<RenderContextVk>(m_window, m_input_manager);
+  m_render_context =
+      std::make_unique<RenderContextVk>(m_window, m_input_manager);
 #endif
+
+  m_input_manager.Subscribe(SDL_EVENT_WINDOW_RESIZED, [&](const SDL_Event e) {
+    m_render_context->OnWindowResize(
+        glm::uvec2{e.window.data1, e.window.data2});
+  });
 }
 
 void Engine::run() {
@@ -38,6 +45,7 @@ void Engine::run() {
   if (!m_render_context->is_ready()) {
     throw std::runtime_error("renderer could not initialize!");
   }
+
   static uint64_t last_time = SDL_GetTicks();
   bool quit = false;
 

@@ -75,6 +75,8 @@ public:
   void draw_frame(const Camera &camera) override;
   void upload_texture_to_gpu(const Texture &texture);
   NoesisUI* GetNoesisUI() { return m_noesisUI.get(); }
+  void OnWindowResize(glm::uvec2 new_dims);
+
 
 private:
   void create_swapchain();
@@ -82,7 +84,7 @@ private:
   VkCommandBuffer create_command_buffer(VkDevice device,
                                         VkCommandPool command_pool);
 
-  VkImageView create_swapchain_image_views(VkDevice device, VkImage image,
+  VkImageView create_swapchain_and_image_views(VkDevice device, VkImage image,
                                            VkFormat format,
                                            VkImageAspectFlags flags);
 
@@ -118,7 +120,8 @@ private:
                                         VkBuffer buffer, VkImageView image_view,
                                         VkSampler sampler);
 
-  VkFramebuffer create_framebuffer(VkDevice device, VkImageView view,
+  VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass renderpass,
+                                   VkImageView view,
                                    VkImageView depth_view = VK_NULL_HANDLE);
 
   void create_sync_objects();
@@ -138,9 +141,11 @@ private:
 
   void update_uniform_buffer(const Camera &camera);
 
-  void cleanup_swapchain();
+  void cleanup_swapchain_and_depth_stencil();
 
   void update_geometry_buffer(SceneObject &object);
+
+  void recreate_swapchain_and_depth_stencil();
 
   VkInstance &m_instance;
   VkPhysicalDevice &m_physical_device;
@@ -153,10 +158,13 @@ private:
   std::vector<VkImage> m_swapchain_images{};
   VkFormat m_swapchain_image_format{};
   VkExtent2D m_extent{};
+  VkExtent2D m_pending_extent{};
   std::vector<VkFramebuffer> m_swapchain_framebuffers{};
   std::vector<VkImageView> m_swapchain_image_views{};
 
   VkRenderPass m_render_pass{};
+  VkRenderPass m_ui_render_pass{};  // Separate render pass for UI overlay
+  std::vector<VkFramebuffer> m_ui_swapchain_framebuffers{};  // UI-specific framebuffers
   VkPipelineLayout m_pipeline_layout{};
   VkPipeline m_pipeline{};
   VkDescriptorPool m_descriptor_pool{};
@@ -167,6 +175,7 @@ private:
   std::vector<VkSemaphore> m_finished_render_semaphores{};
   std::vector<VkFence> m_in_flight_fences{};
   RenderResourceManager m_resource_manager;
+  InputManager& m_input_manager;
 
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
   VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
@@ -210,6 +219,8 @@ private:
   VkSurfaceKHR &m_surface;
   uint32 &m_graphics_queue_index;
   uint32 &m_present_queue_index;
+
+  bool m_window_resize_is_pending = false;
 };
 
 } // namespace Expectre

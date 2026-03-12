@@ -24,6 +24,21 @@ find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 find_package(xxHash REQUIRED)
 
+# Noesis SDK root (must be set before SOURCES which references SDK paths)
+if(WIN32)
+    set(NOESIS_ROOT "C:/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/windows_x86_64")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.lib")
+elseif(APPLE)
+    set(NOESIS_ROOT "$ENV{HOME}/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/macos")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.dylib")
+else()
+    set(NOESIS_ROOT "/usr/local/noesis")
+    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/linux_x86_64")
+    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/libNoesis.so")
+endif()
+
     # add source files
     set(SOURCES
     src/input/InputManager.h
@@ -60,12 +75,9 @@ find_package(xxHash REQUIRED)
     src/TextureManager.h
     src/TextureManager.cpp
     src/ToolsVk.h
-    src/noesis/FastLZ.h
-    src/noesis/FastLZ.cpp
+    ${NOESIS_ROOT}/Src/Packages/Render/VKRenderDevice/Src/VKRenderDevice.cpp
+    ${NOESIS_ROOT}/Src/Packages/App/Providers/Src/FastLZ.cpp
     src/noesis/NoesisInputAdapter.h
-    src/noesis/VKRenderDevice.h
-    src/noesis/VKRenderDevice.cpp
-    src/noesis/VKFactory.h
     src/noesis/NoesisUI.h
     src/noesis/NoesisUI.cpp
     src/AppTime.h
@@ -85,21 +97,6 @@ message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
 add_executable(ExpectreApp ${SOURCES})
 
-
-# TODO: get rid of this hardcoded path and use Conan to manage Noesis as well
-if(WIN32)
-    set(NOESIS_ROOT "C:/noesis")
-    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/windows_x86_64")
-    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.lib")
-elseif(APPLE)
-    set(NOESIS_ROOT "$ENV{HOME}/noesis")
-    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/macos")
-    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/Noesis.dylib")
-else()
-    set(NOESIS_ROOT "/usr/local/noesis")
-    set(NOESIS_LIB_DIR "${NOESIS_ROOT}/Lib/linux_x86_64")
-    set(NOESIS_LIB_FILE "${NOESIS_LIB_DIR}/libNoesis.so")
-endif()
 
 # Create a clean Noesis target
 add_library(Noesis INTERFACE)
@@ -124,6 +121,17 @@ target_link_libraries(ExpectreApp PUBLIC
 target_include_directories(ExpectreApp PRIVATE 
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/lib/
+    ${NOESIS_ROOT}/Src/Packages/Render/VKRenderDevice/Src
+    ${NOESIS_ROOT}/Src/Packages/Render/VKRenderDevice/Include
+    ${NOESIS_ROOT}/Src/Packages/App/Providers/Src
+    ${NOESIS_ROOT}/Src/Packages/App/Providers/Include
+)
+
+# We compile VKRenderDevice and FastLZ sources directly (not as a DLL),
+# so disable the DLL-import macros.
+target_compile_definitions(ExpectreApp PRIVATE
+    NS_RENDER_VKRENDERDEVICE_API=
+    NS_APP_PROVIDERS_API=
 )
 target_link_directories(ExpectreApp PUBLIC ${PROJECT_SOURCE_DIR}/lib/)
 

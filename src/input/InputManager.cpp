@@ -1,6 +1,13 @@
 #include "input/InputManager.h"
 
 namespace Expectre {
+
+InputManager::InputManager() {
+  Subscribe(SDL_EVENT_KEY_DOWN,
+            [this](const SDL_Event &e) { this->OnKeyDown(e); });
+
+  Subscribe(SDL_EVENT_KEY_UP, [this](const SDL_Event &e) { this->OnKeyUp(e); });
+}
 bool InputManager::Update() {
   // Store previous mouse position
   glm::vec2 prevMousePos = m_mouse_pos;
@@ -19,6 +26,9 @@ bool InputManager::Update() {
   // Poll SDL events for keyboard
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_EVENT_QUIT) {
+      return true; // Quit application
+    }
 
     // Broadcast raw event to all registered observers (e.g. Noesis UI)
     for (auto it = m_observers.begin(); it != m_observers.end();) {
@@ -30,13 +40,11 @@ bool InputManager::Update() {
       }
     }
 
-    // Handle events on input queue
-    if (event.type == SDL_EVENT_KEY_DOWN) {
-      m_currentKeys[event.key.key] = true;
-    } else if (event.type == SDL_EVENT_KEY_UP) {
-      m_currentKeys[event.key.key] = false;
-    } else if (event.type == SDL_EVENT_QUIT) {
-      return true;
+    // Fire callbacks for the event we've polled from the event queue
+    if (subscribers.count((SDL_EventType)event.type)) {
+      for (auto &callback : subscribers[(SDL_EventType)event.type]) {
+        callback(event);
+      }
     }
   }
   return false;
@@ -62,6 +70,10 @@ bool InputManager::IsKeyPressed(SDL_Keycode key) const {
   return isCurrentlyDown && !wasPreviouslyDown;
 }
 
+void InputManager::OnKeyDown(SDL_Event e) { m_currentKeys[e.key.key] = true; }
+
+void InputManager::OnKeyUp(SDL_Event e) { m_currentKeys[e.key.key] = false; }
+
 bool InputManager::IsKeyReleased(SDL_Keycode key) const {
   // Released this frame = not down now, but was down last frame
   auto currentIt = m_currentKeys.find(key);
@@ -75,4 +87,11 @@ bool InputManager::IsKeyReleased(SDL_Keycode key) const {
 
 glm::vec2 InputManager::GetMousePosition() const { return m_mouse_pos; }
 glm::vec2 InputManager::GetMouseDelta() const { return m_mouse_delta; }
+
+bool InputManager::resize_pending() { return m_pending_resize; }
+
+glm::uvec2 InputManager::get_pending_resize() {
+  m_pending_resize = false;
+  return m_pending_resize_resolution;
+}
 } // namespace Expectre
