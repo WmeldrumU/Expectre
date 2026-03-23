@@ -36,6 +36,8 @@ build/
 .vscode/
 .vs/
 assets/noesis/*
-
+out_stderr.txt
+out_stdout.txt
+*.codediagram
 # Dont ignores
 !lib/**

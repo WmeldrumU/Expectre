@@ -41,5 +41,6 @@ void main() {
     vec3 specular = specularStrength * spec * lightColor;
 
     vec3 result = (ambient + diffuse + specular) * meshColor;
-    outColor = vec4(result, 1.0);
+    
+    outColor = vec4(1.0, 1.0, 0.0, 1.0);
 }

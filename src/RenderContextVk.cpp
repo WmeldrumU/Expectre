@@ -21,17 +21,24 @@
 
 namespace Expectre {
 
-RenderContextVk::RenderContextVk(SDL_Window *window, InputManager &input_manager) : m_window{window} {
+RenderContextVk::RenderContextVk(SDL_Window *window,
+                                 InputManager &input_manager)
+    : m_window{window} {
   // SDL_Vulkan_LoadLibrary();
   create_instance();
   create_surface();
   create_device();
   create_memory_allocator();
+  int width;
+  int height;
+  SDL_GetWindowSize(m_window, &width, &height);
+  uint32_t u_width = static_cast<uint32>(width);
+  uint32_t u_height = static_cast<uint32>(height);
 
   m_renderer = std::make_shared<RendererVk>(
       m_instance, m_physical_device, m_device, m_allocator, m_surface,
       m_graphics_queue, m_graphics_queue_index, m_present_queue,
-      m_present_queue_index, input_manager);
+      m_present_queue_index, u_width, u_height, input_manager);
   m_ready = true;
 }
 
@@ -183,13 +190,18 @@ void RenderContextVk::create_memory_allocator() {
   vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 }
 
-void RenderContextVk::UpdateAndRender(uint64_t delta_time, Scene &scene) {
+void RenderContextVk::update_and_render(uint64_t delta_time, Scene &scene) {
+
+  auto pending = scene.consume_pending_renderables();
+  m_renderer->upload_pending_meshes(pending);
+
   m_renderer->update(delta_time);
-  m_renderer->draw_frame(scene.get_camera());
+  const auto &renderables = scene.gather_renderables();
+
+  m_renderer->draw_frame(scene.get_camera(), renderables);
 }
 
 void RenderContextVk::OnWindowResize(glm::uvec2 new_dims) {
   m_renderer->OnWindowResize(new_dims);
-  
 }
 } // namespace Expectre

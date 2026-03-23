@@ -60,7 +60,7 @@ void Engine::run() {
     m_scene.Update(delta_time, m_input_manager);
 
     // Render frame
-    m_render_context->UpdateAndRender(delta_time, m_scene);
+    m_render_context->update_and_render(delta_time, m_scene);
 
     limit_frame_rate(60, delta_time);
   }

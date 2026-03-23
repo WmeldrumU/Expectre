@@ -46,7 +46,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   tex.channels = channels;
   tex.width = width;
   tex.height = height;
-  tex.name = name;
+  tex.m_name = name;
   tex.data = static_cast<uint8_t *>(data);
 
   // Compute hash and check for duplicates
@@ -55,7 +55,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   handle.texture_id = hash;
   if (m_texture_map.find(handle) != m_texture_map.end()) {
     // Texture already exists, return existing ID
-    spdlog::error("Texture '{}' (hash - {}) already cached, reusing", tex.name,
+    spdlog::error("Texture '{}' (hash - {}) already cached, reusing", tex.m_name,
                   hash);
     return handle;
   }

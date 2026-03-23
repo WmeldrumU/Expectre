@@ -19,12 +19,12 @@
 #include "IRenderer.h"
 #include "IUIRenderer.h"
 #include "RenderResourceManager.h"
+#include "RenderableInfo.h"
 #include "ShaderFileWatcher.h"
 #include "TextureVk.h"
 #include "ToolsVk.h"
-#include "observer.h"
 #include "input/InputManager.h"
-#include "scene/SceneObject.h"
+#include "observer.h"
 
 #include <memory>
 
@@ -37,7 +37,7 @@
 namespace Expectre {
 
 class Camera;
-class NoesisUI;  // forward-declared from noesis/NoesisUI.h
+class NoesisUI; // forward-declared from noesis/NoesisUI.h
 
 struct MVP_uniform_object {
   glm::mat4 model;
@@ -67,16 +67,19 @@ public:
              VkDevice &device, VmaAllocator &allocator, VkSurfaceKHR &surface,
              VkQueue &graphics_queue, uint32_t &graphics_queue_index,
              VkQueue &present_queue, uint32_t &present_queue_index,
-             InputManager &input_manager);
+             uint32_t width, uint32_t height, InputManager &input_manager);
   ~RendererVk();
 
   bool is_ready() { return m_ready; }
-  void update(uint64_t delta_t) override;
-  void draw_frame(const Camera &camera) override;
+  void update(uint64_t delta_t);
+  void draw_frame(const Camera &camera,const std::vector<RenderableInfo> &renderables) override;
   void upload_texture_to_gpu(const Texture &texture);
-  NoesisUI* GetNoesisUI() { return m_noesisUI.get(); }
-  void OnWindowResize(glm::uvec2 new_dims);
 
+  void
+  upload_pending_meshes(const std::vector<RenderableInfo> &pending_renderables);
+
+  NoesisUI *GetNoesisUI() { return m_noesisUI.get(); }
+  void OnWindowResize(glm::uvec2 new_dims);
 
 private:
   void create_swapchain();
@@ -85,26 +88,28 @@ private:
                                         VkCommandPool command_pool);
 
   VkImageView create_swapchain_and_image_views(VkDevice device, VkImage image,
-                                           VkFormat format,
-                                           VkImageAspectFlags flags);
+                                               VkFormat format,
+                                               VkImageAspectFlags flags);
 
   VkCommandPool create_command_pool(VkDevice device,
                                     uint32_t graphics_queue_family_index);
 
   /// Configuration for a single render pass.
   struct RenderPassConfig {
-    VkFormat          colorFormat;
-    VkFormat          depthFormat;
-    VkAttachmentLoadOp  colorLoadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    VkImageLayout       colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkImageLayout       colorFinalLayout   = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    VkAttachmentLoadOp  depthLoadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    VkAttachmentLoadOp  stencilLoadOp    = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    VkImageLayout       depthInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkImageLayout       depthFinalLayout   = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    VkFormat colorFormat;
+    VkFormat depthFormat;
+    VkAttachmentLoadOp colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkImageLayout colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout colorFinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkAttachmentLoadOp stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkImageLayout depthInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout depthFinalLayout =
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   };
 
-  VkRenderPass create_renderpass(VkDevice device, const RenderPassConfig &config);
+  VkRenderPass create_renderpass(VkDevice device,
+                                 const RenderPassConfig &config);
 
   VkPipeline create_pipeline(VkDevice device, VkRenderPass renderpass,
                              VkPipelineLayout pipeline_layout);
@@ -127,7 +132,8 @@ private:
   void create_sync_objects();
 
   void record_draw_commands(VkCommandBuffer command_buffer,
-                            uint32_t image_index);
+                            uint32_t image_index, 
+                            const std::vector<RenderableInfo> &renderables);
 
   VkPipelineLayout
   create_pipeline_layout(VkDevice device,
@@ -143,7 +149,6 @@ private:
 
   void cleanup_swapchain_and_depth_stencil();
 
-  void update_geometry_buffer(SceneObject &object);
 
   void recreate_swapchain_and_depth_stencil();
 
@@ -163,8 +168,9 @@ private:
   std::vector<VkImageView> m_swapchain_image_views{};
 
   VkRenderPass m_render_pass{};
-  VkRenderPass m_ui_render_pass{};  // Separate render pass for UI overlay
-  std::vector<VkFramebuffer> m_ui_swapchain_framebuffers{};  // UI-specific framebuffers
+  VkRenderPass m_ui_render_pass{}; // Separate render pass for UI overlay
+  std::vector<VkFramebuffer>
+      m_ui_swapchain_framebuffers{}; // UI-specific framebuffers
   VkPipelineLayout m_pipeline_layout{};
   VkPipeline m_pipeline{};
   VkDescriptorPool m_descriptor_pool{};
@@ -175,7 +181,7 @@ private:
   std::vector<VkSemaphore> m_finished_render_semaphores{};
   std::vector<VkFence> m_in_flight_fences{};
   RenderResourceManager m_resource_manager;
-  InputManager& m_input_manager;
+  InputManager &m_input_manager;
 
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};
   VkPhysicalDeviceMemoryProperties m_phys_memory_properties{};
@@ -185,7 +191,8 @@ private:
 
   TextureVk m_depth_stencil;
 
-  TextureVk m_texture{};
+  TextureVk m_texture;
+
   VkSampler m_texture_sampler{};
   VkSurfaceFormatKHR m_surface_format{};
 
@@ -194,18 +201,6 @@ private:
 
   float m_priority = 1.0f;
   bool m_layers_supported = false;
-
-  struct {
-    float camera_speed = 1.0f;
-    bool moveForward = false;
-    bool moveBack = false;
-    bool moveLeft = false;
-    bool moveRight = false;
-    glm::f32vec3 movement_dir = {0.0f, 0.0f, 0.0f};
-    glm::f32vec3 pos = {0.0f, 1.0f, 2.0f};
-    glm::f32vec3 forward_dir = {0.0f, 0.0f, -1.0f};
-
-  } m_camera{};
 
   std::unique_ptr<ShaderFileWatcher> m_vert_shader_watcher = nullptr;
   std::unique_ptr<ShaderFileWatcher> m_frag_shader_watcher = nullptr;
@@ -217,8 +212,8 @@ private:
 
   VmaAllocator &m_allocator;
   VkSurfaceKHR &m_surface;
-  uint32 &m_graphics_queue_index;
-  uint32 &m_present_queue_index;
+  uint32_t &m_graphics_queue_index;
+  uint32_t &m_present_queue_index;
 
   bool m_window_resize_is_pending = false;
 };

@@ -28,7 +28,7 @@ public:
   uint32_t present_queue_index() { return m_present_queue_index; }
   const VmaAllocator &get_allocator() { return m_allocator; }
   const VkSurfaceKHR &get_surface() { return m_surface; }
-  void UpdateAndRender(uint64_t delta_time, Scene &scene);
+  void update_and_render(uint64_t delta_time, Scene &scene);
   bool is_ready() { return m_ready; }
   void OnWindowResize(glm::uvec2 new_dims);
 

@@ -45,6 +45,7 @@ endif()
     src/input/InputManager.cpp
     src/Engine.cpp
     src/Engine.h
+    src/ExTexture.h
     src/IRenderer.h
     src/IRendererInfo.h
     # src/IUIRenderer.h
@@ -81,15 +82,24 @@ endif()
     src/noesis/NoesisUI.h
     src/noesis/NoesisUI.cpp
     src/AppTime.h
+    src/Resource.h
+    src/RenderableInfo.h
+    src/ResourceManager.h
+    src/ResourceHandle.h
     src/TextureVk.h
     # src/UtilsNs.h
+    src/scene/CameraComponent.h
+    src/scene/Camera.h
+    src/scene/Camera.cpp    
+    src/scene/Component.h
+    src/scene/Entity.h
     src/scene/Scene.h
     src/scene/Scene.cpp
     src/scene/SceneObject.cpp
     src/scene/SceneObject.h
     src/scene/SceneRoot.h
-    src/scene/Camera.h
-    src/scene/Camera.cpp
+    src/scene/MeshComponent.h
+    src/scene/TransformComponent.h
     src/noesis/TextureVkNs.h
     src/noesis/RenderTargetVkNs.h
 )
@@ -148,3 +158,4 @@ endif()
 
 # Define it as a macro so it can be used in C++
 add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
+add_compile_definitions(ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")

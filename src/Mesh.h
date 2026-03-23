@@ -2,6 +2,8 @@
 #define MESH_H
 
 #include "Material.h"
+#include "Resource.h"
+#include "ResourceHandle.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/defs.h>
@@ -29,11 +31,25 @@ struct MeshHandle {
   }
 };
 
-struct Mesh {
+class Mesh /*: public Resource*/ {
+public:
+  Mesh() = delete;
+  explicit Mesh(const std::string &path) /*: Resource(path)*/ {}
+
+  // bool load() override;
+  // bool unload() override;
+
+  // CPU data
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  std::string name;              // Name of the mesh
-  MaterialHandle material;       // Material associated with this mesh
+  std::string name;        // Name of the mesh
+  MaterialHandle material; // Material associated with this mesh
+
+  // GPU data (filled after upload)
+  uint32_t vertex_offset = 0;
+  uint32_t index_offset = 0;
+  uint32_t vertex_count = 0;
+  uint32_t index_count = 0;
 };
 
 } // namespace Expectre

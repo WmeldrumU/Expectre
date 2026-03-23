@@ -109,6 +109,7 @@ public:
 
     return texture;
   }
+
   static TextureVk create_texture(
       VkDevice device, VkCommandPool cmd_pool, VkQueue graphics_queue,
       VmaAllocator allocator, const void *pixelData, uint32_t tex_width,
@@ -237,5 +238,6 @@ public:
 
 private:
 };
+
 } // Namespace Expectre
 #endif // TEXTURE VK_H

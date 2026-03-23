@@ -69,8 +69,7 @@ void MeshManager::compute_mesh_normals(Mesh &mesh) {
 }
 
 MeshHandle MeshManager::import_mesh(aiMesh *ai_mesh) {
-  Mesh mesh{};
-  mesh.name = ai_mesh->mName.C_Str();
+  Mesh mesh{ai_mesh->mName.C_Str()};
   mesh.vertices.reserve(ai_mesh->mNumVertices);
   mesh.indices.reserve(ai_mesh->mNumFaces * 3);
 
@@ -131,7 +130,9 @@ MeshHandle MeshManager::import_mesh(aiMesh *ai_mesh) {
   }
 
   // New unique mesh
-  m_mesh_map[handle] = std::move(mesh);
+ // m_mesh_map[handle] = std::move(mesh);
+  m_mesh_map.emplace(std::piecewise_construct, std::forward_as_tuple(handle),
+                     std::forward_as_tuple(std::move(mesh)));
   m_meshes_to_upload_to_gpu.push_back(handle);
 
   return handle;

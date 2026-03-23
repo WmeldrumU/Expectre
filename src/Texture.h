@@ -2,6 +2,11 @@
 #define TEXTURE_H
 #include <stb_image.h>
 #include <string>
+#include <vma/vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
+
+// #include "Resource.h"
+
 namespace Expectre {
 struct TextureHandle {
   uint64_t texture_id = -1;
@@ -13,18 +18,25 @@ struct TextureHandle {
   }
 };
 
-struct Texture {
+class Texture /*: public Resource*/ {
+public:
+  enum class Source { File, Internal };
 
-  Texture() {}
+  Texture()
+      : /*Resource("__internal_textuire__"), */ m_source(Source::Internal) {}
+  Texture(const std::string &path)
+      : /*Resource(path), */ m_source(Source::File) {}
   ~Texture() {
     if (data != nullptr)
       stbi_image_free(data);
   }
 
-  // Move Constructor (i.e. Texture t2 = std::move(t1); )
-  // Steals 'other.data' and sets 'other.data' to nullptr
+  // Move Constructor
   Texture(Texture &&other) noexcept
-      : data(std::exchange(other.data, nullptr)) {}
+      : /* Resource(std::move(other)),*/
+        data(std::exchange(other.data, nullptr)), width(other.width),
+        height(other.height), channels(other.channels),
+        m_name(std::move(other.m_name)) {}
 
   // Move Assignment Operator (i.e. t2 = std::move(t1); )
   Texture &operator=(Texture &&other) noexcept {
@@ -41,11 +53,54 @@ struct Texture {
   Texture(const Texture &) = delete;
   Texture &operator=(const Texture &) = delete;
 
+  bool is_internal() const { return m_source == Source::Internal; }
+
+  // Resource interface
+  // bool load() override {
+
+  //   if (!is_internal()) {
+  //     // No CPU image to load for internal textures
+  //     return false;
+
+  //     int w, h, ch;
+  //     data = stbi_load(m_name.c_str(), &w, &h, &ch, STBI_rgb_alpha);
+  //     if (!data)
+  //       return false;
+
+  //     width = static_cast<uint32_t>(w);
+  //     height = static_cast<uint32_t>(h);
+  //     channels = 4; // forced RGBA
+  //   }
+
+  //   // TODO: create VkImage, VkImageView, VkSampler
+  //   // Use ResourceManager::gpu() context for Vulkan objects
+  //   m_loaded = true;
+  //   return true;
+  // }
+
+  // bool unload() override {
+  //   // TODO: destroy VkImage, VkImageView, VkSampler
+  //   m_loaded = false;
+
+  //   return true;
+  // }
+
+  // CPU data
   uint8_t *data = nullptr;
   uint32_t width = -1;
   uint32_t height = -1;
   uint8_t channels = -1;
-  std::string name;
+  std::string m_name;
+  // GPU data (filled after upload)
+  VkImage image = VK_NULL_HANDLE;
+  VkImageView view = VK_NULL_HANDLE;
+  VkSampler sampler = VK_NULL_HANDLE;
+  VmaAllocation allocation;
+
+private:
+  // Indicates whether the texture data is loaded from a file or
+  // if it is used for internal purposes (i.e. depth stencil)
+  Source m_source = Source::File;
 };
 
 } // namespace Expectre
