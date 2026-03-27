@@ -45,7 +45,7 @@ private:
   TextureManager() = default;
   ~TextureManager() = default;
 
-  uint32_t m_next_mesh_id{0};
+  uint32_t m_next_tex_id{0};
   std::vector<TextureHandle> m_textures_to_upload_to_gpu{};
   std::unordered_map<TextureHandle, Texture> m_texture_map{};
 };

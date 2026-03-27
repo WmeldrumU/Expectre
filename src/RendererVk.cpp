@@ -92,6 +92,8 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
   m_ui_render_pass = create_renderpass(device, ui_rp_config);
 
+  // === DESCRIPTOR SET LAYOUT BINDINGS ===
+  // Binding 0: MVP uniform buffer
   VkDescriptorSetLayoutBinding ubo_layout_binding{};
   ubo_layout_binding.binding = 0;
   ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -99,9 +101,12 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   ubo_layout_binding.pImmutableSamplers = nullptr;
 
+  // Binding 1: Bindless texture array
+  // Large descriptor count enables dynamic texture indexing in shaders
+  // Paired with UPDATE_AFTER_BIND + PARTIALLY_BOUND flags for bindless support
   VkDescriptorSetLayoutBinding sampler_layout_binding{};
   sampler_layout_binding.binding = 1;
-  sampler_layout_binding.descriptorCount = 1;
+  sampler_layout_binding.descriptorCount = kMaxDescriptorSetSamplers;
   sampler_layout_binding.descriptorType =
       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   sampler_layout_binding.pImmutableSamplers = nullptr;
@@ -125,16 +130,18 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         create_framebuffer(device, m_ui_render_pass, m_swapchain_image_views[i],
                            m_depth_stencil.view);
   }
-  // std::ignore = create_texture_from_file(WORKSPACE_DIR +
-  // std::string("/assets/teapot/brick.png"));
+  m_texture = TextureVk::create_texture_from_file(
+      m_device, m_cmd_pool, m_graphics_queue, m_allocator,
+      WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+
   // Create a valid fallback texture so descriptor binding 1 is never null
   static const uint8_t white_pixel[] = {0, 255, 0, 255};
 
-  m_texture = TextureVk::create_texture(
-      device, m_cmd_pool, m_graphics_queue, allocator, white_pixel, 1, 1, 1,
-      VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 0,
-      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      "__fallback_white_or_black_1x1");
+  // m_texture = TextureVk::create_texture(
+  //     device, m_cmd_pool, m_graphics_queue, allocator, white_pixel, 1, 1, 1,
+  //     VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 0,
+  //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  //     "__fallback_white_or_black_1x1");
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
   m_resource_manager.create_vertex_buffer(1024 * 1024 *
@@ -1025,10 +1032,28 @@ void RendererVk::draw_frame(const Camera &camera,
 
 VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
     const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings) {
+  // Create descriptor set layout supporting bindless textures
+  // Enables dynamic texture indexing without rebinding descriptors
+
+  VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags{
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+
+  // Binding flags enable bindless texturing:
+  // - PARTIALLY_BOUND_BIT: Not all descriptors in array must be valid
+  // - UPDATE_AFTER_BIND_BIT: GPU can use descriptors while CPU updates them
+  VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                   VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+  binding_flags.bindingCount = 1;
+  binding_flags.pBindingFlags = &flags;
+
   VkDescriptorSetLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
   layout_info.pBindings = layout_bindings.data();
+  layout_info.flags =
+      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  layout_info.pNext = &binding_flags;
+
   VkDescriptorSetLayout layout;
   VK_CHECK_RESULT(
       vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &layout));
@@ -1124,66 +1149,35 @@ void RendererVk::update(uint64_t delta_t) {
   }
 }
 
-void RendererVk::upload_pending_meshes(
+void RendererVk::upload_pending_assets(
     const std::vector<RenderableInfo> &pending_renderables) {
   auto &mesh_mgr = MeshManager::Instance();
+  auto &mat_mgr = MaterialManager::Instance();
 
   for (const auto &info : pending_renderables) {
     const auto mesh_opt = mesh_mgr.get_mesh(info.mesh);
+
     if (!mesh_opt.has_value()) {
       spdlog::error("[RendererVk] Mesh not found: {}", info.mesh.mesh_id);
       continue;
     }
 
+    const auto mat_opt = mat_mgr.get_material(info.material);
+    if (!mat_opt.has_value()) {
+      spdlog::error("[RendererVk] Material not found: {}", info.material.material_id);
+      continue;
+    }
+
     m_resource_manager.upload_mesh_to_gpu(mesh_opt.value(), m_cmd_pool);
+    m_resource_manager.upload_material_to_gpu(mat_opt.value(), m_cmd_pool);
   }
-}
-
-void RendererVk::upload_texture_to_gpu(const Texture &texture) {
-  // Early return if texture is empty
-  if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
-    spdlog::warn("Attempted to upload empty texture to GPU");
-    return;
-  }
-
-  // Calculate image size (assuming RGBA format for GPU upload)
-  size_t imageSize = texture.width * texture.height * 4;
-
-  // Create staging buffer
-  AllocatedBuffer staging = ToolsVk::create_buffer(
-      m_allocator, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-  // Upload image data to the staging buffer
-  void *data;
-  VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging.allocation, &data));
-  memcpy(data, texture.data, imageSize);
-  vmaUnmapMemory(m_allocator, staging.allocation);
-
-  // Transfer layout and copy data
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-  ToolsVk::copy_buffer_to_image(m_device, m_cmd_pool, m_graphics_queue,
-                                staging.buffer, m_texture.image, texture.width,
-                                texture.height);
-
-  // Final layout transition
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-  // Cleanup staging buffer
-  vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
 }
 
 void RendererVk::recreate_swapchain_and_depth_stencil() {
   vkDeviceWaitIdle(m_device);
 
-  // CHANGED: Destroy old per-image semaphores — count may change with new swapchain
+  // CHANGED: Destroy old per-image semaphores — count may change with new
+  // swapchain
   for (auto &sem : m_finished_render_semaphores) {
     vkDestroySemaphore(m_device, sem, nullptr);
   }

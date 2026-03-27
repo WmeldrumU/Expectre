@@ -116,4 +116,57 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh,
   vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
 }
 
+void RenderResourceManager::upload_texture_to_gpu(const Texture &texture) {
+  // Early return if texture is empty
+  if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
+    spdlog::warn("Attempted to upload empty texture to GPU");
+    return;
+  }
+
+  // Calculate image size (assuming RGBA format for GPU upload)
+  size_t imageSize = texture.width * texture.height * 4;
+
+  // Create staging buffer
+  AllocatedBuffer staging = ToolsVk::create_buffer(
+      m_allocator, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+  // Upload image data to the staging buffer
+  void *data;
+  VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging.allocation, &data));
+  memcpy(data, texture.data, imageSize);
+  vmaUnmapMemory(m_allocator, staging.allocation);
+
+  // Transfer layout and copy data
+  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
+                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                     VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  ToolsVk::copy_buffer_to_image(m_device, m_cmd_pool, m_graphics_queue,
+                                staging.buffer, m_texture.image, texture.width,
+                                texture.height);
+
+  // Final layout transition
+  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
+                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  // Cleanup staging buffer
+  vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+}
+
+void RenderResourceManager::upload_material_to_gpu(
+    const Material &material, VkCommandPool cmd_pool) {
+  // if (mesh.vertices.empty() || mesh.indices.empty()) {
+  //   spdlog::warn("Attempted to upload empty mesh to GPU");
+  //   return;
+  // }
+      TextureManager::Instance().g
+      const auto& albedo = material.albedo.texture_id
+
+  auto it = m_material_allocations.find()
+}
+
 } // namespace Expectre

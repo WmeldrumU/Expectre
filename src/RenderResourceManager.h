@@ -17,6 +17,15 @@ struct MeshAllocation {
   MaterialHandle material; // material associated with this mesh
 };
 
+struct MaterialAllocation {
+  // Indices of the textures in the
+  // sampler2D array
+  uint32_t albedo_index;
+  uint32_t normal_index;
+  uint32_t metallic_index;
+  uint32_t roughness_index;
+};
+
 struct VertexBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
@@ -39,10 +48,12 @@ public:
 
   ~RenderResourceManager() {
     if (m_vertex_buffer.buffer != VK_NULL_HANDLE) {
-      vmaDestroyBuffer(m_allocator, m_vertex_buffer.buffer, m_vertex_buffer.allocation);
+      vmaDestroyBuffer(m_allocator, m_vertex_buffer.buffer,
+                       m_vertex_buffer.allocation);
     }
     if (m_index_buffer.buffer != VK_NULL_HANDLE) {
-      vmaDestroyBuffer(m_allocator, m_index_buffer.buffer, m_index_buffer.allocation);
+      vmaDestroyBuffer(m_allocator, m_index_buffer.buffer,
+                       m_index_buffer.allocation);
     }
   }
 
@@ -51,6 +62,9 @@ public:
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
   const VertexBuffer &get_vertex_buffer() { return m_vertex_buffer; }
   void upload_mesh_to_gpu(const Mesh &mesh, VkCommandPool cmd_pool);
+  void upload_texture_to_gpu(const Texture &texture);
+
+  void upload_material_to_gpu(const Material &material, VkCommandPool);
 
   const std::vector<MeshAllocation> &get_mesh_allocations() const {
     return m_mesh_allocations;
@@ -72,6 +86,7 @@ private:
   VertexBuffer m_vertex_buffer{};
   IndexBuffer m_index_buffer{};
   std::vector<MeshAllocation> m_mesh_allocations;
+  std::unordered_map<TextureHandle, uint32_t> m_texture_allocation;
 };
 } // namespace Expectre
 

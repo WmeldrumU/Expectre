@@ -39,6 +39,9 @@ namespace Expectre {
 class Camera;
 class NoesisUI; // forward-declared from noesis/NoesisUI.h
 
+// Based on GTX 780 capabilites
+static constexpr uint32_t kMaxDescriptorSetSamplers = 1048576;
+static constexpr uint32_t kMaxDescriptorSetUniformBuffers = 90;
 struct MVP_uniform_object {
   glm::mat4 model;
   glm::mat4 view;
@@ -72,11 +75,12 @@ public:
 
   bool is_ready() { return m_ready; }
   void update(uint64_t delta_t);
-  void draw_frame(const Camera &camera,const std::vector<RenderableInfo> &renderables) override;
+  void draw_frame(const Camera &camera,
+                  const std::vector<RenderableInfo> &renderables) override;
   void upload_texture_to_gpu(const Texture &texture);
 
   void
-  upload_pending_meshes(const std::vector<RenderableInfo> &pending_renderables);
+  upload_pending_assets(const std::vector<RenderableInfo> &pending_renderables);
 
   NoesisUI *GetNoesisUI() { return m_noesisUI.get(); }
   void OnWindowResize(glm::uvec2 new_dims);
@@ -132,7 +136,7 @@ private:
   void create_sync_objects();
 
   void record_draw_commands(VkCommandBuffer command_buffer,
-                            uint32_t image_index, 
+                            uint32_t image_index,
                             const std::vector<RenderableInfo> &renderables);
 
   VkPipelineLayout
@@ -148,7 +152,6 @@ private:
   void update_uniform_buffer(const Camera &camera);
 
   void cleanup_swapchain_and_depth_stencil();
-
 
   void recreate_swapchain_and_depth_stencil();
 

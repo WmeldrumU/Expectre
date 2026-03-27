@@ -141,22 +141,32 @@ void RenderContextVk::create_device() {
 
   VkPhysicalDeviceFeatures supportedFeatures{};
   vkGetPhysicalDeviceFeatures(m_physical_device, &supportedFeatures);
-  VkPhysicalDeviceFeatures requiredFeatures{};
-  requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
-  requiredFeatures.tessellationShader = VK_TRUE;
-  requiredFeatures.geometryShader = VK_TRUE;
-  requiredFeatures.samplerAnisotropy = VK_TRUE;
-  requiredFeatures.fillModeNonSolid = VK_TRUE;
+  VkPhysicalDeviceVulkan12Features features_1_2 = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+  features_1_2.descriptorIndexing = VK_TRUE;
+  features_1_2.descriptorBindingPartiallyBound = VK_TRUE;
+  features_1_2.runtimeDescriptorArray = VK_TRUE;
+
+  VkPhysicalDeviceFeatures2 required_features{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  required_features.features.multiDrawIndirect =
+      supportedFeatures.multiDrawIndirect;
+  required_features.features.tessellationShader = VK_TRUE;
+  required_features.features.geometryShader = VK_TRUE;
+  required_features.features.samplerAnisotropy = VK_TRUE;
+  required_features.features.fillModeNonSolid = VK_TRUE;
+  required_features.pNext = &features_1_2;
 
   std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   VkDeviceCreateInfo device_create_info{};
   device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.pEnabledFeatures = &requiredFeatures;
+  // device_create_info.pEnabledFeatures = &required_features;
   device_create_info.queueCreateInfoCount = 1;
   device_create_info.pQueueCreateInfos = &queue_create_info;
   device_create_info.enabledExtensionCount = extensions.size();
   device_create_info.ppEnabledExtensionNames = extensions.data();
+  device_create_info.pNext = &required_features;
   // Start creating logical device
   m_device = VK_NULL_HANDLE;
   VK_CHECK_RESULT(vkCreateDevice(m_physical_device, &device_create_info,
@@ -193,7 +203,7 @@ void RenderContextVk::create_memory_allocator() {
 void RenderContextVk::update_and_render(uint64_t delta_time, Scene &scene) {
 
   auto pending = scene.consume_pending_renderables();
-  m_renderer->upload_pending_meshes(pending);
+  m_renderer->upload_pending_assets(pending);
 
   m_renderer->update(delta_time);
   const auto &renderables = scene.gather_renderables();

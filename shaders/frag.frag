@@ -1,6 +1,9 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require // Required for variable indexing
 
-layout(binding = 1) uniform sampler2D texSampler;
+layout(binding = 1) uniform sampler2D texSamplers[]; // All textures live here
+
+layout(push_constant) uniform PC {int texture_id} pc;
 
 layout(location = 0) in vec3 fragPos;
 layout(location = 1) in vec3 fragColor;
@@ -11,7 +14,7 @@ layout(location = 0) out vec4 outColor;
 
 void main() {
     // Material color from brick texture
-    vec3 meshColor = texture(texSampler, fragTexCoord).rgb;
+    vec3 meshColor = texture(texSamplers[nonuniformEXT(pc.texture_id)], fragTexCoord).rgb;
 
     // Light properties
     vec3 lightColor = vec3(1.0, 1.0, 1.0);
@@ -42,5 +45,5 @@ void main() {
 
     vec3 result = (ambient + diffuse + specular) * meshColor;
     
-    outColor = vec4(1.0, 1.0, 0.0, 1.0);
+    outColor = vec4(result, 1.0);
 }
