@@ -33,7 +33,7 @@ std::vector<RenderableInfo> Scene::gather_renderables() const {
     info.mesh = mesh_cpt->get_mesh();
     info.material = mesh_cpt->get_material();
     info.transform =
-        trf_cpt ? trf_cpt->get_matrix() : glm::mat4(1.0f);
+        trf_cpt ? trf_cpt->get_transform_matrix() : glm::mat4(1.0f);
     result.push_back(info);
   }
   return result;
