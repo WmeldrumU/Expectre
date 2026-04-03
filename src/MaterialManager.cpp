@@ -74,7 +74,7 @@ MaterialManager::import_material(const aiScene *scene,
   material.albedo = load_texture_from_material(
       ai_material, aiTextureType_DIFFUSE, model_directory);
   spdlog::debug("[MAT] '{}' albedo texture_id={} valid={}",
-               material.name, material.albedo.texture_id, (bool)material.albedo);
+               material.name, material.albedo.texture_id, static_cast<bool>(material.albedo));
 
   material.normal = load_texture_from_material(
       ai_material, aiTextureType_NORMALS, model_directory);

@@ -3,7 +3,7 @@
 
 #include "Texture.h"
 
-#include <optional>
+#include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
 
@@ -26,28 +26,34 @@ public:
   }
 
   uint64_t compute_texture_hash(const Texture &texture) const;
+  
   // Delete copy constructor and assignment operator
   TextureManager(const TextureManager &) = delete;
   TextureManager &operator=(const TextureManager &) = delete;
   TextureManager(TextureManager &&) = delete;
   TextureManager &operator=(TextureManager &&) = delete;
 
-  std::optional<std::reference_wrapper<const Texture>>
-  get_texture(TextureHandle texture) {
+  const Texture &get_texture(TextureHandle texture) {
     auto it = m_texture_map.find(texture);
     if (it != m_texture_map.end()) {
-      return std::ref(it->second);
+      return it->second;
     }
-    return std::nullopt;
+    // Texture not found, return default magenta checkerboard
+    spdlog::warn("Texture handle {} not found, using default magenta checkerboard", 
+                 texture.texture_id);
+    return m_texture_map[m_default_texture_handle];
   }
 
 private:
-  TextureManager() = default;
+  TextureManager();
   ~TextureManager() = default;
+
+  void create_default_texture();
 
   uint32_t m_next_tex_id{0};
   std::vector<TextureHandle> m_textures_to_upload_to_gpu{};
   std::unordered_map<TextureHandle, Texture> m_texture_map{};
+  TextureHandle m_default_texture_handle{};
 };
 } // namespace Expectre
 

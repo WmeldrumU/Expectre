@@ -1,10 +1,32 @@
 
 #include <RenderResourceManager.h>
 
+#include "TextureVk.h"
+#include "TextureManager.h"
 #include "ToolsVk.h"
 #include <spdlog/spdlog.h>
 
 namespace Expectre {
+
+RenderResourceManager::RenderResourceManager(
+    VkDevice device, VkPhysicalDevice phys_device, VmaAllocator allocator,
+    uint32_t graphics_queue_family_index, VkQueue queue)
+    : m_device(device), m_phys_device(phys_device), m_allocator(allocator),
+      m_graphics_queue(queue) {
+  create_transfer_command_pool(graphics_queue_family_index);
+}
+
+void RenderResourceManager::create_transfer_command_pool(
+    uint32_t graphics_queue_family_index) {
+  VkCommandPoolCreateInfo pool_info{};
+  pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                    VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  pool_info.queueFamilyIndex = graphics_queue_family_index;
+
+  VK_CHECK_RESULT(
+      vkCreateCommandPool(m_device, &pool_info, nullptr, &m_transfer_cmd_pool));
+}
 
 void RenderResourceManager::create_vertex_buffer(uint32_t size_bytes) {
   auto buf = ToolsVk::create_buffer(
@@ -30,8 +52,7 @@ void RenderResourceManager::create_index_buffer(uint32_t size_bytes) {
   m_index_buffer.byte_size = size_bytes;
 }
 
-void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh,
-                                               VkCommandPool cmd_pool) {
+void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh) {
   if (mesh.vertices.empty() || mesh.indices.empty()) {
     spdlog::warn("Attempted to upload empty mesh to GPU");
     return;
@@ -87,8 +108,8 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh,
   vcopy.dstOffset = static_cast<VkDeviceSize>(vertex_dst_start_bytes);
   vcopy.size = static_cast<VkDeviceSize>(vertex_bytes);
 
-  ToolsVk::copy_buffer(m_device, cmd_pool, m_graphics_queue, staging.buffer,
-                       m_vertex_buffer.buffer, vcopy);
+  ToolsVk::copy_buffer(m_device, m_transfer_cmd_pool, m_graphics_queue,
+                       staging.buffer, m_vertex_buffer.buffer, vcopy);
 
   // Copy indices
   VkBufferCopy icopy{};
@@ -96,8 +117,8 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh,
   icopy.dstOffset = static_cast<VkDeviceSize>(index_dst_start_bytes);
   icopy.size = static_cast<VkDeviceSize>(index_bytes);
 
-  ToolsVk::copy_buffer(m_device, cmd_pool, m_graphics_queue, staging.buffer,
-                       m_index_buffer.buffer, icopy);
+  ToolsVk::copy_buffer(m_device, m_transfer_cmd_pool, m_graphics_queue,
+                       staging.buffer, m_index_buffer.buffer, icopy);
 
   // Advance allocators
   m_vertex_buffer.byte_offset += vertex_bytes;
@@ -138,35 +159,39 @@ void RenderResourceManager::upload_texture_to_gpu(const Texture &texture) {
   vmaUnmapMemory(m_allocator, staging.allocation);
 
   // Transfer layout and copy data
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  TextureVk::transition_image_layout(
+      m_device, m_transfer_cmd_pool, m_graphics_queue, texture.image,
+      VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-  ToolsVk::copy_buffer_to_image(m_device, m_cmd_pool, m_graphics_queue,
-                                staging.buffer, m_texture.image, texture.width,
+  ToolsVk::copy_buffer_to_image(m_device, m_transfer_cmd_pool, m_graphics_queue,
+                                staging.buffer, texture.image, texture.width,
                                 texture.height);
 
   // Final layout transition
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  TextureVk::transition_image_layout(
+      m_device, m_transfer_cmd_pool, m_graphics_queue, texture.image,
+      VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
   // Cleanup staging buffer
   vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
 }
 
-void RenderResourceManager::upload_material_to_gpu(
-    const Material &material, VkCommandPool cmd_pool) {
+void RenderResourceManager::upload_material_to_gpu(const Material &material) {
   // if (mesh.vertices.empty() || mesh.indices.empty()) {
   //   spdlog::warn("Attempted to upload empty mesh to GPU");
   //   return;
   // }
-      TextureManager::Instance().g
-      const auto& albedo = material.albedo.texture_id
+  // const auto& albedo = material.albedo.texture_id
 
-  auto it = m_material_allocations.find()
+  // auto it = m_material_allocations.find()
+
+  auto& tex_mgr = TextureManager::Instance();
+  // albedo
+  const auto& albedo = tex_mgr.get_texture(material.albedo);
+  upload_texture_to_gpu(albedo);
+
 }
 
 } // namespace Expectre

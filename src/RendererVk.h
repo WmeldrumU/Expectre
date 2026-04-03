@@ -183,7 +183,7 @@ private:
   std::vector<VkSemaphore> m_available_image_semaphores{};
   std::vector<VkSemaphore> m_finished_render_semaphores{};
   std::vector<VkFence> m_in_flight_fences{};
-  RenderResourceManager m_resource_manager;
+  std::unique_ptr<RenderResourceManager> m_resource_manager;
   InputManager &m_input_manager;
 
   std::array<struct UniformBuffer, MAX_CONCURRENT_FRAMES> m_uniform_buffers{};

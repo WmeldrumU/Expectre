@@ -6,7 +6,7 @@
 
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
-
+#include <unordered_map>
 namespace Expectre {
 
 struct MeshAllocation {
@@ -43,10 +43,14 @@ struct IndexBuffer {
 class RenderResourceManager {
 public:
   RenderResourceManager() = delete;
-  RenderResourceManager(VkDevice device, VmaAllocator allocator, VkQueue queue)
-      : m_device(device), m_allocator(allocator), m_graphics_queue(queue) {}
+  RenderResourceManager(VkDevice device, VkPhysicalDevice phys_device,
+                        VmaAllocator allocator, uint32_t graphics_queue_family_index,
+                        VkQueue queue);
 
   ~RenderResourceManager() {
+    if (m_transfer_cmd_pool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(m_device, m_transfer_cmd_pool, nullptr);
+    }
     if (m_vertex_buffer.buffer != VK_NULL_HANDLE) {
       vmaDestroyBuffer(m_allocator, m_vertex_buffer.buffer,
                        m_vertex_buffer.allocation);
@@ -61,10 +65,10 @@ public:
   void create_index_buffer(uint32_t size_bytes);
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
   const VertexBuffer &get_vertex_buffer() { return m_vertex_buffer; }
-  void upload_mesh_to_gpu(const Mesh &mesh, VkCommandPool cmd_pool);
+  void upload_mesh_to_gpu(const Mesh &mesh);
   void upload_texture_to_gpu(const Texture &texture);
 
-  void upload_material_to_gpu(const Material &material, VkCommandPool);
+  void upload_material_to_gpu(const Material &material);
 
   const std::vector<MeshAllocation> &get_mesh_allocations() const {
     return m_mesh_allocations;
@@ -79,13 +83,20 @@ private:
     return (v + (a - 1)) & ~(a - 1);
   }
 
+  void create_transfer_command_pool(uint32_t graphics_queue_family_index);
+
   VkDevice m_device = VK_NULL_HANDLE;
+  VkPhysicalDevice m_phys_device = VK_NULL_HANDLE;
   VmaAllocator m_allocator = VK_NULL_HANDLE;
   VkQueue m_graphics_queue = VK_NULL_HANDLE;
+  // Transfer command pool (owned by RendererVk, used for GPU uploads)
+  VkCommandPool m_transfer_cmd_pool = VK_NULL_HANDLE;
 
   VertexBuffer m_vertex_buffer{};
   IndexBuffer m_index_buffer{};
   std::vector<MeshAllocation> m_mesh_allocations;
+  // map that provide the indices of the textures within the shader's Sampler2D
+  // array
   std::unordered_map<TextureHandle, uint32_t> m_texture_allocation;
 };
 } // namespace Expectre

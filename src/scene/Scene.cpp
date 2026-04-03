@@ -11,8 +11,11 @@ Scene::Scene(std::string scene_name)
 
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
   auto bunny_dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
+  auto lamp_dir =
+      WORKSPACE_DIR + std::string("/assets/gltf/AnisotropyBarnLamp.glb");
   import_model_as_entity(teapot_dir);
   import_model_as_entity(bunny_dir);
+  //import_model_as_entity(lamp_dir);
 
   // m_camera.add_component<CameraComponent>();
 }

@@ -1,0 +1,9 @@
+TODO
+
+
+Texture resources need to be populated as they are being uploaded to the gpu.
+
+When upload_texture_to_gpu is called (and the TextureVk object is passed), the vulkan
+resources arent' populated yet. Either we need to populate them in that function or a helper
+function in RenderResrourceManager. We may also need to create a sampler with it given that
+our bindless texture array in our shadeer is a sampler2d array. 

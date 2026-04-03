@@ -42,9 +42,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
       m_graphics_queue_index{graphics_queue_index},
       m_present_queue{present_queue},
       m_present_queue_index{present_queue_index}, m_extent{width, height},
-      m_pending_extent{width, height},
-      m_resource_manager{device, allocator, graphics_queue},
-      m_input_manager{input_manager} {
+      m_pending_extent{width, height}, m_input_manager{input_manager} {
 
   // Command buffers and swapchain
   create_swapchain();
@@ -56,6 +54,9 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         VK_IMAGE_ASPECT_COLOR_BIT);
   }
   m_cmd_pool = create_command_pool(device, graphics_queue_index);
+  m_resource_manager = std::make_unique<RenderResourceManager>(
+      device, physical_device, allocator, graphics_queue_index, graphics_queue);
+
   m_depth_stencil =
       TextureVk::create_depth_stencil(m_physical_device, device, m_cmd_pool,
                                       m_graphics_queue, allocator, m_extent);
@@ -144,9 +145,9 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   //     "__fallback_white_or_black_1x1");
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
-  m_resource_manager.create_vertex_buffer(1024 * 1024 *
-                                          48); // 48 MB for vertices
-  m_resource_manager.create_index_buffer(1024 * 1024 * 16); // 16 MB for indices
+  m_resource_manager->create_vertex_buffer(1024 * 1024 *
+                                           48); // 48 MB for vertices
+  m_resource_manager->create_index_buffer(1024 * 1024 * 16); // 16 MB for indices
 
   std::vector<VkDescriptorPoolSize> pool_sizes(2);
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -827,8 +828,8 @@ void RendererVk::record_draw_commands(
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
   VkDeviceSize offsets[] = {0};
-  const auto &index_buffer = m_resource_manager.get_index_buffer();
-  const auto &vertex_buffer = m_resource_manager.get_vertex_buffer();
+  const auto &index_buffer = m_resource_manager->get_index_buffer();
+  const auto &vertex_buffer = m_resource_manager->get_vertex_buffer();
 
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
 
@@ -840,7 +841,7 @@ void RendererVk::record_draw_commands(
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
   const std::vector<MeshAllocation> &mesh_allocations =
-      m_resource_manager.get_mesh_allocations();
+      m_resource_manager->get_mesh_allocations();
   for (const auto &alloc : mesh_allocations) {
     // Check if this mesh's material has an albedo texture
     uint32_t useTexture = 0u;
@@ -1164,12 +1165,13 @@ void RendererVk::upload_pending_assets(
 
     const auto mat_opt = mat_mgr.get_material(info.material);
     if (!mat_opt.has_value()) {
-      spdlog::error("[RendererVk] Material not found: {}", info.material.material_id);
+      spdlog::error("[RendererVk] Material not found: {}",
+                    info.material.material_id);
       continue;
     }
 
-    m_resource_manager.upload_mesh_to_gpu(mesh_opt.value(), m_cmd_pool);
-    m_resource_manager.upload_material_to_gpu(mat_opt.value(), m_cmd_pool);
+    m_resource_manager->upload_mesh_to_gpu(mesh_opt.value());
+    m_resource_manager->upload_material_to_gpu(mat_opt.value());
   }
 }
 
