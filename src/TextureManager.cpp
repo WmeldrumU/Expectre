@@ -101,4 +101,25 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   return handle;
 }
 
+void TextureManager::load_texture_from_file(Texture &texture,
+                                             const std::string &filepath) {
+  // Load image file using stbi
+  int tex_width, tex_height, tex_channels;
+  stbi_uc *pixels =
+      stbi_load(filepath.c_str(), &tex_width, &tex_height, &tex_channels, 4);
+
+  if (!pixels) {
+    spdlog::error("Failed to load texture from '{}'", filepath);
+    return;
+  }
+
+  // Populate CPU data in texture object
+  texture.data = pixels;
+  texture.width = static_cast<uint32_t>(tex_width);
+  texture.height = static_cast<uint32_t>(tex_height);
+  texture.channels = 4;  // Forced RGBA by stbi_load
+  texture.m_name = filepath;
+  texture.format = VK_FORMAT_R8G8B8A8_SRGB;
+}
+
 } // namespace Expectre

@@ -87,15 +87,17 @@ public:
 
   // CPU data
   uint8_t *data = nullptr;
-  uint32_t width = -1;
-  uint32_t height = -1;
-  uint8_t channels = -1;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint8_t channels = 0;
   std::string m_name;
-  // GPU data (filled after upload)
+
+  // GPU data (filled after upload by RenderResourceManager)
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkSampler sampler = VK_NULL_HANDLE;
   VmaAllocation allocation;
+  VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;  // Texture format
 
 private:
   // Indicates whether the texture data is loaded from a file or

@@ -25,6 +25,10 @@ public:
     return std::move(m_textures_to_upload_to_gpu);
   }
 
+  // Load texture from file - populates CPU data only, no GPU resources
+  // Caller is responsible for calling RenderResourceManager::upload_texture_to_gpu
+  void load_texture_from_file(Texture &texture, const std::string &filepath);
+
   uint64_t compute_texture_hash(const Texture &texture) const;
   
   // Delete copy constructor and assignment operator
@@ -33,7 +37,7 @@ public:
   TextureManager(TextureManager &&) = delete;
   TextureManager &operator=(TextureManager &&) = delete;
 
-  const Texture &get_texture(TextureHandle texture) {
+  Texture &get_texture(TextureHandle texture) {
     auto it = m_texture_map.find(texture);
     if (it != m_texture_map.end()) {
       return it->second;

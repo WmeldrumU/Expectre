@@ -21,7 +21,7 @@
 #include "RenderResourceManager.h"
 #include "RenderableInfo.h"
 #include "ShaderFileWatcher.h"
-#include "TextureVk.h"
+#include "Texture.h"
 #include "ToolsVk.h"
 #include "input/InputManager.h"
 #include "observer.h"
@@ -192,9 +192,9 @@ private:
   std::array<VkCommandBuffer, MAX_CONCURRENT_FRAMES> m_cmd_buffers;
   bool m_ready = false;
 
-  TextureVk m_depth_stencil;
+  Texture m_depth_stencil;
 
-  TextureVk m_texture;
+  Texture m_texture;
 
   VkSampler m_texture_sampler{};
   VkSurfaceFormatKHR m_surface_format{};

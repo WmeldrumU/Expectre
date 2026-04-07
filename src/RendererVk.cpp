@@ -57,12 +57,11 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_resource_manager = std::make_unique<RenderResourceManager>(
       device, physical_device, allocator, graphics_queue_index, graphics_queue);
 
-  m_depth_stencil =
-      TextureVk::create_depth_stencil(m_physical_device, device, m_cmd_pool,
-                                      m_graphics_queue, allocator, m_extent);
+  m_resource_manager->create_depth_stencil_texture(m_depth_stencil, m_extent.width,
+                                                    m_extent.height);
   RenderPassConfig rp_config{};
   rp_config.colorFormat = m_swapchain_image_format,
-  rp_config.depthFormat = m_depth_stencil.image_info.format,
+  rp_config.depthFormat = m_depth_stencil.format,
   rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
   rp_config.colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   rp_config.colorFinalLayout =
@@ -78,7 +77,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   // (even though UI doesn't use it)
   RenderPassConfig ui_rp_config{};
   ui_rp_config.colorFormat = m_swapchain_image_format,
-  ui_rp_config.depthFormat = m_depth_stencil.image_info.format,
+  ui_rp_config.depthFormat = m_depth_stencil.format,
   ui_rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD, // Load from 3D pass
       ui_rp_config.colorInitialLayout =
           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -131,18 +130,12 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         create_framebuffer(device, m_ui_render_pass, m_swapchain_image_views[i],
                            m_depth_stencil.view);
   }
-  m_texture = TextureVk::create_texture_from_file(
-      m_device, m_cmd_pool, m_graphics_queue, m_allocator,
-      WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+  // Load texture CPU data from file using TextureManager
+  TextureManager::Instance().load_texture_from_file(
+      m_texture, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+  // Upload GPU resources using RenderResourceManager
+  m_resource_manager->upload_texture_to_gpu(m_texture);
 
-  // Create a valid fallback texture so descriptor binding 1 is never null
-  static const uint8_t white_pixel[] = {0, 255, 0, 255};
-
-  // m_texture = TextureVk::create_texture(
-  //     device, m_cmd_pool, m_graphics_queue, allocator, white_pixel, 1, 1, 1,
-  //     VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 0,
-  //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  //     "__fallback_white_or_black_1x1");
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
   m_resource_manager->create_vertex_buffer(1024 * 1024 *
@@ -1210,9 +1203,8 @@ void RendererVk::recreate_swapchain_and_depth_stencil() {
   }
 
   // Recreate depth stencil (destroyed in cleanup_swapchain)
-  m_depth_stencil =
-      TextureVk::create_depth_stencil(m_physical_device, m_device, m_cmd_pool,
-                                      m_graphics_queue, m_allocator, m_extent);
+  m_resource_manager->create_depth_stencil_texture(m_depth_stencil, m_extent.width,
+                                                    m_extent.height);
 
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {

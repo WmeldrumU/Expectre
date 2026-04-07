@@ -1,9 +1,41 @@
 TODO
 
+=== COMPLETED ===
+✓ Unified texture representation (Texture.h holds CPU + GPU data)
+✓ Removed TextureVk dependency from core rendering pipeline
+✓ Implemented populate_texture_with_gpu_data() in RenderResourceManager
+✓ Moved texture file loading to TextureManager (CPU-side)
+✓ Created GPU upload pipeline: TextureManager::load_texture_from_file() → RenderResourceManager::upload_texture_to_gpu()
+✓ Added depth/stencil texture creation support
 
-Texture resources need to be populated as they are being uploaded to the gpu.
+=== NEXT SESSION: BINDLESS TEXTURE DESCRIPTOR ALLOCATION ===
 
-When upload_texture_to_gpu is called (and the TextureVk object is passed), the vulkan
-resources arent' populated yet. Either we need to populate them in that function or a helper
-function in RenderResrourceManager. We may also need to create a sampler with it given that
-our bindless texture array in our shadeer is a sampler2d array. 
+1. POPULATE TEXTURE DESCRIPTOR INDICES
+   - In upload_texture_to_gpu(): assign next available index in bindless sampler2D array
+   - Store mapping: m_texture_allocation[TextureHandle] = descriptor_index
+   - Validate descriptor index doesn't exceed descriptor pool size
+
+2. IMPLEMENT MATERIAL ALLOCATION
+   - In upload_material_to_gpu():
+     * Call upload_texture_to_gpu() for all material textures (albedo, normal, metallic, roughness, ao)
+     * Collect descriptor indices for each texture
+     * Create MaterialAllocation struct with indices
+     * Store in m_material_allocations map
+   - Add m_material_allocations map to RenderResourceManager header
+
+3. UPDATE DESCRIPTOR SETS FOR BINDLESS ARRAY
+   - After textures are populated, write descriptor set with VkImageViews at assigned indices
+   - Call vkUpdateDescriptorSets() to bind textures to sampler2D array
+   - Ensure proper synchronization before rendering
+
+4. RENDERING INTEGRATION
+   - MeshAllocation references MaterialHandle
+   - During render: lookup MaterialAllocation for material descriptor indices
+   - Pass descriptor indices to shader via push constants or UBO
+   - Update shaders to use nonuniformEXT(material_index) for dynamic indexing
+
+5. TEST ASSET PIPELINE
+   - Load .obj model with materials
+   - Verify texture descriptor indices assigned correctly
+   - Verify MaterialAllocation created properly
+   - Render and confirm bindless texture lookups work 

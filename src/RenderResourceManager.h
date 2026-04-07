@@ -4,9 +4,9 @@
 
 #include "Mesh.h"
 
+#include <unordered_map>
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
-#include <unordered_map>
 namespace Expectre {
 
 struct MeshAllocation {
@@ -44,8 +44,8 @@ class RenderResourceManager {
 public:
   RenderResourceManager() = delete;
   RenderResourceManager(VkDevice device, VkPhysicalDevice phys_device,
-                        VmaAllocator allocator, uint32_t graphics_queue_family_index,
-                        VkQueue queue);
+                        VmaAllocator allocator,
+                        uint32_t graphics_queue_family_index, VkQueue queue);
 
   ~RenderResourceManager() {
     if (m_transfer_cmd_pool != VK_NULL_HANDLE) {
@@ -66,7 +66,9 @@ public:
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
   const VertexBuffer &get_vertex_buffer() { return m_vertex_buffer; }
   void upload_mesh_to_gpu(const Mesh &mesh);
-  void upload_texture_to_gpu(const Texture &texture);
+  void upload_texture_to_gpu(Texture &texture);
+  void create_depth_stencil_texture(Texture &texture, uint32_t width,
+                                    uint32_t height);
 
   void upload_material_to_gpu(const Material &material);
 
@@ -84,6 +86,16 @@ private:
   }
 
   void create_transfer_command_pool(uint32_t graphics_queue_family_index);
+  
+  // Creates VkImage, VkImageView, uploads pixel data via staging buffer
+  // Populates texture.image, texture.view, texture.allocation
+  void populate_texture_with_gpu_data(
+      Texture &texture,
+      uint32_t mip_levels = 1,
+      VkFormat texture_format = VK_FORMAT_R8G8B8A8_SRGB,
+      VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+      VkImageUsageFlags extra_usage = 0,
+      VkImageLayout final_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
   VkDevice m_device = VK_NULL_HANDLE;
   VkPhysicalDevice m_phys_device = VK_NULL_HANDLE;
