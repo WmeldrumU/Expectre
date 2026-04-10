@@ -47,14 +47,13 @@ public:
                  texture.texture_id);
     return m_texture_map[m_default_texture_handle];
   }
-
+TextureHandle get_default_texture();
 private:
   TextureManager();
   ~TextureManager() = default;
 
   void create_default_texture();
 
-  uint32_t m_next_tex_id{0};
   std::vector<TextureHandle> m_textures_to_upload_to_gpu{};
   std::unordered_map<TextureHandle, Texture> m_texture_map{};
   TextureHandle m_default_texture_handle{};

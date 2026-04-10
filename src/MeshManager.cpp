@@ -69,7 +69,8 @@ void MeshManager::compute_mesh_normals(Mesh &mesh) {
 }
 
 MeshHandle MeshManager::import_mesh(aiMesh *ai_mesh) {
-  Mesh mesh{ai_mesh->mName.C_Str()};
+  Mesh mesh{};
+  mesh.name = ai_mesh->mName.C_Str();
   mesh.vertices.reserve(ai_mesh->mNumVertices);
   mesh.indices.reserve(ai_mesh->mNumFaces * 3);
 

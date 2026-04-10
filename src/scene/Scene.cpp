@@ -1,23 +1,17 @@
 
 #include "scene/Scene.h"
-#include "scene/CameraComponent.h"
-#include "scene/SceneRoot.h"
-
 #include <stdexcept>
 
 namespace Expectre {
-Scene::Scene(std::string scene_name)
-    : m_root{}, m_camera{&m_root, scene_name + "Camera"} {
+Scene::Scene(std::string scene_name) {
 
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
   auto bunny_dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
   auto lamp_dir =
       WORKSPACE_DIR + std::string("/assets/gltf/AnisotropyBarnLamp.glb");
-  import_model_as_entity(teapot_dir);
-  import_model_as_entity(bunny_dir);
-  //import_model_as_entity(lamp_dir);
-
-  // m_camera.add_component<CameraComponent>();
+  m_importer.import_model(teapot_dir, m_entities, m_pending_renderables);
+  m_importer.import_model(bunny_dir, m_entities, m_pending_renderables);
+  // m_importer.import_model(lamp_dir, m_entities, m_pending_renderables);
 }
 
 std::vector<RenderableInfo> Scene::gather_renderables() const {
@@ -45,10 +39,7 @@ std::vector<RenderableInfo> Scene::gather_renderables() const {
 void Scene::Update(uint64_t delta_time, const InputManager &input_manager) {
 
   m_camera.update(delta_time, input_manager);
-  // auto *camera_cpt = m_camera.get_component<CameraComponent>();
-  // camera_cpt->update(delta_time, input_manager);
-  // Update scene logic here, e.g., traverse scene graph, update animations,
-  // etc. This is a placeholder implementation.
+  // Update scene logic here, e.g., traverse entity list, update animations.
 }
 
 } // namespace Expectre

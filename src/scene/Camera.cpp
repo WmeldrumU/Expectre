@@ -2,10 +2,6 @@
 #include <glm/glm.hpp>
 
 namespace Expectre {
-Camera::Camera(SceneObject *parent, std::string name)
-    : SceneObject(parent, name) {
-  m_renderable = false;
-}
 
 void Camera::update(uint64_t delta_time, const InputManager &input_manager) {
   // Use the camera's forward direction and calculate right vector

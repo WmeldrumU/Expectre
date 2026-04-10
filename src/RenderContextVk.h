@@ -7,7 +7,6 @@
 #include <vulkan/vulkan.h>
 
 #include "RendererVk.h"
-#include "scene/SceneObject.h"
 
 namespace Expectre {
 class Scene;

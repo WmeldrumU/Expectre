@@ -49,6 +49,7 @@ endif()
     src/IRenderer.h
     src/IRendererInfo.h
     # src/IUIRenderer.h
+    src/LimitsVk.h
     src/main.cpp
     src/MathUtils.h
     src/Mesh.h
@@ -82,22 +83,16 @@ endif()
     src/noesis/NoesisUI.h
     src/noesis/NoesisUI.cpp
     src/AppTime.h
-    src/Resource.h
     src/RenderableInfo.h
-    src/ResourceManager.h
-    src/ResourceHandle.h
     src/TextureVk.h
     # src/UtilsNs.h
-    src/scene/CameraComponent.h
+    src/scene/AssetImporter.h
     src/scene/Camera.h
     src/scene/Camera.cpp    
     src/scene/Component.h
     src/scene/Entity.h
     src/scene/Scene.h
     src/scene/Scene.cpp
-    src/scene/SceneObject.cpp
-    src/scene/SceneObject.h
-    src/scene/SceneRoot.h
     src/scene/MeshComponent.h
     src/scene/TransformComponent.h
     src/noesis/TextureVkNs.h

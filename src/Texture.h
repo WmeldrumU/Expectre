@@ -40,11 +40,17 @@ public:
 
   // Move Assignment Operator (i.e. t2 = std::move(t1); )
   Texture &operator=(Texture &&other) noexcept {
-    if (this != &other) { // Prevent self-assignment
+    if (this != &other) {// prevent self assignment 
       if (data) {
-        stbi_image_free(data); // Clean up existing resource first
+        stbi_image_free(data); // clean up self image before taking other's
       }
-      data = std::exchange(other.data, nullptr); // Steal the new one
+      data = std::exchange(other.data, nullptr); // take others image
+      width = other.width;
+      height = other.height;
+      channels = other.channels;
+      m_name = std::move(other.m_name);
+      format = other.format;
+      m_source = other.m_source;
     }
     return *this;
   }

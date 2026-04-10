@@ -9,7 +9,6 @@
 #include "MeshManager.h"
 #include "TextureManager.h"
 #include "ToolsVk.h"
-#include "scene/SceneObject.h"
 
 #include <SDL3/SDL_vulkan.h> // <-- for SDL_Vulkan_CreateSurface
 #include <bitset>
@@ -32,13 +31,13 @@ RenderContextVk::RenderContextVk(SDL_Window *window,
   int width;
   int height;
   SDL_GetWindowSize(m_window, &width, &height);
-  uint32_t u_width = static_cast<uint32>(width);
-  uint32_t u_height = static_cast<uint32>(height);
+  uint32_t uint_width = static_cast<uint32_t>(width);
+  uint32_t uint_height = static_cast<uint32_t>(height);
 
   m_renderer = std::make_shared<RendererVk>(
       m_instance, m_physical_device, m_device, m_allocator, m_surface,
       m_graphics_queue, m_graphics_queue_index, m_present_queue,
-      m_present_queue_index, u_width, u_height, input_manager);
+      m_present_queue_index, uint_width, uint_height, input_manager);
   m_ready = true;
 }
 

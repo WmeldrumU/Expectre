@@ -48,11 +48,12 @@ public:
     }
     return std::nullopt;
   }
-
+MaterialHandle register_material(const Material& material);
 private:
-  MaterialManager() = default;
+  MaterialManager();
   ~MaterialManager() = default;
-
+  void create_default_material();
+  
   // Helper to load a texture of a specific type from aiMaterial
   TextureHandle load_texture_from_material(const aiMaterial *ai_material,
                                             aiTextureType texture_type,

@@ -7,39 +7,41 @@
 
 namespace Expectre {
 
-TextureManager::TextureManager() {
-  create_default_texture();
-}
+TextureManager::TextureManager() {}
 
 void TextureManager::create_default_texture() {
-  // Create 8x8 magenta checkerboard pattern
+  // Create 8x8 magenta/black checkerboard pattern
   constexpr uint32_t size = 8;
   constexpr uint32_t channels = 4; // RGBA
-  uint8_t *data = new uint8_t[size * size * channels];
-  
-  // Magenta: RGB(255, 0, 255) = 0xFF00FF
-  // Black: RGB(0, 0, 0) = 0x000000
-  uint8_t magenta[] = {255, 0, 255, 255};
-  uint8_t black[] = {0, 0, 0, 255};
-  
+
+  // Use malloc so Texture::~Texture can safely call stbi_image_free (which
+  // calls free())
+  uint8_t *data = static_cast<uint8_t *>(malloc(size * size * channels));
+
+  // Magenta: RGBA(255, 0, 255, 255)   Black: RGBA(0, 0, 0, 255)
+  const uint8_t magenta[] = {255, 0, 255, 255};
+  const uint8_t black[] = {0, 0, 0, 255};
+
   for (uint32_t y = 0; y < size; ++y) {
     for (uint32_t x = 0; x < size; ++x) {
       uint32_t pixel_idx = (y * size + x) * channels;
-      
-      // Checkerboard pattern: alternate based on (x + y) % 2
-      bool is_magenta = ((x + y) % 2) == 0;
-      uint8_t *color = is_magenta ? magenta : black;
-      
-      data[pixel_idx + 0] = color[0];     // R
-      data[pixel_idx + 1] = color[1];     // G
-      data[pixel_idx + 2] = color[2];     // B
-      data[pixel_idx + 3] = color[3];     // A
+      const uint8_t *color = ((x + y) % 2 == 0) ? magenta : black;
+      data[pixel_idx + 0] = color[0]; // R
+      data[pixel_idx + 1] = color[1]; // G
+      data[pixel_idx + 2] = color[2]; // B
+      data[pixel_idx + 3] = color[3]; // A
     }
   }
-  
-  // Import the generated texture
-  m_default_texture_handle = import_texture("__default_magenta_checkerboard__", 
+
+  m_default_texture_handle = import_texture("__default_magenta_checkerboard__",
                                             data, size, size, channels);
+}
+
+TextureHandle TextureManager::get_default_texture() {
+  if (!m_default_texture_handle) {
+    create_default_texture();
+  }
+  return m_default_texture_handle;
 }
 
 uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
@@ -48,7 +50,8 @@ uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
 
   // Hash pixel data (width * height * channels bytes)
   XXH64_update(state, texture.data,
-               static_cast<size_t>(texture.width) * texture.height * texture.channels);
+               static_cast<size_t>(texture.width) * texture.height *
+                   texture.channels);
 
   uint64_t hash = XXH64_digest(state);
   XXH64_freeState(state);
@@ -66,7 +69,8 @@ TextureHandle TextureManager::import_texture(std::string image_dir) {
     spdlog::error("Failed to load texture from '{}'", image_dir);
     std::terminate();
   }
-  return import_texture(image_dir, data, tex_width, tex_height, desired_channels);
+  return import_texture(image_dir, data, tex_width, tex_height,
+                        desired_channels);
 }
 
 TextureHandle TextureManager::import_texture(std::string name, void *data,
@@ -90,8 +94,8 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   handle.texture_id = hash;
   if (m_texture_map.find(handle) != m_texture_map.end()) {
     // Texture already exists, return existing ID
-    spdlog::error("Texture '{}' (hash - {}) already cached, reusing", tex.m_name,
-                  hash);
+    spdlog::error("Texture '{}' (hash - {}) already cached, reusing",
+                  tex.m_name, hash);
     return handle;
   }
 
@@ -102,7 +106,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
 }
 
 void TextureManager::load_texture_from_file(Texture &texture,
-                                             const std::string &filepath) {
+                                            const std::string &filepath) {
   // Load image file using stbi
   int tex_width, tex_height, tex_channels;
   stbi_uc *pixels =
@@ -117,7 +121,7 @@ void TextureManager::load_texture_from_file(Texture &texture,
   texture.data = pixels;
   texture.width = static_cast<uint32_t>(tex_width);
   texture.height = static_cast<uint32_t>(tex_height);
-  texture.channels = 4;  // Forced RGBA by stbi_load
+  texture.channels = 4; // Forced RGBA by stbi_load
   texture.m_name = filepath;
   texture.format = VK_FORMAT_R8G8B8A8_SRGB;
 }

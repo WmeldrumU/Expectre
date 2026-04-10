@@ -6,6 +6,33 @@
 
 namespace Expectre {
 
+MaterialManager::MaterialManager() {}
+
+void MaterialManager::create_default_material() {
+  Material default_material{};
+  default_material.name = "DefaultMaterial";
+  auto default_tex = TextureManager::Instance().get_default_texture();
+  default_material.albedo = default_tex;
+  default_material.normal = default_tex;
+  default_material.metallic = default_tex;
+  default_material.roughness = default_tex;
+
+  m_default_material_handle = register_material(default_material);
+  spdlog::info("[MAT] Created default material");
+}
+
+MaterialHandle MaterialManager::register_material(const Material &material) {
+  // Compute hash and store
+  uint64_t hash = compute_material_hash(material);
+  MaterialHandle handle;
+  handle.material_id = hash;
+
+  // Add to map
+  m_material_map[m_default_material_handle] = std::move(material);
+  m_materials_to_upload_to_gpu.push_back(m_default_material_handle);
+  return handle;
+}
+
 uint64_t
 MaterialManager::compute_material_hash(const Material &material) const {
   XXH64_state_t *state = XXH64_createState();
@@ -32,7 +59,8 @@ TextureHandle MaterialManager::load_texture_from_material(
     const std::string &model_directory) {
 
   auto count = ai_material->GetTextureCount(texture_type);
-  spdlog::debug("[TEXLOAD] type={} count={} dir='{}'", (int)texture_type, count, model_directory);
+  spdlog::debug("[TEXLOAD] type={} count={} dir='{}'", (int)texture_type, count,
+                model_directory);
   if (count == 0) {
     return TextureHandle{}; // Return invalid handle if no texture
   }
@@ -54,14 +82,15 @@ TextureHandle MaterialManager::load_texture_from_material(
 
   // Load texture through TextureManager
   auto handle = TextureManager::Instance().import_texture(full_path.string());
-  spdlog::debug("[TEXLOAD] result texture_id={} valid={}", handle.texture_id, (bool)handle);
+  spdlog::debug("[TEXLOAD] result texture_id={} valid={}", handle.texture_id,
+                (bool)handle);
   return handle;
 }
 
 MaterialHandle
 MaterialManager::import_material(const aiScene *scene,
-                                  const aiMaterial *ai_material,
-                                  const std::string &model_directory) {
+                                 const aiMaterial *ai_material,
+                                 const std::string &model_directory) {
   Material material{};
 
   // Get material name
@@ -73,8 +102,8 @@ MaterialManager::import_material(const aiScene *scene,
   // Load PBR textures
   material.albedo = load_texture_from_material(
       ai_material, aiTextureType_DIFFUSE, model_directory);
-  spdlog::debug("[MAT] '{}' albedo texture_id={} valid={}",
-               material.name, material.albedo.texture_id, static_cast<bool>(material.albedo));
+  spdlog::debug("[MAT] '{}' albedo texture_id={} valid={}", material.name,
+                material.albedo.texture_id, static_cast<bool>(material.albedo));
 
   material.normal = load_texture_from_material(
       ai_material, aiTextureType_NORMALS, model_directory);
@@ -109,26 +138,9 @@ MaterialManager::import_material(const aiScene *scene,
 }
 
 MaterialHandle MaterialManager::get_default_material() {
-  // Return cached default material if already created
-  if (m_default_material_handle) {
-    return m_default_material_handle;
+  if (!m_default_material_handle) {
+    create_default_material();
   }
-
-  // Create default material with no textures
-  Material default_material{};
-  default_material.name = "DefaultMaterial";
-  // All texture handles are invalid by default
-
-  // Compute hash and store
-  uint64_t hash = compute_material_hash(default_material);
-  m_default_material_handle.material_id = hash;
-
-  // Add to map
-  m_material_map[m_default_material_handle] = std::move(default_material);
-  m_materials_to_upload_to_gpu.push_back(m_default_material_handle);
-
-  spdlog::info("Created default material");
-
   return m_default_material_handle;
 }
 
