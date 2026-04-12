@@ -14,7 +14,7 @@
 #include <spdlog/spdlog.h>
 
 #include "AppTime.h"
-#include "MaterialManager.h"
+#include "LimitsVk.h"
 #include "Mesh.h"
 #include "MeshManager.h"
 #include "RenderableInfo.h"
@@ -57,11 +57,12 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_resource_manager = std::make_unique<RenderResourceManager>(
       device, physical_device, allocator, graphics_queue_index, graphics_queue);
 
-  m_resource_manager->create_depth_stencil_texture(m_depth_stencil, m_extent.width,
-                                                    m_extent.height);
+  m_resource_manager->create_depth_stencil_texture(m_extent.width,
+                                                   m_extent.height);
+  const auto &depth_stencil = m_resource_manager->get_depth_stencil_texture();
   RenderPassConfig rp_config{};
   rp_config.colorFormat = m_swapchain_image_format,
-  rp_config.depthFormat = m_depth_stencil.format,
+  rp_config.depthFormat = depth_stencil.format,
   rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
   rp_config.colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   rp_config.colorFinalLayout =
@@ -77,7 +78,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   // (even though UI doesn't use it)
   RenderPassConfig ui_rp_config{};
   ui_rp_config.colorFormat = m_swapchain_image_format,
-  ui_rp_config.depthFormat = m_depth_stencil.format,
+  ui_rp_config.depthFormat = depth_stencil.format,
   ui_rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD, // Load from 3D pass
       ui_rp_config.colorInitialLayout =
           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -106,7 +107,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   // Paired with UPDATE_AFTER_BIND + PARTIALLY_BOUND flags for bindless support
   VkDescriptorSetLayoutBinding sampler_layout_binding{};
   sampler_layout_binding.binding = 1;
-  sampler_layout_binding.descriptorCount = kMaxDescriptorSetSamplers;
+  sampler_layout_binding.descriptorCount = 1;
   sampler_layout_binding.descriptorType =
       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   sampler_layout_binding.pImmutableSamplers = nullptr;
@@ -118,9 +119,8 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   m_pipeline = create_pipeline(device, m_render_pass, m_pipeline_layout);
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
-    m_swapchain_framebuffers[i] =
-        create_framebuffer(device, m_render_pass, m_swapchain_image_views[i],
-                           m_depth_stencil.view);
+    m_swapchain_framebuffers[i] = create_framebuffer(
+        device, m_render_pass, m_swapchain_image_views[i], depth_stencil.view);
   }
 
   // Create UI-specific framebuffers (also compatible with both render passes)
@@ -128,19 +128,21 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
     m_ui_swapchain_framebuffers[i] =
         create_framebuffer(device, m_ui_render_pass, m_swapchain_image_views[i],
-                           m_depth_stencil.view);
+                           depth_stencil.view);
   }
-  // Load texture CPU data from file using TextureManager
-  TextureManager::Instance().load_texture_from_file(
-      m_texture, WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-  // Upload GPU resources using RenderResourceManager
-  m_resource_manager->upload_texture_to_gpu(m_texture);
+  m_texture_handle = TextureManager::Instance().import_texture(
+      WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+  m_resource_manager->upload_texture_to_gpu(m_texture_handle);
+  const auto texture_allocation =
+      m_resource_manager->get_texture_allocation(m_texture_handle);
+  assert(texture_allocation.has_value());
 
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
   m_resource_manager->create_vertex_buffer(1024 * 1024 *
                                            48); // 48 MB for vertices
-  m_resource_manager->create_index_buffer(1024 * 1024 * 16); // 16 MB for indices
+  m_resource_manager->create_index_buffer(1024 * 1024 *
+                                          16); // 16 MB for indices
 
   std::vector<VkDescriptorPoolSize> pool_sizes(2);
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -156,8 +158,8 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         create_uniform_buffer(allocator, sizeof(MVP_uniform_object));
     uniform_buffer.descriptorSet = create_descriptor_set(
         device, m_descriptor_pool, m_descriptor_set_layout,
-        m_uniform_buffers[i].allocated_buffer.buffer, m_texture.view,
-        m_texture_sampler);
+        m_uniform_buffers[i].allocated_buffer.buffer,
+        texture_allocation->get().view, m_texture_sampler);
 
     m_cmd_buffers[i] = create_command_buffer(device, m_cmd_pool);
   }
@@ -197,10 +199,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
 }
 
 void RendererVk::cleanup_swapchain_and_depth_stencil() {
-  // Destroy depth buffer
-  vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
-  vmaDestroyImage(m_allocator, m_depth_stencil.image,
-                  m_depth_stencil.allocation);
+  m_resource_manager->destroy_depth_stencil_texture();
 
   for (auto framebuffer : m_swapchain_framebuffers) {
     vkDestroyFramebuffer(m_device, framebuffer, nullptr);
@@ -258,9 +257,6 @@ RendererVk::~RendererVk() {
 
   // Destroy texture resources
   vkDestroySampler(m_device, m_texture_sampler, nullptr);
-  vkDestroyImageView(m_device, m_texture.view, nullptr);
-  vkDestroyImage(m_device, m_texture.image, nullptr);
-  vmaFreeMemory(m_allocator, m_texture.allocation);
 
   // Destroy command pool
   vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
@@ -627,7 +623,7 @@ RendererVk::create_descriptor_pool(VkDevice device,
   pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
   pool_info.pPoolSizes = pool_sizes.data();
   pool_info.maxSets = max_sets;
-
+  // pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
   VkDescriptorPool pool;
   VK_CHECK_RESULT(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool));
   return pool;
@@ -836,12 +832,9 @@ void RendererVk::record_draw_commands(
   const std::vector<MeshAllocation> &mesh_allocations =
       m_resource_manager->get_mesh_allocations();
   for (const auto &alloc : mesh_allocations) {
-    // Check if this mesh's material has an albedo texture
-    uint32_t useTexture = 0u;
-    auto mat = MaterialManager::Instance().get_material(alloc.material);
-    if (mat.has_value() && mat->get().albedo) {
-      useTexture = 1u;
-    }
+    // Get albedo texture
+    // TODO(wmeldrum): implement "uses-<texture-type>" fields in material
+    uint32_t useTexture = 1u;
     vkCmdPushConstants(command_buffer, m_pipeline_layout,
                        VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
                        &useTexture);
@@ -1026,27 +1019,10 @@ void RendererVk::draw_frame(const Camera &camera,
 
 VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
     const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings) {
-  // Create descriptor set layout supporting bindless textures
-  // Enables dynamic texture indexing without rebinding descriptors
-
-  VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags{
-      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-
-  // Binding flags enable bindless texturing:
-  // - PARTIALLY_BOUND_BIT: Not all descriptors in array must be valid
-  // - UPDATE_AFTER_BIND_BIT: GPU can use descriptors while CPU updates them
-  VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
-                                   VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
-  binding_flags.bindingCount = 1;
-  binding_flags.pBindingFlags = &flags;
-
   VkDescriptorSetLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
   layout_info.pBindings = layout_bindings.data();
-  layout_info.flags =
-      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-  layout_info.pNext = &binding_flags;
 
   VkDescriptorSetLayout layout;
   VK_CHECK_RESULT(
@@ -1146,25 +1122,11 @@ void RendererVk::update(uint64_t delta_t) {
 void RendererVk::upload_pending_assets(
     const std::vector<RenderableInfo> &pending_renderables) {
   auto &mesh_mgr = MeshManager::Instance();
-  auto &mat_mgr = MaterialManager::Instance();
 
   for (const auto &info : pending_renderables) {
     const auto mesh_opt = mesh_mgr.get_mesh(info.mesh);
 
-    if (!mesh_opt.has_value()) {
-      spdlog::error("[RendererVk] Mesh not found: {}", info.mesh.mesh_id);
-      continue;
-    }
-
-    const auto mat_opt = mat_mgr.get_material(info.material);
-    if (!mat_opt.has_value()) {
-      spdlog::error("[RendererVk] Material not found: {}",
-                    info.material.material_id);
-      continue;
-    }
-
-    m_resource_manager->upload_mesh_to_gpu(mesh_opt.value());
-    m_resource_manager->upload_material_to_gpu(mat_opt.value());
+    m_resource_manager->upload_renderable_to_gpu(info);
   }
 }
 
@@ -1203,14 +1165,15 @@ void RendererVk::recreate_swapchain_and_depth_stencil() {
   }
 
   // Recreate depth stencil (destroyed in cleanup_swapchain)
-  m_resource_manager->create_depth_stencil_texture(m_depth_stencil, m_extent.width,
-                                                    m_extent.height);
+  m_resource_manager->create_depth_stencil_texture(m_extent.width,
+                                                   m_extent.height);
+  const auto &depth_stencil = m_resource_manager->get_depth_stencil_texture();
 
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
     m_swapchain_framebuffers[i] =
         create_framebuffer(m_device, m_render_pass, m_swapchain_image_views[i],
-                           m_depth_stencil.view);
+                           depth_stencil.view);
   }
 
   // Recreate UI framebuffers
@@ -1218,7 +1181,7 @@ void RendererVk::recreate_swapchain_and_depth_stencil() {
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
     m_ui_swapchain_framebuffers[i] =
         create_framebuffer(m_device, m_ui_render_pass,
-                           m_swapchain_image_views[i], m_depth_stencil.view);
+                           m_swapchain_image_views[i], depth_stencil.view);
   }
 
   // CHANGED: Recreate per-image semaphores to match new swapchain image count

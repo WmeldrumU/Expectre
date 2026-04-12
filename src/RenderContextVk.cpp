@@ -5,7 +5,6 @@
 #define VMA_STATS_STRING_ENABLED 1
 
 #include "Engine.h"
-#include "MaterialManager.h"
 #include "MeshManager.h"
 #include "TextureManager.h"
 #include "ToolsVk.h"

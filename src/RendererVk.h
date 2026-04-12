@@ -17,7 +17,6 @@
 #include <vma/vk_mem_alloc.h>
 
 #include "IRenderer.h"
-#include "IUIRenderer.h"
 #include "RenderResourceManager.h"
 #include "RenderableInfo.h"
 #include "ShaderFileWatcher.h"
@@ -38,10 +37,6 @@ namespace Expectre {
 
 class Camera;
 class NoesisUI; // forward-declared from noesis/NoesisUI.h
-
-// Based on GTX 780 capabilites
-static constexpr uint32_t kMaxDescriptorSetSamplers = 1048576;
-static constexpr uint32_t kMaxDescriptorSetUniformBuffers = 90;
 struct MVP_uniform_object {
   glm::mat4 model;
   glm::mat4 view;
@@ -77,7 +72,6 @@ public:
   void update(uint64_t delta_t);
   void draw_frame(const Camera &camera,
                   const std::vector<RenderableInfo> &renderables) override;
-  void upload_texture_to_gpu(const Texture &texture);
 
   void
   upload_pending_assets(const std::vector<RenderableInfo> &pending_renderables);
@@ -192,9 +186,7 @@ private:
   std::array<VkCommandBuffer, MAX_CONCURRENT_FRAMES> m_cmd_buffers;
   bool m_ready = false;
 
-  Texture m_depth_stencil;
-
-  Texture m_texture;
+  TextureHandle m_texture_handle{};
 
   VkSampler m_texture_sampler{};
   VkSurfaceFormatKHR m_surface_format{};

@@ -10,7 +10,6 @@
 #include <spdlog/spdlog.h>
 
 #include "Entity.h"
-#include "MaterialManager.h"
 #include "MeshManager.h"
 #include "RenderableInfo.h"
 #include "scene/MeshComponent.h"
@@ -62,7 +61,7 @@ public:
       // // Import mesh
       MeshHandle mesh_handle = MeshManager::Instance().import_mesh(ai_mesh);
 
-      MaterialHandle material_handle;
+      Material material;
       // Import material if mesh has one, otherwise use default
       if (ai_mesh->mMaterialIndex < scene->mNumMaterials) {
         const aiMaterial *ai_material =
@@ -73,20 +72,23 @@ public:
             file_path.empty()
                 ? ""
                 : std::filesystem::path(file_path).parent_path().string();
-        material_handle = MaterialManager::Instance().import_material(
+        material = TextureManager::Instance().import_material(
             scene, ai_material, model_directory);
 
       } else {
         // Use default material if mesh doesn't have one
-        material_handle = MaterialManager::Instance().get_default_material();
+        TextureHandle default_tex =
+            TextureManager::Instance().get_default_texture();
+        material = {"_DEFAULT_MATERIAL", default_tex, default_tex,
+                    default_tex,         default_tex, default_tex};
       }
 
       // Set the mesh and material
-      mesh_cpt->set_material(material_handle);
       mesh_cpt->set_mesh(mesh_handle);
+      mesh_cpt->set_material(material);
       RenderableInfo info;
       info.mesh = mesh_handle;
-      info.material = material_handle;
+      info.material = material;
       imported_renderables.push_back(info);
     }
 
@@ -98,10 +100,8 @@ public:
     }
   }
 
-  void
-  import_model(const std::string &file_path,
-                         std::vector<Entity> &entities,
-                         std::vector<RenderableInfo> &imported_renderables) {
+  void import_model(const std::string &file_path, std::vector<Entity> &entities,
+                    std::vector<RenderableInfo> &imported_renderables) {
     Assimp::Importer importer;
     const aiScene *scene = importer.ReadFile(
         file_path, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |

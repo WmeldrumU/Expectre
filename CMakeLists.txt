@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cmake_policy(SET CMP0091 NEW)
 
 # Load Conan's settings FIRST
@@ -45,21 +46,15 @@ endif()
     src/input/InputManager.cpp
     src/Engine.cpp
     src/Engine.h
-    src/ExTexture.h
     src/IRenderer.h
-    src/IRendererInfo.h
-    # src/IUIRenderer.h
     src/LimitsVk.h
     src/main.cpp
     src/MathUtils.h
     src/Mesh.h
     src/MeshManager.h
     src/MeshManager.cpp
-    # src/NoesisShaders.h
     src/observer.h
     src/Material.h
-    src/MaterialManager.h
-    src/MaterialManager.cpp
     src/RenderContextVk.cpp
     src/RenderContextVk.h
     src/RenderDeviceVk.cpp

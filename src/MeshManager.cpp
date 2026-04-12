@@ -10,7 +10,6 @@ MeshManager &MeshManager::Instance() {
   static MeshManager instance;
   return instance;
 }
-
 uint64_t MeshManager::compute_mesh_hash(const Mesh &mesh) const {
   XXH64_state_t *state = XXH64_createState();
   XXH64_reset(state, 0);
@@ -66,6 +65,76 @@ void MeshManager::compute_mesh_normals(Mesh &mesh) {
       vertex.normal = glm::vec3(0.0f, 1.0f, 0.0f);
     }
   }
+}
+
+void MeshManager::create_default_mesh() {
+  // Unit cube centered at origin with per-face UVs and outward normals.
+  // Each face has 4 unique vertices (no sharing) so UVs and normals are
+  // correct.
+  Mesh mesh{};
+  mesh.name = "__default_cube__";
+
+  // Helper: { pos, color, normal, uv }
+  // +X face (right)
+  mesh.vertices.insert(
+      mesh.vertices.end(),
+      {
+          {{0.5f, -0.5f, -0.5f}, {1, 1, 1}, {1, 0, 0}, {0, 1}},
+          {{0.5f, 0.5f, -0.5f}, {1, 1, 1}, {1, 0, 0}, {0, 0}},
+          {{0.5f, 0.5f, 0.5f}, {1, 1, 1}, {1, 0, 0}, {1, 0}},
+          {{0.5f, -0.5f, 0.5f}, {1, 1, 1}, {1, 0, 0}, {1, 1}},
+          // -X face (left)
+          {{-0.5f, -0.5f, 0.5f}, {1, 1, 1}, {-1, 0, 0}, {0, 1}},
+          {{-0.5f, 0.5f, 0.5f}, {1, 1, 1}, {-1, 0, 0}, {0, 0}},
+          {{-0.5f, 0.5f, -0.5f}, {1, 1, 1}, {-1, 0, 0}, {1, 0}},
+          {{-0.5f, -0.5f, -0.5f}, {1, 1, 1}, {-1, 0, 0}, {1, 1}},
+          // +Y face (top)
+          {{-0.5f, 0.5f, -0.5f}, {1, 1, 1}, {0, 1, 0}, {0, 1}},
+          {{-0.5f, 0.5f, 0.5f}, {1, 1, 1}, {0, 1, 0}, {0, 0}},
+          {{0.5f, 0.5f, 0.5f}, {1, 1, 1}, {0, 1, 0}, {1, 0}},
+          {{0.5f, 0.5f, -0.5f}, {1, 1, 1}, {0, 1, 0}, {1, 1}},
+          // -Y face (bottom)
+          {{-0.5f, -0.5f, 0.5f}, {1, 1, 1}, {0, -1, 0}, {0, 1}},
+          {{-0.5f, -0.5f, -0.5f}, {1, 1, 1}, {0, -1, 0}, {0, 0}},
+          {{0.5f, -0.5f, -0.5f}, {1, 1, 1}, {0, -1, 0}, {1, 0}},
+          {{0.5f, -0.5f, 0.5f}, {1, 1, 1}, {0, -1, 0}, {1, 1}},
+          // +Z face (front)
+          {{-0.5f, -0.5f, 0.5f}, {1, 1, 1}, {0, 0, 1}, {0, 1}},
+          {{0.5f, -0.5f, 0.5f}, {1, 1, 1}, {0, 0, 1}, {1, 1}},
+          {{0.5f, 0.5f, 0.5f}, {1, 1, 1}, {0, 0, 1}, {1, 0}},
+          {{-0.5f, 0.5f, 0.5f}, {1, 1, 1}, {0, 0, 1}, {0, 0}},
+          // -Z face (back)
+          {{0.5f, -0.5f, -0.5f}, {1, 1, 1}, {0, 0, -1}, {0, 1}},
+          {{-0.5f, -0.5f, -0.5f}, {1, 1, 1}, {0, 0, -1}, {1, 1}},
+          {{-0.5f, 0.5f, -0.5f}, {1, 1, 1}, {0, 0, -1}, {1, 0}},
+          {{0.5f, 0.5f, -0.5f}, {1, 1, 1}, {0, 0, -1}, {0, 0}},
+      });
+
+  // Two triangles per face, 6 faces
+  for (uint32_t face = 0; face < 6; ++face) {
+    uint32_t base = face * 4;
+    mesh.indices.insert(mesh.indices.end(), {
+                                                base,
+                                                base + 1,
+                                                base + 2,
+                                                base,
+                                                base + 2,
+                                                base + 3,
+                                            });
+  }
+
+  uint64_t hash = compute_mesh_hash(mesh);
+  m_default_mesh_handle.mesh_id = hash;
+
+  m_mesh_map[m_default_mesh_handle] = std::move(mesh);
+  m_meshes_to_upload_to_gpu.push_back(m_default_mesh_handle);
+}
+
+MeshHandle MeshManager::get_default_mesh() {
+  if (!m_default_mesh_handle) {
+    create_default_mesh();
+  }
+  return m_default_mesh_handle;
 }
 
 MeshHandle MeshManager::import_mesh(aiMesh *ai_mesh) {
@@ -131,9 +200,7 @@ MeshHandle MeshManager::import_mesh(aiMesh *ai_mesh) {
   }
 
   // New unique mesh
- // m_mesh_map[handle] = std::move(mesh);
-  m_mesh_map.emplace(std::piecewise_construct, std::forward_as_tuple(handle),
-                     std::forward_as_tuple(std::move(mesh)));
+  m_mesh_map[handle] = std::move(mesh);
   m_meshes_to_upload_to_gpu.push_back(handle);
 
   return handle;

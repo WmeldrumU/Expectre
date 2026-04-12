@@ -1,8 +1,6 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "Material.h"
-
 #include <assimp/Importer.hpp>
 #include <assimp/defs.h>
 #include <assimp/mesh.h>
@@ -34,7 +32,6 @@ public:
   std::string name; // Name of the mesh
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  MaterialHandle material; // Material associated with this mesh
 };
 
 } // namespace Expectre

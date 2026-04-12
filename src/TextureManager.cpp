@@ -94,7 +94,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   handle.texture_id = hash;
   if (m_texture_map.find(handle) != m_texture_map.end()) {
     // Texture already exists, return existing ID
-    spdlog::error("Texture '{}' (hash - {}) already cached, reusing",
+    spdlog::warn("Texture '{}' (hash - {}) already cached, reusing",
                   tex.m_name, hash);
     return handle;
   }
@@ -123,7 +123,6 @@ void TextureManager::load_texture_from_file(Texture &texture,
   texture.height = static_cast<uint32_t>(tex_height);
   texture.channels = 4; // Forced RGBA by stbi_load
   texture.m_name = filepath;
-  texture.format = VK_FORMAT_R8G8B8A8_SRGB;
 }
 
 } // namespace Expectre

@@ -2,7 +2,6 @@
 #define TEXTURE_H
 #include <stb_image.h>
 #include <string>
-#include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
 // #include "Resource.h"
@@ -40,7 +39,7 @@ public:
 
   // Move Assignment Operator (i.e. t2 = std::move(t1); )
   Texture &operator=(Texture &&other) noexcept {
-    if (this != &other) {// prevent self assignment 
+    if (this != &other) { // prevent self assignment
       if (data) {
         stbi_image_free(data); // clean up self image before taking other's
       }
@@ -49,7 +48,6 @@ public:
       height = other.height;
       channels = other.channels;
       m_name = std::move(other.m_name);
-      format = other.format;
       m_source = other.m_source;
     }
     return *this;
@@ -97,13 +95,6 @@ public:
   uint32_t height = 0;
   uint8_t channels = 0;
   std::string m_name;
-
-  // GPU data (filled after upload by RenderResourceManager)
-  VkImage image = VK_NULL_HANDLE;
-  VkImageView view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
-  VmaAllocation allocation;
-  VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;  // Texture format
 
 private:
   // Indicates whether the texture data is loaded from a file or

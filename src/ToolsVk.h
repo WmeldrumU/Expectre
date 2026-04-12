@@ -346,34 +346,8 @@ get_required_instance_extensions(bool enable_validation_layers) {
     spdlog::debug("- {}", ext);
   }
 
-  //extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+  // extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
   return extensions;
-}
-
-static VkFormat find_supported_format(VkPhysicalDevice phys_device,
-                                      const std::vector<VkFormat> &candidates,
-                                      VkImageTiling tiling,
-                                      VkFormatFeatureFlags features) {
-  for (VkFormat format : candidates) {
-    VkFormatProperties props;
-    vkGetPhysicalDeviceFormatProperties(phys_device, format, &props);
-
-    if (tiling == VK_IMAGE_TILING_LINEAR &&
-        (props.linearTilingFeatures & features) == features) {
-      return format;
-    } else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
-               (props.optimalTilingFeatures & features) == features) {
-      return format;
-    }
-  }
-
-  throw std::runtime_error("failed to find supported format!");
-}
-
-static VkFormat find_depth_format(VkPhysicalDevice phys_device) {
-  return find_supported_format(
-      phys_device, {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
-      VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
 static VkCommandBuffer begin_single_time_commands(VkDevice device,
@@ -436,7 +410,6 @@ static void copy_buffer(VkDevice device, VkCommandPool command_pool,
                         VkBuffer dstBuffer, VkBufferCopy copy_region) {
   VkCommandBuffer commandBuffer =
       ToolsVk::begin_single_time_commands(device, command_pool);
-
 
   vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copy_region);
 
@@ -610,20 +583,25 @@ static VkPhysicalDevice select_physical_device(VkInstance instance) {
   return chosen_phys_device;
 }
 
-static VkImageAspectFlags choose_aspect_flags(VkFormat format) {
-  if (format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-      format == VK_FORMAT_D24_UNORM_S8_UINT)
-    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-  else if (format == VK_FORMAT_D32_SFLOAT)
-    return VK_IMAGE_ASPECT_DEPTH_BIT;
-  else
+static VkImageAspectFlags choose_aspect_flags(uint32_t num_channels) {
+  if (num_channels == 3 || num_channels == 4) {
     return VK_IMAGE_ASPECT_COLOR_BIT;
+
+  } else if (num_channels == 1) {
+    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
+  spdlog::warn(
+      "choose_aspect_flags(): num channels should be 1, 3, or 4. Actual: {}",
+      num_channels);
+
+  return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
 static void transition_image_layout(VkDevice device, VkCommandPool cmd_pool,
-                                     VkQueue graphics_queue, VkImage image,
-                                     VkFormat format, VkImageLayout old_layout,
-                                     VkImageLayout new_layout) {
+                                    VkQueue graphics_queue, VkImage image,
+                                    VkImageAspectFlags aspect_mask,
+                                    VkImageLayout old_layout,
+                                    VkImageLayout new_layout) {
   VkCommandBuffer cmd_buffer = begin_single_time_commands(device, cmd_pool);
 
   VkImageMemoryBarrier barrier{};
@@ -633,7 +611,7 @@ static void transition_image_layout(VkDevice device, VkCommandPool cmd_pool,
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.image = image;
-  barrier.subresourceRange.aspectMask = choose_aspect_flags(format);
+  barrier.subresourceRange.aspectMask = aspect_mask;
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = 1;
   barrier.subresourceRange.baseArrayLayer = 0;

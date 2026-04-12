@@ -2,7 +2,6 @@
 #define SCENE
 
 #include <spdlog/spdlog.h>
-#include "MaterialManager.h"
 #include "MeshManager.h"
 #include "TextureManager.h"
 

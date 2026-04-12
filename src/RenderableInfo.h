@@ -13,7 +13,7 @@ namespace Expectre {
 /// knowing about the other's internals.
 struct RenderableInfo {
   MeshHandle mesh{};
-  MaterialHandle material{};
+  Material material{};
   glm::mat4 transform{1.0f};
 };
 
