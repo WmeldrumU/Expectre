@@ -45,7 +45,19 @@ RenderContextVk::~RenderContextVk() {
   // Destroy renderer first to free all its VMA allocations
   m_renderer.reset();
 
+  VmaTotalStatistics stats{};
+  vmaCalculateStatistics(m_allocator, &stats);
   vmaDestroyAllocator(m_allocator);
+
+  if (stats.total.statistics.allocationCount > 0) {
+    // Or a human-readable string:
+    char *statsStr = nullptr;
+    vmaBuildStatsString(m_allocator, &statsStr, VK_TRUE);
+
+    // log statsStr somewhere:
+    printf("%s\n", statsStr);
+    vmaFreeStatsString(m_allocator, statsStr);
+  }
 
   // Destroy device, surface, instance
   vkDestroyDevice(m_device, nullptr);
@@ -200,12 +212,12 @@ void RenderContextVk::create_memory_allocator() {
 
 void RenderContextVk::update_and_render(uint64_t delta_time, Scene &scene) {
 
-  auto pending = scene.consume_pending_renderables();
+  const auto &pending = scene.consume_pending_renderables();
   m_renderer->upload_pending_assets(pending);
 
   m_renderer->update(delta_time);
+  
   const auto &renderables = scene.gather_renderables();
-
   m_renderer->draw_frame(scene.get_camera(), renderables);
 }
 

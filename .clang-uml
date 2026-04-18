@@ -1,0 +1,64 @@
+# Path to directory containing compile_commands.json
+compilation_database_dir: build/Debug
+# Directory where generated PlantUML diagrams will be written
+output_directory: docs/diagrams
+
+plantuml:
+  before:
+      - "!theme cyborg"
+  cmd: "java -jar \"C:/Users/wmeldru/.vscode/extensions/jebbs.plantuml-2.18.1/plantuml.jar\" -tsvg \"docs/diagrams/{}.puml\""
+mermaid:
+  before:
+      - "%%{init: {'theme':'dark'}}%%"
+  cmd: "mmdc -i \"docs/diagrams/{}.mmd\" -o \"docs/diagrams/{}_mermaid.svg\" --backgroundColor \"#1e1e1e\""
+diagrams:
+  class_diagram:
+    type: class
+    glob:
+      - src/*.cpp
+      - src/*.h
+      - src/input/*.cpp
+      - src/input/*.h
+      - src/scene/*.cpp
+      - src/scene/*.h
+      - src/noesis/*.cpp
+      - src/noesis/*.h
+    using_namespace:
+      - Expectre
+    include:
+      namespaces:
+        - Expectre
+    exclude:
+      namespaces:
+        - std
+
+  scene_diagram:
+    type: class
+    glob:
+      - src/scene/*.cpp
+      - src/scene/*.h
+    using_namespace:
+      - Expectre
+    include:
+      namespaces:
+        - Expectre
+
+  renderer_diagram:
+    type: class
+    glob:
+      - src/RenderContextVk.cpp
+      - src/RenderContextVk.h
+      - src/RenderDeviceVk.cpp
+      - src/RenderDeviceVk.h
+      - src/RendererVk.cpp
+      - src/RendererVk.h
+      - src/RenderResourceManager.cpp
+      - src/RenderResourceManager.h
+      - src/IRenderer.h
+      - src/IRendererInfo.h
+      - src/IUIRenderer.h
+    using_namespace:
+      - Expectre
+    include:
+      namespaces:
+        - Expectre

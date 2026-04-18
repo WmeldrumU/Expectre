@@ -2,6 +2,9 @@
 #define SCENE_COMPONENT
 
 namespace Expectre {
+// tag components
+
+struct PendingUpload {};
 
 // Component type ID system
 class ComponentTypeIDSystem {

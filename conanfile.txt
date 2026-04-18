@@ -5,6 +5,7 @@ glm/0.9.5.4
 stb/cci.20230920
 assimp/6.0.2
 xxhash/0.8.3
+flecs/4.1.1
 
 [generators]
 CMakeToolchain

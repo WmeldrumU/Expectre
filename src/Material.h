@@ -15,6 +15,8 @@ struct MaterialHandle {
   }
 };
 
+// ECS
+struct UsesMaterial {};
 struct Material {
   std::string name;
   TextureHandle albedo;

@@ -266,16 +266,6 @@ RendererVk::~RendererVk() {
   //                 m_depth_stencil.allocation);
 
   cleanup_swapchain_and_depth_stencil();
-
-  VmaTotalStatistics stats{};
-  vmaCalculateStatistics(m_allocator, &stats);
-
-  // Or a human-readable string:
-  char *statsStr = nullptr;
-  vmaBuildStatsString(m_allocator, &statsStr, VK_TRUE);
-  // log statsStr somewhere:
-  printf("%s\n", statsStr);
-  vmaFreeStatsString(m_allocator, statsStr);
 }
 
 void RendererVk::create_swapchain() {
@@ -834,10 +824,9 @@ void RendererVk::record_draw_commands(
   for (const auto &alloc : mesh_allocations) {
     // Get albedo texture
     // TODO(wmeldrum): implement "uses-<texture-type>" fields in material
-    uint32_t useTexture = 1u;
-    vkCmdPushConstants(command_buffer, m_pipeline_layout,
-                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
-                       &useTexture);
+    // vkCmdPushConstants(command_buffer, m_pipeline_layout,
+    //                    VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
+    //                    &useTexture);
     vkCmdDrawIndexed(command_buffer, alloc.index_count, 1, alloc.index_offset,
                      alloc.vertex_offset, 0 /* first instance */);
   }

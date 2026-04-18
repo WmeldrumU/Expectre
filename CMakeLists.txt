@@ -24,6 +24,7 @@ find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 find_package(xxHash REQUIRED)
+find_package(flecs REQUIRED)
 
 # Noesis SDK root (must be set before SOURCES which references SDK paths)
 if(WIN32)
@@ -113,6 +114,7 @@ set(COMMON_LIBRARIES
     Vulkan::shaderc_combined
     xxHash::xxhash
     Noesis
+    flecs::flecs_static
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(ExpectreApp PUBLIC

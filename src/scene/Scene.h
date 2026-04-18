@@ -1,16 +1,18 @@
 #ifndef SCENE
 #define SCENE
 
-#include <spdlog/spdlog.h>
-#include "MeshManager.h"
-#include "TextureManager.h"
-
 #include "AssetImporter.h"
+#include "MeshManager.h"
 #include "RenderableInfo.h"
+#include "TextureManager.h"
 #include "input/InputManager.h"
 #include "scene/Camera.h"
 #include "scene/Entity.h"
 #include "scene/MeshComponent.h"
+#include "scene/TransformComponent.h"
+#include <flecs.h>
+#include <spdlog/spdlog.h>
+#include <vector>
 
 namespace Expectre {
 
@@ -25,34 +27,42 @@ public:
   void Update(uint64_t delta_time, const InputManager &input_manager);
   const Camera &get_camera() { return m_camera; }
 
-  const std::vector<Entity> &get_entities() { return m_entities; }
   std::vector<RenderableInfo> consume_pending_renderables() {
-    std::vector<RenderableInfo> out;
-    out.swap(m_pending_renderables);
-    return out;
+    std::vector<RenderableInfo> pending;
+    pending.reserve(m_pending_renderables.count());
+
+    m_renderables.each([&](flecs::entity e, Transform trf, MeshHandle mh) {
+      pending.emplace_back(mh,
+                           TextureManager::Instance().get_default_material(),
+                           trf.get_transform_matrix());
+
+      e.remove<PendingUpload>();
+    });
+    return pending;
   }
 
-  std::vector<RenderableInfo> gather_renderables() const;
+  std::vector<RenderableInfo> gather_renderables() {
+    std::vector<RenderableInfo> pending;
 
-  const Entity &get_entity(const EntityId &id) { return m_entities[id]; }
+    m_renderables.each([&](Transform trf, MeshHandle mh) {
+      pending.emplace_back(mh,
+                           TextureManager::Instance().get_default_material(),
+                           trf.get_transform_matrix());
+    });
+    return pending;
+  }
 
 private:
-  EntityId create_and_register_entity(std::string name,
-                                      EntityId parent = kInvalidEntity) {
-    EntityId id = static_cast<EntityId>(m_entities.size());
-    m_entities.emplace_back(std::move(name), parent);
-    return id;
-  }
-
   Camera m_camera;
   AssetImporter m_importer;
   // ECS
   // ROOT IS STORED AS THE FIRST ELEMENT
-  std::vector<Entity> m_entities;
+  // std::vector<Entity> m_entities;
+  flecs::world m_world;
+  flecs::query<Transform, MeshHandle> m_renderables;
+  flecs::query<Transform, MeshHandle> m_pending_renderables;
 
-  // Entities whose GPU resources haven't been uploaded yet.
-  // Each entity is added once in AssetImporter::import_model, consumed once by the renderer
-  std::vector<RenderableInfo> m_pending_renderables;
+  void foo() {}
 };
 } // namespace Expectre
 #endif // SCENE

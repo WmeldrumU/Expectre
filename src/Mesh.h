@@ -27,6 +27,9 @@ struct MeshHandle {
   }
 };
 
+// ECS
+struct UsesMesh {};
+
 struct Mesh {
 public:
   std::string name; // Name of the mesh
