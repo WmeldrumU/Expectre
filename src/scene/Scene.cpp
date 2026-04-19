@@ -9,18 +9,32 @@ namespace Expectre {
 Scene::Scene(std::string scene_name) {
   m_world.set<flecs::Rest>({});
 
+  m_world.component<UsesMesh>().add(flecs::Traversable).add(flecs::Exclusive);
+
+  /*
+  m_renderables = m_world.query_builder<Transform>()
+                      .with<UsesMesh>(flecs::Wildcard)
+                      .without<PendingUpload>()
+                      .build();
+
+  */
+  /*
+    m_pending_renderables = m_world.query_builder<Transform>()
+                                .with<UsesMesh>(flecs::Wildcard)
+                                .with<PendingUpload>()
+                                .build();
+
+    */
+
   m_renderables = m_world.query_builder<Transform, MeshHandle>()
                       .without<PendingUpload>()
                       .term_at(1)
-                      .src()
-                      .second<UsesMesh>()
+                      .up<UsesMesh>()
                       .build();
-
   m_pending_renderables = m_world.query_builder<Transform, MeshHandle>()
                               .with<PendingUpload>()
                               .term_at(1)
-                              .src()
-                              .second<UsesMesh>()
+                              .up<UsesMesh>()
                               .build();
 
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
