@@ -7,7 +7,16 @@
 
 namespace Expectre {
 Scene::Scene(std::string scene_name) {
+
   m_world.set<flecs::Rest>({});
+  m_world.import<flecs::stats>();
+  // REGISTER COMPONENTS HERE
+  m_world.component<Transform>();
+  m_world.component<PendingUpload>();
+  m_world.component<MeshHandle>();
+  // m_world.component(flecs::ChildOf);
+  m_world.component<Material>();
+  m_world.component<UsesMaterial>();
 
   m_world.component<UsesMesh>().add(flecs::Traversable).add(flecs::Exclusive);
 
@@ -42,14 +51,12 @@ Scene::Scene(std::string scene_name) {
   auto lamp_dir =
       WORKSPACE_DIR + std::string("/assets/gltf/AnisotropyBarnLamp.glb");
   m_importer.import_model(teapot_dir, m_world);
-
-  // Create a second teapot instance sharing the same mesh/material data
-  // m_importer.import_model(bunny_dir, m_entities, m_pending_renderables);
+  m_importer.import_model(bunny_dir, m_world);
   //  m_importer.import_model(lamp_dir, m_entities, m_pending_renderables);
 }
 
 void Scene::Update(uint64_t delta_time, const InputManager &input_manager) {
-
+  m_world.progress();
   m_camera.update(delta_time, input_manager);
   // Update scene logic here, e.g., traverse entity list, update animations.
 }

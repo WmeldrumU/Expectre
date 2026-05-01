@@ -47,7 +47,7 @@ public:
     if (it != m_texture_map.end()) {
       return it->second;
     }
-    // Texture not found, return default magenta checkerboard
+    // Texture not found, return default checkerboard
     spdlog::warn(
         "Texture handle {} not found, using default texture",
         texture.texture_id);
@@ -57,7 +57,7 @@ public:
   TextureHandle get_default_texture();
   Material get_default_material() {
     TextureHandle _default = get_default_texture();
-    return Material{"__default__", _default, _default, _default, _default};
+    return Material{"___EXP_DEFAULT_MATERIAL____", _default, _default, _default, _default};
   }
 
   TextureHandle load_texture_from_material(const aiMaterial *ai_material,

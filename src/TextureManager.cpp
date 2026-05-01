@@ -10,7 +10,7 @@ namespace Expectre {
 TextureManager::TextureManager() {}
 
 void TextureManager::create_default_texture() {
-  // Create 8x8 magenta/black checkerboard pattern
+  // Create 8x8 white/black checkerboard pattern
   constexpr uint32_t size = 8;
   constexpr uint32_t channels = 4; // RGBA
 
@@ -18,14 +18,13 @@ void TextureManager::create_default_texture() {
   // calls free())
   uint8_t *data = static_cast<uint8_t *>(malloc(size * size * channels));
 
-  // Magenta: RGBA(255, 0, 255, 255)   Black: RGBA(0, 0, 0, 255)
-  const uint8_t magenta[] = {255, 0, 255, 255};
+  const uint8_t white[] = {255, 255, 255, 255};
   const uint8_t black[] = {0, 0, 0, 255};
 
   for (uint32_t y = 0; y < size; ++y) {
     for (uint32_t x = 0; x < size; ++x) {
       uint32_t pixel_idx = (y * size + x) * channels;
-      const uint8_t *color = ((x + y) % 2 == 0) ? magenta : black;
+      const uint8_t *color = ((x + y) % 2 == 0) ? white : black;
       data[pixel_idx + 0] = color[0]; // R
       data[pixel_idx + 1] = color[1]; // G
       data[pixel_idx + 2] = color[2]; // B
@@ -33,7 +32,7 @@ void TextureManager::create_default_texture() {
     }
   }
 
-  m_default_texture_handle = import_texture("__default_magenta_checkerboard__",
+  m_default_texture_handle = import_texture("__default_checkerboard__",
                                             data, size, size, channels);
 }
 

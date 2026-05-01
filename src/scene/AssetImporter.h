@@ -30,9 +30,12 @@ public:
     if (node == nullptr) {
       return;
     }
-
-    // Create entity and set parent
-    auto current_entity = world.entity(node->mName.C_Str()).child_of(parent);
+    // Create entity
+    auto current_entity = world.entity(node->mName.C_Str());
+    if (parent.is_valid()) {
+      // set parent if parent is valid
+      current_entity.child_of(parent);
+    }
 
     // Get transform from assimp matrix
     auto ai_trf = node->mTransformation;
@@ -59,7 +62,11 @@ public:
 
       // Import mesh, to manager, create entity from the returned handle
       MeshHandle mesh_handle = MeshManager::Instance().import_mesh(ai_mesh);
-      flecs::entity mesh_ent = world.entity().set<MeshHandle>({mesh_handle});
+      flecs::entity mesh_ent = world
+                                   .entity((std::string("MESH_") +
+                                            std::string(ai_mesh->mName.C_Str()))
+                                               .c_str())
+                                   .set<MeshHandle>({mesh_handle});
 
       // There are potentailly multiple meshes, import
       // each sub-mesh as a child entity
@@ -72,6 +79,7 @@ public:
       child_entity.add<UsesMesh>(mesh_ent).add(flecs::Exclusive);
       // Add Transform component
       child_entity.set<Transform>({current_transform});
+      child_entity.add<PendingUpload>();
 
       // Import material if mesh has one, otherwise use default
       if (ai_mesh->mMaterialIndex < scene->mNumMaterials) {
@@ -87,15 +95,18 @@ public:
             scene, ai_material, model_directory);
 
         auto material_entity = world.entity().set<Material>({material});
+        material_entity.set_name((std::string(mesh_ent.name()) + "/mat/" +
+                                  std::string(ai_material->GetName().C_Str()))
+                                     .c_str());
         child_entity.add<UsesMaterial>(material_entity);
 
       } else {
         // Use default material if mesh doesn't have one
-        TextureHandle default_tex =
-            TextureManager::Instance().get_default_texture();
-        Material material = {"_DEFAULT_MATERIAL_", default_tex, default_tex,
-                             default_tex,          default_tex, default_tex};
-        auto material_entity = world.entity().set<Material>({material});
+        Material default_material =
+            TextureManager::Instance().get_default_material();
+        auto material_entity = world.entity()
+                                   .set<Material>({default_material})
+                                   .set_name(default_material.name.c_str());
         child_entity.add<UsesMaterial>(material_entity);
       }
     }
@@ -123,12 +134,9 @@ public:
     }
 
     const aiNode *ai_root = scene->mRootNode;
-    auto root_entity = world.entity(ai_root->mName.C_Str());
 
-    for (unsigned i = 0; i < ai_root->mNumChildren; i++) {
-      import_model_helper(scene, ai_root->mChildren[i], root_entity, file_path,
-                          world);
-    }
+    import_model_helper(scene, ai_root, flecs::entity::null(), file_path,
+                        world);
   }
 
 private:

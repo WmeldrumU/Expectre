@@ -171,6 +171,7 @@ TextureAllocation RenderResourceManager::create_texture_allocation(
   allocation.view = image_view;
   allocation.allocation = image_allocation;
   allocation.format = image_info.format;
+
   return allocation;
 }
 
@@ -281,38 +282,30 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh) {
   vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
 }
 
-void RenderResourceManager::upload_texture_to_gpu(
-    TextureHandle texture_handle) {
+std::optional<TextureAllocation>
+RenderResourceManager::upload_texture_to_gpu(TextureHandle texture_handle) {
   if (!texture_handle) {
     spdlog::warn("Attempted to upload invalid texture handle to GPU");
-    return;
+    return {};
   }
 
   if (m_texture_allocations.find(texture_handle) !=
       m_texture_allocations.end()) {
-    return;
+    return {};
   }
 
   auto &texture = TextureManager::Instance().get_texture(texture_handle);
   if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
     spdlog::warn("Attempted to upload empty texture to GPU");
-    return;
+    return {};
   }
+
+  const uint32_t texture_map_index = m_texture_allocations.size();
 
   m_texture_allocations[texture_handle] = create_texture_allocation(
       texture.width, texture.height, texture.data, texture.channels);
-}
-
-void RenderResourceManager::upload_material_to_gpu(const Material &material) {
-  // if (mesh.vertices.empty() || mesh.indices.empty()) {
-  //   spdlog::warn("Attempted to upload empty mesh to GPU");
-  //   return;
-  // }
-  // const auto& albedo = material.albedo.texture_id
-
-  // auto it = m_material_allocations.find()
-
-  upload_texture_to_gpu(material.albedo);
+  m_texture_allocations[texture_handle].texture_map_idx = texture_map_index;
+  return m_texture_allocations[texture_handle];
 }
 
 void RenderResourceManager::upload_renderable_to_gpu(
@@ -320,8 +313,9 @@ void RenderResourceManager::upload_renderable_to_gpu(
 
   const auto &mesh = MeshManager::Instance().get_mesh(info.mesh);
 
-  upload_mesh_to_gpu(mesh);
-  upload_material_to_gpu(info.material);
+  // upload_texture_to_gpu(info.material.normal);
+  // upload_texture_to_gpu(info.material.metallic);
+  // upload_texture_to_gpu(info.material.roughness);
 }
 
 } // namespace Expectre

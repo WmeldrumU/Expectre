@@ -120,8 +120,7 @@ private:
   VkDescriptorSet create_descriptor_set(VkDevice device,
                                         VkDescriptorPool descriptor_pool,
                                         VkDescriptorSetLayout descriptor_layout,
-                                        VkBuffer buffer, VkImageView image_view,
-                                        VkSampler sampler);
+                                        VkBuffer buffer);
 
   VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass renderpass,
                                    VkImageView view,
@@ -138,7 +137,9 @@ private:
                          VkDescriptorSetLayout descriptor_set_layout);
 
   VkDescriptorSetLayout create_descriptor_set_layout(
-      const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings);
+      const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings,
+      VkDescriptorSetLayoutBindingFlagsCreateInfo
+          &set_layout_bindings_flags_CI);
 
   UniformBuffer create_uniform_buffer(VmaAllocator allocator,
                                       VkDeviceSize buffer_size);
@@ -148,6 +149,8 @@ private:
   void cleanup_swapchain_and_depth_stencil();
 
   void recreate_swapchain_and_depth_stencil();
+
+  void update_bindless_descriptors(std::vector<TextureAllocation> allocs);
 
   VkInstance &m_instance;
   VkPhysicalDevice &m_physical_device;
@@ -173,6 +176,7 @@ private:
   VkDescriptorPool m_descriptor_pool{};
   VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;
   VkDescriptorSetLayout m_descriptor_set_layout{VK_NULL_HANDLE};
+  VkSampler m_texture_sampler{VK_NULL_HANDLE};
 
   std::vector<VkSemaphore> m_available_image_semaphores{};
   std::vector<VkSemaphore> m_finished_render_semaphores{};
@@ -186,9 +190,6 @@ private:
   std::array<VkCommandBuffer, MAX_CONCURRENT_FRAMES> m_cmd_buffers;
   bool m_ready = false;
 
-  TextureHandle m_texture_handle{};
-
-  VkSampler m_texture_sampler{};
   VkSurfaceFormatKHR m_surface_format{};
 
   uint32_t m_current_frame{0};

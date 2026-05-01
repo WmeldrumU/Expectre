@@ -48,6 +48,7 @@ struct TextureAllocation {
   VkImageView view = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
+  uint32_t texture_map_idx = -1;
 };
 
 class RenderResourceManager {
@@ -64,11 +65,10 @@ public:
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
   const VertexBuffer &get_vertex_buffer() { return m_vertex_buffer; }
   void upload_mesh_to_gpu(const Mesh &mesh);
-  void upload_texture_to_gpu(TextureHandle texture_handle);
+  std::optional<TextureAllocation>
+  upload_texture_to_gpu(TextureHandle texture_handle);
   void create_depth_stencil_texture(uint32_t width, uint32_t height);
   void destroy_depth_stencil_texture();
-
-  void upload_material_to_gpu(const Material &material);
 
   const std::vector<MeshAllocation> &get_mesh_allocations() const {
     return m_mesh_allocations;
@@ -137,7 +137,7 @@ private:
   std::unordered_map<TextureHandle, TextureAllocation> m_texture_allocations;
   // map that provide the indices of the textures within the shader's Sampler2D
   // array
-  // std::unordered_map<TextureHandle, uint32_t> m_texture_allocation;
+  std::unordered_map<TextureHandle, uint32_t> m_texture_shader_indices;
 };
 } // namespace Expectre
 

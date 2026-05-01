@@ -107,14 +107,28 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   // Paired with UPDATE_AFTER_BIND + PARTIALLY_BOUND flags for bindless support
   VkDescriptorSetLayoutBinding sampler_layout_binding{};
   sampler_layout_binding.binding = 1;
-  sampler_layout_binding.descriptorCount = 1;
+  // Define and upper bound for the descriptor
+  sampler_layout_binding.descriptorCount = kMaxBindlessTextures;
   sampler_layout_binding.descriptorType =
       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   sampler_layout_binding.pImmutableSamplers = nullptr;
   sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+  // Descriptor flags, describes bindings if they need to be partially bound,
+  // or have variable descriptor counts
+  std::vector<VkDescriptorBindingFlags> descriptor_binding_flags{
+      0, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT};
+
+  // Descriptor flags CI
+  VkDescriptorSetLayoutBindingFlagsCreateInfo set_layout_binding_flags{};
+  set_layout_binding_flags.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+  set_layout_binding_flags.bindingCount = descriptor_binding_flags.size();
+  set_layout_binding_flags.pBindingFlags = descriptor_binding_flags.data();
+
   m_descriptor_set_layout = create_descriptor_set_layout(
-      {ubo_layout_binding, sampler_layout_binding});
+      {ubo_layout_binding, sampler_layout_binding}, set_layout_binding_flags);
   m_pipeline_layout = create_pipeline_layout(device, m_descriptor_set_layout);
   m_pipeline = create_pipeline(device, m_render_pass, m_pipeline_layout);
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
@@ -130,12 +144,6 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         create_framebuffer(device, m_ui_render_pass, m_swapchain_image_views[i],
                            depth_stencil.view);
   }
-  m_texture_handle = TextureManager::Instance().import_texture(
-      WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
-  m_resource_manager->upload_texture_to_gpu(m_texture_handle);
-  const auto texture_allocation =
-      m_resource_manager->get_texture_allocation(m_texture_handle);
-  assert(texture_allocation.has_value());
 
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
@@ -148,7 +156,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   pool_sizes[0].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
   pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  pool_sizes[1].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
+  pool_sizes[1].descriptorCount = kMaxBindlessTextures * MAX_CONCURRENT_FRAMES;
   m_descriptor_pool =
       create_descriptor_pool(device, pool_sizes, MAX_CONCURRENT_FRAMES);
 
@@ -156,10 +164,10 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
     auto &uniform_buffer = m_uniform_buffers[i];
     uniform_buffer =
         create_uniform_buffer(allocator, sizeof(MVP_uniform_object));
+
     uniform_buffer.descriptorSet = create_descriptor_set(
         device, m_descriptor_pool, m_descriptor_set_layout,
-        m_uniform_buffers[i].allocated_buffer.buffer,
-        texture_allocation->get().view, m_texture_sampler);
+        m_uniform_buffers[i].allocated_buffer.buffer);
 
     m_cmd_buffers[i] = create_command_buffer(device, m_cmd_pool);
   }
@@ -235,6 +243,7 @@ RendererVk::~RendererVk() {
   vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
   // Destroy descriptor pool
   vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+  vkDestroySampler(m_device, m_texture_sampler, nullptr);
 
   // Destroy uniform buffers
   for (auto &ub : m_uniform_buffers) {
@@ -254,9 +263,6 @@ RendererVk::~RendererVk() {
   vkDestroyRenderPass(m_device, m_render_pass, nullptr);
   vkDestroyRenderPass(m_device, m_ui_render_pass,
                       nullptr); // Clean up UI render pass
-
-  // Destroy texture resources
-  vkDestroySampler(m_device, m_texture_sampler, nullptr);
 
   // Destroy command pool
   vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
@@ -613,7 +619,7 @@ RendererVk::create_descriptor_pool(VkDevice device,
   pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
   pool_info.pPoolSizes = pool_sizes.data();
   pool_info.maxSets = max_sets;
-  // pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
   VkDescriptorPool pool;
   VK_CHECK_RESULT(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool));
   return pool;
@@ -621,16 +627,25 @@ RendererVk::create_descriptor_pool(VkDevice device,
 
 VkDescriptorSet RendererVk::create_descriptor_set(
     VkDevice device, VkDescriptorPool descriptor_pool,
-    VkDescriptorSetLayout descriptor_set_layout, VkBuffer buffer,
-    VkImageView image_view, VkSampler sampler) {
+    VkDescriptorSetLayout descriptor_set_layout, VkBuffer buffer) {
 
   VkDescriptorSet descriptor_set;
+
+
+  VkDescriptorSetVariableDescriptorCountAllocateInfo
+      variable_descriptor_count_info{};
+  variable_descriptor_count_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+  variable_descriptor_count_info.descriptorSetCount = 1;
+  // Tells vulkan the maximum number of descriptors in the descriptor sets unbounded arrays
+  variable_descriptor_count_info.pDescriptorCounts = &kMaxBindlessTextures;
 
   VkDescriptorSetAllocateInfo alloc_info{};
   alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   alloc_info.descriptorPool = descriptor_pool;
   alloc_info.descriptorSetCount = 1;
   alloc_info.pSetLayouts = &descriptor_set_layout;
+  alloc_info.pNext = &variable_descriptor_count_info;
 
   VK_CHECK_RESULT(
       vkAllocateDescriptorSets(device, &alloc_info, &descriptor_set));
@@ -640,13 +655,8 @@ VkDescriptorSet RendererVk::create_descriptor_set(
   buffer_info.offset = 0;
   buffer_info.range = sizeof(MVP_uniform_object);
 
-  VkDescriptorImageInfo image_info{};
-  image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  image_info.imageView = image_view;
-  image_info.sampler = sampler;
-
   // VkWriteDescriptorSet - Represents a descriptor set write operation
-  std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
+  std::array<VkWriteDescriptorSet, 1> descriptor_writes{};
   descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   descriptor_writes[0].dstSet = descriptor_set;
   descriptor_writes[0].dstBinding = 0;
@@ -655,14 +665,9 @@ VkDescriptorSet RendererVk::create_descriptor_set(
   descriptor_writes[0].descriptorCount = 1;
   descriptor_writes[0].pBufferInfo = &buffer_info;
 
-  descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptor_writes[1].dstSet = descriptor_set;
-  descriptor_writes[1].dstBinding = 1;
-  descriptor_writes[1].dstArrayElement = 0;
-  descriptor_writes[1].descriptorType =
-      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  descriptor_writes[1].descriptorCount = 1;
-  descriptor_writes[1].pImageInfo = &image_info;
+  // Do not write to index 1 yet (our texture array), we need to get the texture
+  // handles from our scene, so just create the descriptor sets, write the MVP
+  // matrix uniform data
 
   vkUpdateDescriptorSets(device, descriptor_writes.size(),
                          descriptor_writes.data(), 0, nullptr);
@@ -1007,11 +1012,13 @@ void RendererVk::draw_frame(const Camera &camera,
 }
 
 VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
-    const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings) {
+    const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings,
+    VkDescriptorSetLayoutBindingFlagsCreateInfo &set_layout_bindings_flags_CI) {
   VkDescriptorSetLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
   layout_info.pBindings = layout_bindings.data();
+  layout_info.pNext = &set_layout_bindings_flags_CI;
 
   VkDescriptorSetLayout layout;
   VK_CHECK_RESULT(
@@ -1110,12 +1117,54 @@ void RendererVk::update(uint64_t delta_t) {
 
 void RendererVk::upload_pending_assets(
     const std::vector<RenderableInfo> &pending_renderables) {
+  auto &tex_mgr = TextureManager::Instance();
   auto &mesh_mgr = MeshManager::Instance();
 
-  for (const auto &info : pending_renderables) {
-    const auto mesh_opt = mesh_mgr.get_mesh(info.mesh);
+  std::vector<TextureAllocation> uploaded_textures_that_need_descriptor;
 
-    m_resource_manager->upload_renderable_to_gpu(info);
+  for (const auto &info : pending_renderables) {
+    const auto mesh = mesh_mgr.get_mesh(info.mesh);
+
+    m_resource_manager->upload_mesh_to_gpu(mesh);
+    auto texture_alloc =
+        m_resource_manager->upload_texture_to_gpu(info.material.albedo);
+
+    if (texture_alloc.has_value()) {
+      // Update our texture descriptors with new texture data
+      uploaded_textures_that_need_descriptor.push_back(texture_alloc.value());
+    }
+  }
+
+  update_bindless_descriptors(uploaded_textures_that_need_descriptor);
+}
+
+void RendererVk::update_bindless_descriptors(
+    std::vector<TextureAllocation> allocs) {
+
+  if (allocs.empty()) {
+    return;
+  }
+
+  std::vector<VkDescriptorImageInfo> image_infos(allocs.size());
+
+  for (auto i = 0; i < allocs.size(); i++) {
+    image_infos[i].sampler = m_texture_sampler;
+    image_infos[i].imageView = allocs[i].view;
+    image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+
+  for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_uniform_buffers[i].descriptorSet;
+    write.dstBinding = kTextureArrayBindingIndex;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = allocs.size();
+    write.dstArrayElement = allocs[0].texture_map_idx;
+    write.pImageInfo = image_infos.data();
+
+    vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
   }
 }
 

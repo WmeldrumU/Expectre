@@ -1,4 +1,3 @@
-
-1. MeshHandle not needed?
-   - It's possible that instead of using MeshHandle, we possibly get rid of MeshHandle
-   and/or just store the allocation data in the mesh entity.
+- Bindless Textures working! Kindof! Feature is enabled and everything is running, but the 
+teapot brick texture is not uploading to the gpu. Both teapot and bunny are using 
+the default checkerboard texture. Something to do with the asset pipeline. 

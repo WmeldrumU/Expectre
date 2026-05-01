@@ -156,6 +156,7 @@ void RenderContextVk::create_device() {
   features_1_2.descriptorIndexing = VK_TRUE;
   features_1_2.descriptorBindingPartiallyBound = VK_TRUE;
   features_1_2.runtimeDescriptorArray = VK_TRUE;
+  features_1_2.descriptorBindingVariableDescriptorCount = VK_TRUE;
 
   VkPhysicalDeviceFeatures2 required_features{
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};

@@ -31,13 +31,24 @@ public:
     std::vector<RenderableInfo> pending;
     pending.reserve(m_pending_renderables.count());
 
-    m_renderables.each([&](flecs::entity e, Transform trf, MeshHandle mh) {
+    // We must defer the operations done on enitities because of the
+    // call to remove(). Removing mid-iteration would move the entitiy to a
+    // different table. This is the flecs equivalent of iterating and altering at
+    // the same time
+
+    m_world.defer_begin();
+
+    m_pending_renderables.each([&](flecs::entity e, Transform trf,
+                                   MeshHandle mh) {
       pending.emplace_back(mh,
                            TextureManager::Instance().get_default_material(),
                            trf.get_transform_matrix());
 
       e.remove<PendingUpload>();
     });
+
+    m_world.defer_end();
+
     return pending;
   }
 

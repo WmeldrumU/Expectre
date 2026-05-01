@@ -149,5 +149,7 @@ if(WIN32)
 endif()
 
 # Define it as a macro so it can be used in C++
-add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
-add_compile_definitions(ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
+target_compile_definitions(ExpectreApp PRIVATE
+WORKSPACE_DIR="${CMAKE_SOURCE_DIR}"
+ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+FLECS_CPP_NO_AUTO_REGISTRATION)
