@@ -212,6 +212,8 @@ private:
   uint32_t &m_present_queue_index;
 
   bool m_window_resize_is_pending = false;
+
+  std::vector<std::pair<MeshAllocation, int32_t>> m_draw_calls;
 };
 
 } // namespace Expectre

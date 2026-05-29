@@ -13,11 +13,11 @@ Scene::Scene(std::string scene_name) {
   // REGISTER COMPONENTS HERE
   m_world.component<Transform>();
   m_world.component<PendingUpload>();
-  m_world.component<MeshHandle>();
   // m_world.component(flecs::ChildOf);
   m_world.component<Material>();
-  m_world.component<UsesMaterial>();
+  m_world.component<UsesMaterial>().add(flecs::Traversable);
 
+  m_world.component<MeshHandle>();
   m_world.component<UsesMesh>().add(flecs::Traversable).add(flecs::Exclusive);
 
   /*
@@ -35,24 +35,29 @@ Scene::Scene(std::string scene_name) {
 
     */
 
-  m_renderables = m_world.query_builder<Transform, MeshHandle>()
+  m_renderables = m_world.query_builder<Transform, MeshHandle, Material>()
                       .without<PendingUpload>()
                       .term_at(1)
                       .up<UsesMesh>()
+                      .term_at(2)
+                      .up<UsesMaterial>()
                       .build();
-  m_pending_renderables = m_world.query_builder<Transform, MeshHandle>()
-                              .with<PendingUpload>()
-                              .term_at(1)
-                              .up<UsesMesh>()
-                              .build();
+  m_pending_renderables =
+      m_world.query_builder<Transform, MeshHandle, Material>()
+          .with<PendingUpload>()
+          .term_at(1)
+          .up<UsesMesh>()
+          .term_at(2)
+          .up<UsesMaterial>()
+          .build();
 
   auto teapot_dir = WORKSPACE_DIR + std::string("/assets/teapot/teapot.obj");
   auto bunny_dir = WORKSPACE_DIR + std::string("/assets/bunny.obj");
   auto lamp_dir =
       WORKSPACE_DIR + std::string("/assets/gltf/AnisotropyBarnLamp.glb");
-  m_importer.import_model(teapot_dir, m_world);
-  m_importer.import_model(bunny_dir, m_world);
-  //  m_importer.import_model(lamp_dir, m_entities, m_pending_renderables);
+  // m_importer.import_model(teapot_dir, m_world);
+  // m_importer.import_model(bunny_dir, m_world);
+  // m_importer.import_gltf_model(usd_file_dir, m_world);
 }
 
 void Scene::Update(uint64_t delta_time, const InputManager &input_manager) {

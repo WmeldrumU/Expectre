@@ -157,6 +157,7 @@ void RenderContextVk::create_device() {
   features_1_2.descriptorBindingPartiallyBound = VK_TRUE;
   features_1_2.runtimeDescriptorArray = VK_TRUE;
   features_1_2.descriptorBindingVariableDescriptorCount = VK_TRUE;
+  features_1_2.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 
   VkPhysicalDeviceFeatures2 required_features{
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
@@ -217,7 +218,7 @@ void RenderContextVk::update_and_render(uint64_t delta_time, Scene &scene) {
   m_renderer->upload_pending_assets(pending);
 
   m_renderer->update(delta_time);
-  
+
   const auto &renderables = scene.gather_renderables();
   m_renderer->draw_frame(scene.get_camera(), renderables);
 }

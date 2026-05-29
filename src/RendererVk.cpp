@@ -1,6 +1,6 @@
 ﻿// Library macros
 #define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+// #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "RendererVk.h"
 
 #include <array>
@@ -631,13 +631,13 @@ VkDescriptorSet RendererVk::create_descriptor_set(
 
   VkDescriptorSet descriptor_set;
 
-
   VkDescriptorSetVariableDescriptorCountAllocateInfo
       variable_descriptor_count_info{};
   variable_descriptor_count_info.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
   variable_descriptor_count_info.descriptorSetCount = 1;
-  // Tells vulkan the maximum number of descriptors in the descriptor sets unbounded arrays
+  // Tells vulkan the maximum number of descriptors in the descriptor sets
+  // unbounded arrays
   variable_descriptor_count_info.pDescriptorCounts = &kMaxBindlessTextures;
 
   VkDescriptorSetAllocateInfo alloc_info{};
@@ -824,16 +824,13 @@ void RendererVk::record_draw_commands(
       command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1,
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
-  const std::vector<MeshAllocation> &mesh_allocations =
-      m_resource_manager->get_mesh_allocations();
-  for (const auto &alloc : mesh_allocations) {
-    // Get albedo texture
-    // TODO(wmeldrum): implement "uses-<texture-type>" fields in material
-    // vkCmdPushConstants(command_buffer, m_pipeline_layout,
-    //                    VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
-    //                    &useTexture);
-    vkCmdDrawIndexed(command_buffer, alloc.index_count, 1, alloc.index_offset,
-                     alloc.vertex_offset, 0 /* first instance */);
+  for (auto const &[mesh_alloc, texture_idx] : m_draw_calls) {
+    vkCmdPushConstants(command_buffer, m_pipeline_layout,
+                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int32_t),
+                       &texture_idx);
+    vkCmdDrawIndexed(command_buffer, mesh_alloc.index_count, 1,
+                     mesh_alloc.index_offset, mesh_alloc.vertex_offset,
+                     0 /* first instance */);
   }
 
   vkCmdEndRenderPass(command_buffer);
@@ -1117,21 +1114,17 @@ void RendererVk::update(uint64_t delta_t) {
 
 void RendererVk::upload_pending_assets(
     const std::vector<RenderableInfo> &pending_renderables) {
-  auto &tex_mgr = TextureManager::Instance();
-  auto &mesh_mgr = MeshManager::Instance();
-
   std::vector<TextureAllocation> uploaded_textures_that_need_descriptor;
 
   for (const auto &info : pending_renderables) {
-    const auto mesh = mesh_mgr.get_mesh(info.mesh);
+    auto mesh_alloc = m_resource_manager->upload_mesh_to_gpu(info.mesh);
 
-    m_resource_manager->upload_mesh_to_gpu(mesh);
-    auto texture_alloc =
-        m_resource_manager->upload_texture_to_gpu(info.material.albedo);
-
-    if (texture_alloc.has_value()) {
-      // Update our texture descriptors with new texture data
-      uploaded_textures_that_need_descriptor.push_back(texture_alloc.value());
+    if (info.material.albedo) {
+      auto texture_alloc = m_resource_manager->upload_texture_to_gpu(info.material.albedo);
+      m_draw_calls.emplace_back(mesh_alloc, static_cast<int32_t>(texture_alloc.texture_map_idx));
+      uploaded_textures_that_need_descriptor.push_back(texture_alloc);
+    } else {
+      m_draw_calls.emplace_back(mesh_alloc, -1); // no texture — shader falls back to vertex color
     }
   }
 

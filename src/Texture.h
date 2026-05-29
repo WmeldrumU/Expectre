@@ -8,7 +8,7 @@
 
 namespace Expectre {
 struct TextureHandle {
-  uint64_t texture_id = -1;
+  int64_t texture_id = -1;
   explicit operator bool() const { return texture_id != -1; }
 
   // Equality operator for use in unordered_map

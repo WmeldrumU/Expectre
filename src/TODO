@@ -1,3 +1,2 @@
-- Bindless Textures working! Kindof! Feature is enabled and everything is running, but the 
-teapot brick texture is not uploading to the gpu. Both teapot and bunny are using 
-the default checkerboard texture. Something to do with the asset pipeline. 
+- REVIEW LAST COMMIT BEFORE COMMITTING AGAIN
+git reset --soft HEAD~1

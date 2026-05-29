@@ -33,19 +33,17 @@ public:
 
     // We must defer the operations done on enitities because of the
     // call to remove(). Removing mid-iteration would move the entitiy to a
-    // different table. This is the flecs equivalent of iterating and altering at
-    // the same time
+    // different table. This is the flecs equivalent of iterating and altering
+    // at the same time
 
     m_world.defer_begin();
 
-    m_pending_renderables.each([&](flecs::entity e, Transform trf,
-                                   MeshHandle mh) {
-      pending.emplace_back(mh,
-                           TextureManager::Instance().get_default_material(),
-                           trf.get_transform_matrix());
+    m_pending_renderables.each(
+        [&](flecs::entity e, Transform trf, MeshHandle mh, Material mat) {
+          pending.push_back({mh, mat, trf.get_transform_matrix()});
 
-      e.remove<PendingUpload>();
-    });
+          e.remove<PendingUpload>();
+        });
 
     m_world.defer_end();
 
@@ -55,10 +53,8 @@ public:
   std::vector<RenderableInfo> gather_renderables() {
     std::vector<RenderableInfo> pending;
 
-    m_renderables.each([&](Transform trf, MeshHandle mh) {
-      pending.emplace_back(mh,
-                           TextureManager::Instance().get_default_material(),
-                           trf.get_transform_matrix());
+    m_renderables.each([&](Transform trf, MeshHandle mh, Material mat) {
+      pending.push_back({mh, mat, trf.get_transform_matrix()});
     });
     return pending;
   }
@@ -70,8 +66,8 @@ private:
   // ROOT IS STORED AS THE FIRST ELEMENT
   // std::vector<Entity> m_entities;
   flecs::world m_world;
-  flecs::query<Transform, MeshHandle> m_renderables;
-  flecs::query<Transform, MeshHandle> m_pending_renderables;
+  flecs::query<Transform, MeshHandle, Material> m_renderables;
+  flecs::query<Transform, MeshHandle, Material> m_pending_renderables;
 
   void foo() {}
 };

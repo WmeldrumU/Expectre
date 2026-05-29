@@ -48,7 +48,7 @@ struct TextureAllocation {
   VkImageView view = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VkFormat format = VK_FORMAT_UNDEFINED;
-  uint32_t texture_map_idx = -1;
+  int32_t texture_map_idx = -1;
 };
 
 class RenderResourceManager {
@@ -64,9 +64,8 @@ public:
   void create_index_buffer(uint32_t size_bytes);
   const IndexBuffer &get_index_buffer() { return m_index_buffer; }
   const VertexBuffer &get_vertex_buffer() { return m_vertex_buffer; }
-  void upload_mesh_to_gpu(const Mesh &mesh);
-  std::optional<TextureAllocation>
-  upload_texture_to_gpu(TextureHandle texture_handle);
+  MeshAllocation upload_mesh_to_gpu(MeshHandle mesh_hanlde);
+  TextureAllocation upload_texture_to_gpu(TextureHandle texture_handle);
   void create_depth_stencil_texture(uint32_t width, uint32_t height);
   void destroy_depth_stencil_texture();
 
@@ -87,7 +86,7 @@ public:
     return m_depth_stencil;
   }
 
-  void upload_renderable_to_gpu(const RenderableInfo &info);
+  void register_renderable_as_draw_call(const RenderableInfo &info);
 
 private:
   // Aligns v up to the nearest multiple of a (which must be a power of 2)

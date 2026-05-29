@@ -1,6 +1,7 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 #include "Texture.h"
+#include <glm/vec4.hpp>
 #include <string>
 
 namespace Expectre {
@@ -24,6 +25,14 @@ struct Material {
   TextureHandle metallic;
   TextureHandle roughness;
   TextureHandle ao; // Ambient occlusion (optional)
+  TextureHandle emissive;
+
+  glm::vec4 albedo_factor = glm::vec4(1.0f);
+  float metallic_factor = 1.0f;
+  float roughness_factor = 1.0f;
+  float normal_scale = 1.0f;
+  float occlusion_strength = 1.0f;
+  float emissive_factor = 1.0f;
 };
 
 } // namespace Expectre

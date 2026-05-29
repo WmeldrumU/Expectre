@@ -5,7 +5,8 @@
 
 #include <assimp/Importer.hpp>
 #include <assimp/mesh.h>
-
+#include <fastgltf/tools.hpp>
+#include <fastgltf/types.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
@@ -17,6 +18,7 @@ class MeshManager {
 public:
   static MeshManager &Instance();
   MeshHandle import_mesh(aiMesh *ai_mesh);
+  MeshHandle import_mesh(const fastgltf::Asset &asset, const fastgltf::Mesh &mesh);
 
   std::vector<MeshHandle> consume_meshes_to_upload_to_gpu() {
     return std::move(m_meshes_to_upload_to_gpu);

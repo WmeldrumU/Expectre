@@ -18,7 +18,7 @@ struct Vertex {
 };
 
 struct MeshHandle {
-  uint64_t mesh_id = -1;
+  int64_t mesh_id = -1;
   explicit operator bool() const { return mesh_id != -1; }
 
   // Equality operator for use in unordered_map

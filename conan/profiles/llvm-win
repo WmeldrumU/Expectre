@@ -1,0 +1,19 @@
+[settings]
+os=Windows
+arch=x86_64
+build_type=Debug
+compiler=clang
+compiler.version=19
+compiler.cppstd=17
+compiler.runtime=dynamic
+compiler.runtime_type=Debug
+compiler.runtime_version=v144
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.build:compiler_executables = {"c": "clang", "cpp": "clang++"}
+tools.compilation:verbosity=verbose
+draco/*:tools.build:cxxflags+=["-Dftello=_ftelli64", "-Dfseeko=_fseeki64"]
+
+[tool_requires]
+ninja/[*]

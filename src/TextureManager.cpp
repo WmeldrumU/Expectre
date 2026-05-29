@@ -1,6 +1,5 @@
 #include "TextureManager.h"
 #include <spdlog/spdlog.h>
-#include <stb.h>
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
 #include <stb_image.h>
 #include <xxhash.h>

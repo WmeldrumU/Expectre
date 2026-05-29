@@ -10,6 +10,11 @@ namespace Expectre {
 
 	namespace fs = std::filesystem;
 
+	static bool ends_with(std::string_view str, std::string_view suffix) {
+		return str.size() >= suffix.size() &&
+		       str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+	}
+
 	class ShaderFileWatcher {
 	public:
 		ShaderFileWatcher() = delete;
@@ -23,11 +28,11 @@ namespace Expectre {
 			// FILETIME 
 			m_last_write_time = std::filesystem::last_write_time(m_path);
 
-			if (m_path.ends_with(".vert")) {
+			if (ends_with(m_path, ".vert")) {
 				std::cout << "It's a vertex shader.\n";
 				m_shader_kind = shaderc_shader_kind::shaderc_vertex_shader;
 			}
-			else if (m_path.ends_with(".frag")) {
+			else if (ends_with(m_path, ".frag")) {
 				std::cout << "It's a fragment shader.\n";
 				m_shader_kind = shaderc_shader_kind::shaderc_fragment_shader;
 			}

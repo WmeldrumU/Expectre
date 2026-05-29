@@ -1,6 +1,6 @@
 # Expectre
 
-A real-time 3D engine built from scratch in C++20 and Vulkan 1.4. **Work in progress.**
+A real-time 3D engine built from scratch in C++17 and Vulkan 1.4. **Work in progress.**
 
 <img src="demo.gif" width="600">
 
@@ -97,7 +97,7 @@ arch=x86_64
 build_type=Debug
 compiler=clang
 compiler.version=19
-compiler.cppstd=20
+compiler.cppstd=17
 compiler.runtime=dynamic
 compiler.runtime_type=Debug
 compiler.runtime_version=v144

@@ -33,9 +33,9 @@ public:
         Noesis::String uriPath;
         uri.GetPath(uriPath);
         std::string path = m_root + uriPath.Str();
-        spdlog::info("[NoesisUI] LoadXaml: '{}'", path);
+        // spdlog::info("[NoesisUI] LoadXaml: '{}'", path);
         auto stream = Noesis::OpenFileStream(path.c_str());
-        spdlog::info("[NoesisUI] LoadXaml result: {}", stream ? "OK" : "NULL");
+        // spdlog::info("[NoesisUI] LoadXaml result: {}", stream ? "OK" : "NULL");
         return stream;
     }
 
@@ -81,7 +81,7 @@ protected:
         if (!dir.empty() && dir.back() != '/' && dir.back() != '\\')
             dir += '/';
         std::string path = dir + filename;
-        printf("[NoesisUI] OpenFont: %s\n", path.c_str());
+        // printf("[NoesisUI] OpenFont: %s\n", path.c_str());
         return Noesis::OpenFileStream(path.c_str());
     }
 
@@ -159,7 +159,7 @@ NoesisUI::NoesisUI(const InitInfo &info)
   if (!root) {
     spdlog::error("[NoesisUI] Failed to load Page0.xaml!");
   } else {
-    spdlog::info("[NoesisUI] Page0.xaml loaded OK, root type: {}", root->GetClassType()->GetName());
+    // spdlog::info("[NoesisUI] Page0.xaml loaded OK, root type: {}", root->GetClassType()->GetName());
   }
 
   m_view = Noesis::GUI::CreateView(root);

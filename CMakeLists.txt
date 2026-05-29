@@ -12,8 +12,8 @@ cmake_policy(SET CMP0091 NEW)
 project(ExpectreProject CXX)
 option(USE_WEBGPU "Build with WebGPU support" OFF)
 
-# use c++ 20, this version is required
-set(CMAKE_CXX_STANDARD 20)
+# use c++ 17, this version is required
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 find_package(SDL3 REQUIRED)
@@ -25,6 +25,7 @@ find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 find_package(xxHash REQUIRED)
 find_package(flecs REQUIRED)
+find_package(fastgltf REQUIRED)
 
 # Noesis SDK root (must be set before SOURCES which references SDK paths)
 if(WIN32)
@@ -115,6 +116,7 @@ set(COMMON_LIBRARIES
     xxHash::xxhash
     Noesis
     flecs::flecs_static
+    fastgltf::fastgltf
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(ExpectreApp PUBLIC

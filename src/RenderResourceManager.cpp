@@ -198,11 +198,14 @@ void RenderResourceManager::destroy_depth_stencil_texture() {
   m_depth_stencil.format = VK_FORMAT_UNDEFINED;
 }
 
-void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh) {
-  if (mesh.vertices.empty() || mesh.indices.empty()) {
-    spdlog::warn("Attempted to upload empty mesh to GPU");
-    return;
-  }
+MeshAllocation
+RenderResourceManager::upload_mesh_to_gpu(MeshHandle mesh_handle) {
+  // if (mesh.vertices.empty() || mesh.indices.empty()) {
+  //   spdlog::warn("Attempted to upload empty mesh to GPU");
+  //   return {};
+  // }
+
+  const auto &mesh = MeshManager::Instance().get_mesh(mesh_handle);
 
   // Sizes
   uint32_t vertex_bytes =
@@ -280,25 +283,29 @@ void RenderResourceManager::upload_mesh_to_gpu(const Mesh &mesh) {
 
   // Destroy staging
   vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+
+  return alloc;
 }
 
-std::optional<TextureAllocation>
+TextureAllocation
 RenderResourceManager::upload_texture_to_gpu(TextureHandle texture_handle) {
-  if (!texture_handle) {
-    spdlog::warn("Attempted to upload invalid texture handle to GPU");
-    return {};
-  }
+  // if (!texture_handle) {
+  //   spdlog::warn("Attempted to upload invalid texture handle to GPU");
+  //   return {};
+  // }
 
-  if (m_texture_allocations.find(texture_handle) !=
-      m_texture_allocations.end()) {
-    return {};
+  // Return existing allocation if already uploaded — avoids a VMA leak when
+  // multiple meshes share the same texture handle.
+  auto it = m_texture_allocations.find(texture_handle);
+  if (it != m_texture_allocations.end()) {
+    return it->second;
   }
 
   auto &texture = TextureManager::Instance().get_texture(texture_handle);
-  if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
-    spdlog::warn("Attempted to upload empty texture to GPU");
-    return {};
-  }
+  // if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
+  //   spdlog::warn("Attempted to upload empty texture to GPU");
+  //   return {};
+  // }
 
   const uint32_t texture_map_index = m_texture_allocations.size();
 
@@ -306,16 +313,6 @@ RenderResourceManager::upload_texture_to_gpu(TextureHandle texture_handle) {
       texture.width, texture.height, texture.data, texture.channels);
   m_texture_allocations[texture_handle].texture_map_idx = texture_map_index;
   return m_texture_allocations[texture_handle];
-}
-
-void RenderResourceManager::upload_renderable_to_gpu(
-    const RenderableInfo &info) {
-
-  const auto &mesh = MeshManager::Instance().get_mesh(info.mesh);
-
-  // upload_texture_to_gpu(info.material.normal);
-  // upload_texture_to_gpu(info.material.metallic);
-  // upload_texture_to_gpu(info.material.roughness);
 }
 
 } // namespace Expectre
