@@ -1,7 +1,6 @@
 ﻿// Library macros
 #define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-
+// #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "RendererVk.h"
 
 #include <array>
@@ -15,12 +14,15 @@
 #include <spdlog/spdlog.h>
 
 #include "AppTime.h"
-#include "MaterialManager.h"
+#include "LimitsVk.h"
 #include "Mesh.h"
 #include "MeshManager.h"
-#include "RenderContextVk.h"
+#include "RenderableInfo.h"
 #include "ShaderFileWatcher.h"
+#include "TextureManager.h"
 #include "ToolsVk.h"
+#include "scene/MeshComponent.h"
+#include "scene/TransformComponent.h"
 
 #include "scene/Camera.h"
 
@@ -32,18 +34,15 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
                        VkDevice &device, VmaAllocator &allocator,
                        VkSurfaceKHR &surface, VkQueue &graphics_queue,
                        uint32_t &graphics_queue_index, VkQueue &present_queue,
-                       uint32_t &present_queue_index,
-                       InputManager &input_manager)
+                       uint32_t &present_queue_index, uint32_t width,
+                       uint32_t height, InputManager &input_manager)
     : m_instance{instance}, m_physical_device{physical_device},
       m_device{device}, m_allocator{allocator}, m_surface{surface},
       m_graphics_queue{graphics_queue},
       m_graphics_queue_index{graphics_queue_index},
       m_present_queue{present_queue},
-      m_present_queue_index{present_queue_index},
-      m_extent{STARTING_RESOLUTION_X, STARTING_RESOLUTION_Y},
-      m_pending_extent{STARTING_RESOLUTION_X, STARTING_RESOLUTION_Y},
-      m_resource_manager{device, allocator, graphics_queue},
-      m_input_manager{input_manager} {
+      m_present_queue_index{present_queue_index}, m_extent{width, height},
+      m_pending_extent{width, height}, m_input_manager{input_manager} {
 
   // Command buffers and swapchain
   create_swapchain();
@@ -55,36 +54,47 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
         VK_IMAGE_ASPECT_COLOR_BIT);
   }
   m_cmd_pool = create_command_pool(device, graphics_queue_index);
-  m_depth_stencil =
-      TextureVk::create_depth_stencil(m_physical_device, device, m_cmd_pool,
-                                      m_graphics_queue, allocator, m_extent);
+  m_resource_manager = std::make_unique<RenderResourceManager>(
+      device, physical_device, allocator, graphics_queue_index, graphics_queue);
+
+  m_resource_manager->create_depth_stencil_texture(m_extent.width,
+                                                   m_extent.height);
+  const auto &depth_stencil = m_resource_manager->get_depth_stencil_texture();
   RenderPassConfig rp_config{};
   rp_config.colorFormat = m_swapchain_image_format,
-  rp_config.depthFormat = m_depth_stencil.image_info.format,
+  rp_config.depthFormat = depth_stencil.format,
   rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
   rp_config.colorInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  rp_config.colorFinalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,  // For UI overlay
-  rp_config.depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+  rp_config.colorFinalLayout =
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // For UI overlay
+      rp_config.depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
   rp_config.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
   rp_config.depthInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   // 3D render pass: outputs to COLOR_ATTACHMENT_OPTIMAL for UI to overlay on
       m_render_pass = create_renderpass(device, rp_config);
-  
+
   // Create separate UI render pass (loads 3D output, presents)
   // NOTE: Must include depth attachment for framebuffer compatibility
   // (even though UI doesn't use it)
   RenderPassConfig ui_rp_config{};
   ui_rp_config.colorFormat = m_swapchain_image_format,
-  ui_rp_config.depthFormat = m_depth_stencil.image_info.format,
-  ui_rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,  // Load from 3D pass
-  ui_rp_config.colorInitialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  ui_rp_config.colorFinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,  // Ready to present
-  ui_rp_config.depthLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-  ui_rp_config.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,  // Noesis uses stencil for clipping
-  ui_rp_config.depthInitialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-  ui_rp_config.depthFinalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  ui_rp_config.depthFormat = depth_stencil.format,
+  ui_rp_config.colorLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD, // Load from 3D pass
+      ui_rp_config.colorInitialLayout =
+          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  ui_rp_config.colorFinalLayout =
+      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, // Ready to present
+      ui_rp_config.depthLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+  ui_rp_config.stencilLoadOp =
+      VK_ATTACHMENT_LOAD_OP_CLEAR, // Noesis uses stencil for clipping
+      ui_rp_config.depthInitialLayout =
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  ui_rp_config.depthFinalLayout =
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
   m_ui_render_pass = create_renderpass(device, ui_rp_config);
 
+  // === DESCRIPTOR SET LAYOUT BINDINGS ===
+  // Binding 0: MVP uniform buffer
   VkDescriptorSetLayoutBinding ubo_layout_binding{};
   ubo_layout_binding.binding = 0;
   ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -92,46 +102,61 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
   ubo_layout_binding.pImmutableSamplers = nullptr;
 
+  // Binding 1: Bindless texture array
+  // Large descriptor count enables dynamic texture indexing in shaders
+  // Paired with UPDATE_AFTER_BIND + PARTIALLY_BOUND flags for bindless support
   VkDescriptorSetLayoutBinding sampler_layout_binding{};
   sampler_layout_binding.binding = 1;
-  sampler_layout_binding.descriptorCount = 1;
+  // Define and upper bound for the descriptor
+  sampler_layout_binding.descriptorCount = kMaxBindlessTextures;
   sampler_layout_binding.descriptorType =
       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   sampler_layout_binding.pImmutableSamplers = nullptr;
   sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+  // Descriptor flags, describes bindings if they need to be partially bound,
+  // or have variable descriptor counts
+  std::vector<VkDescriptorBindingFlags> descriptor_binding_flags{
+      0, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT};
+
+  // Descriptor flags CI
+  VkDescriptorSetLayoutBindingFlagsCreateInfo set_layout_binding_flags{};
+  set_layout_binding_flags.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+  set_layout_binding_flags.bindingCount = descriptor_binding_flags.size();
+  set_layout_binding_flags.pBindingFlags = descriptor_binding_flags.data();
+
   m_descriptor_set_layout = create_descriptor_set_layout(
-      {ubo_layout_binding, sampler_layout_binding});
+      {ubo_layout_binding, sampler_layout_binding}, set_layout_binding_flags);
   m_pipeline_layout = create_pipeline_layout(device, m_descriptor_set_layout);
   m_pipeline = create_pipeline(device, m_render_pass, m_pipeline_layout);
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
     m_swapchain_framebuffers[i] = create_framebuffer(
-        device, m_render_pass, m_swapchain_image_views[i], m_depth_stencil.view);
+        device, m_render_pass, m_swapchain_image_views[i], depth_stencil.view);
   }
-  
+
   // Create UI-specific framebuffers (also compatible with both render passes)
   m_ui_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
-    m_ui_swapchain_framebuffers[i] = create_framebuffer(
-        device, m_ui_render_pass, m_swapchain_image_views[i], m_depth_stencil.view);
+    m_ui_swapchain_framebuffers[i] =
+        create_framebuffer(device, m_ui_render_pass, m_swapchain_image_views[i],
+                           depth_stencil.view);
   }
-  // std::ignore = create_texture_from_file(WORKSPACE_DIR +
-  // std::string("/assets/teapot/brick.png"));
-  m_texture = TextureVk::create_texture_from_file(
-      device, m_cmd_pool, m_graphics_queue, allocator,
-      WORKSPACE_DIR + std::string("/assets/teapot/brick.png"));
+
   m_texture_sampler =
       ToolsVk::create_texture_sampler(m_physical_device, device);
-  m_resource_manager.create_vertex_buffer(1024 * 1024 *
-                                          48); // 48 MB for vertices
-  m_resource_manager.create_index_buffer(1024 * 1024 * 16); // 16 MB for indices
+  m_resource_manager->create_vertex_buffer(1024 * 1024 *
+                                           48); // 48 MB for vertices
+  m_resource_manager->create_index_buffer(1024 * 1024 *
+                                          16); // 16 MB for indices
 
   std::vector<VkDescriptorPoolSize> pool_sizes(2);
   pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   pool_sizes[0].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
   pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  pool_sizes[1].descriptorCount = static_cast<uint32_t>(MAX_CONCURRENT_FRAMES);
+  pool_sizes[1].descriptorCount = kMaxBindlessTextures * MAX_CONCURRENT_FRAMES;
   m_descriptor_pool =
       create_descriptor_pool(device, pool_sizes, MAX_CONCURRENT_FRAMES);
 
@@ -139,10 +164,10 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
     auto &uniform_buffer = m_uniform_buffers[i];
     uniform_buffer =
         create_uniform_buffer(allocator, sizeof(MVP_uniform_object));
+
     uniform_buffer.descriptorSet = create_descriptor_set(
         device, m_descriptor_pool, m_descriptor_set_layout,
-        m_uniform_buffers[i].allocated_buffer.buffer, m_texture.view,
-        m_texture_sampler);
+        m_uniform_buffers[i].allocated_buffer.buffer);
 
     m_cmd_buffers[i] = create_command_buffer(device, m_cmd_pool);
   }
@@ -161,7 +186,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   nsInit.device = m_device;
   nsInit.graphicsQueue = m_graphics_queue;
   nsInit.queueFamilyIndex = m_graphics_queue_index;
-  nsInit.renderPass = m_ui_render_pass;  // Use UI render pass for Noesis
+  nsInit.renderPass = m_ui_render_pass; // Use UI render pass for Noesis
   nsInit.sampleCount = VK_SAMPLE_COUNT_1_BIT;
   nsInit.width = m_extent.width;
   nsInit.height = m_extent.height;
@@ -174,7 +199,7 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
   // leak into the core engine.
   m_ns_input_adapter = m_noesisUI->CreateInputAdapter();
   input_manager.AddObserver(m_ns_input_adapter);
-  
+
   // Update NoesisUI to use the UI render pass (separate from 3D scene)
   // This requires calling WarmUpRenderPass with the UI-specific render pass
   // (This is handled in the NoesisUI constructor via InitInfo)
@@ -182,15 +207,12 @@ RendererVk::RendererVk(VkInstance &instance, VkPhysicalDevice &physical_device,
 }
 
 void RendererVk::cleanup_swapchain_and_depth_stencil() {
-  // Destroy depth buffer
-  vkDestroyImageView(m_device, m_depth_stencil.view, nullptr);
-  vmaDestroyImage(m_allocator, m_depth_stencil.image,
-                  m_depth_stencil.allocation);
+  m_resource_manager->destroy_depth_stencil_texture();
 
   for (auto framebuffer : m_swapchain_framebuffers) {
     vkDestroyFramebuffer(m_device, framebuffer, nullptr);
   }
-  
+
   for (auto framebuffer : m_ui_swapchain_framebuffers) {
     vkDestroyFramebuffer(m_device, framebuffer, nullptr);
   }
@@ -221,6 +243,7 @@ RendererVk::~RendererVk() {
   vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
   // Destroy descriptor pool
   vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+  vkDestroySampler(m_device, m_texture_sampler, nullptr);
 
   // Destroy uniform buffers
   for (auto &ub : m_uniform_buffers) {
@@ -238,13 +261,8 @@ RendererVk::~RendererVk() {
   vkDestroyPipeline(m_device, m_pipeline, nullptr);
   vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
   vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-  vkDestroyRenderPass(m_device, m_ui_render_pass, nullptr);  // Clean up UI render pass
-
-  // Destroy texture resources
-  vkDestroySampler(m_device, m_texture_sampler, nullptr);
-  vkDestroyImageView(m_device, m_texture.view, nullptr);
-  vkDestroyImage(m_device, m_texture.image, nullptr);
-  vmaFreeMemory(m_allocator, m_texture.allocation);
+  vkDestroyRenderPass(m_device, m_ui_render_pass,
+                      nullptr); // Clean up UI render pass
 
   // Destroy command pool
   vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
@@ -254,16 +272,6 @@ RendererVk::~RendererVk() {
   //                 m_depth_stencil.allocation);
 
   cleanup_swapchain_and_depth_stencil();
-
-  VmaTotalStatistics stats{};
-  vmaCalculateStatistics(m_allocator, &stats);
-
-  // Or a human-readable string:
-  char *statsStr = nullptr;
-  vmaBuildStatsString(m_allocator, &statsStr, VK_TRUE);
-  // log statsStr somewhere:
-  printf("%s\n", statsStr);
-  vmaFreeStatsString(m_allocator, statsStr);
 }
 
 void RendererVk::create_swapchain() {
@@ -388,24 +396,24 @@ VkRenderPass RendererVk::create_renderpass(VkDevice device,
   deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
   deps[0].dstSubpass = 0;
   deps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                          VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                          VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   deps[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
   // Dependency at the end: subpass 0 → external
   deps[1].srcSubpass = 0;
   deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
   deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                          VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   deps[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
   deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   deps[1].dstAccessMask = 0;
   deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -611,7 +619,7 @@ RendererVk::create_descriptor_pool(VkDevice device,
   pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
   pool_info.pPoolSizes = pool_sizes.data();
   pool_info.maxSets = max_sets;
-
+  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
   VkDescriptorPool pool;
   VK_CHECK_RESULT(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool));
   return pool;
@@ -619,16 +627,25 @@ RendererVk::create_descriptor_pool(VkDevice device,
 
 VkDescriptorSet RendererVk::create_descriptor_set(
     VkDevice device, VkDescriptorPool descriptor_pool,
-    VkDescriptorSetLayout descriptor_set_layout, VkBuffer buffer,
-    VkImageView image_view, VkSampler sampler) {
+    VkDescriptorSetLayout descriptor_set_layout, VkBuffer buffer) {
 
   VkDescriptorSet descriptor_set;
+
+  VkDescriptorSetVariableDescriptorCountAllocateInfo
+      variable_descriptor_count_info{};
+  variable_descriptor_count_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+  variable_descriptor_count_info.descriptorSetCount = 1;
+  // Tells vulkan the maximum number of descriptors in the descriptor sets
+  // unbounded arrays
+  variable_descriptor_count_info.pDescriptorCounts = &kMaxBindlessTextures;
 
   VkDescriptorSetAllocateInfo alloc_info{};
   alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   alloc_info.descriptorPool = descriptor_pool;
   alloc_info.descriptorSetCount = 1;
   alloc_info.pSetLayouts = &descriptor_set_layout;
+  alloc_info.pNext = &variable_descriptor_count_info;
 
   VK_CHECK_RESULT(
       vkAllocateDescriptorSets(device, &alloc_info, &descriptor_set));
@@ -638,13 +655,8 @@ VkDescriptorSet RendererVk::create_descriptor_set(
   buffer_info.offset = 0;
   buffer_info.range = sizeof(MVP_uniform_object);
 
-  VkDescriptorImageInfo image_info{};
-  image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  image_info.imageView = image_view;
-  image_info.sampler = sampler;
-
   // VkWriteDescriptorSet - Represents a descriptor set write operation
-  std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
+  std::array<VkWriteDescriptorSet, 1> descriptor_writes{};
   descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   descriptor_writes[0].dstSet = descriptor_set;
   descriptor_writes[0].dstBinding = 0;
@@ -653,14 +665,9 @@ VkDescriptorSet RendererVk::create_descriptor_set(
   descriptor_writes[0].descriptorCount = 1;
   descriptor_writes[0].pBufferInfo = &buffer_info;
 
-  descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptor_writes[1].dstSet = descriptor_set;
-  descriptor_writes[1].dstBinding = 1;
-  descriptor_writes[1].dstArrayElement = 0;
-  descriptor_writes[1].descriptorType =
-      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  descriptor_writes[1].descriptorCount = 1;
-  descriptor_writes[1].pImageInfo = &image_info;
+  // Do not write to index 1 yet (our texture array), we need to get the texture
+  // handles from our scene, so just create the descriptor sets, write the MVP
+  // matrix uniform data
 
   vkUpdateDescriptorSets(device, descriptor_writes.size(),
                          descriptor_writes.data(), 0, nullptr);
@@ -668,7 +675,8 @@ VkDescriptorSet RendererVk::create_descriptor_set(
   return descriptor_set;
 }
 
-VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkRenderPass renderpass,
+VkFramebuffer RendererVk::create_framebuffer(VkDevice device,
+                                             VkRenderPass renderpass,
                                              VkImageView view,
                                              VkImageView depth_view) {
   VkResult err;
@@ -681,7 +689,7 @@ VkFramebuffer RendererVk::create_framebuffer(VkDevice device, VkRenderPass rende
 
   VkFramebufferCreateInfo framebuffer_info{};
   framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebuffer_info.renderPass = renderpass;  // Use provided render pass
+  framebuffer_info.renderPass = renderpass; // Use provided render pass
   framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
   framebuffer_info.pAttachments = attachments.data();
   framebuffer_info.width = m_extent.width;
@@ -746,8 +754,9 @@ void RendererVk::create_sync_objects() {
   }
 }
 
-void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
-                                      uint32_t image_index) {
+void RendererVk::record_draw_commands(
+    VkCommandBuffer command_buffer, uint32_t image_index,
+    const std::vector<RenderableInfo> &renderables) {
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   begin_info.pNext = nullptr;
@@ -803,8 +812,8 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
   VkDeviceSize offsets[] = {0};
-  const auto &index_buffer = m_resource_manager.get_index_buffer();
-  const auto &vertex_buffer = m_resource_manager.get_vertex_buffer();
+  const auto &index_buffer = m_resource_manager->get_index_buffer();
+  const auto &vertex_buffer = m_resource_manager->get_vertex_buffer();
 
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
 
@@ -815,30 +824,13 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
       command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1,
       &m_uniform_buffers[m_current_frame].descriptorSet, 0, nullptr);
 
-  const std::vector<MeshAllocation> &mesh_allocations =
-      m_resource_manager.get_mesh_allocations();
-  for (const auto &alloc : mesh_allocations) {
-    // Check if this mesh's material has an albedo texture
-    uint32_t useTexture = 0u;
-    auto mat = MaterialManager::Instance().get_material(alloc.material);
-    if (mat.has_value() && mat->get().albedo) {
-      useTexture = 1u;
-    }
-    static bool logged = false;
-    if (!logged) {
-      for (const auto &a : mesh_allocations) {
-        auto m = MaterialManager::Instance().get_material(a.material);
-        spdlog::info("[DRAW] mat_id={} found={} albedo_valid={}",
-                     a.material.material_id, m.has_value(),
-                     m.has_value() ? (bool)m->get().albedo : false);
-      }
-      logged = true;
-    }
+  for (auto const &[mesh_alloc, texture_idx] : m_draw_calls) {
     vkCmdPushConstants(command_buffer, m_pipeline_layout,
-                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t),
-                       &useTexture);
-    vkCmdDrawIndexed(command_buffer, alloc.index_count, 1, alloc.index_offset,
-                     alloc.vertex_offset, 0 /* first instance */);
+                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int32_t),
+                       &texture_idx);
+    vkCmdDrawIndexed(command_buffer, mesh_alloc.index_count, 1,
+                     mesh_alloc.index_offset, mesh_alloc.vertex_offset,
+                     0 /* first instance */);
   }
 
   vkCmdEndRenderPass(command_buffer);
@@ -849,7 +841,7 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
     std::array<VkClearValue, 2> ui_clear_val;
     ui_clear_val[0] = {{{0.0f, 0.0f, 0.0f, 0.0f}}};
     ui_clear_val[1].depthStencil = {1.0f, 0};
-    
+
     VkRenderPassBeginInfo ui_renderpass_info{};
     ui_renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     ui_renderpass_info.pNext = nullptr;
@@ -859,7 +851,8 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
     ui_renderpass_info.renderArea.offset.y = 0;
     ui_renderpass_info.renderArea.extent.width = m_extent.width;
     ui_renderpass_info.renderArea.extent.height = m_extent.height;
-    ui_renderpass_info.clearValueCount = 2;  // Must provide values even with LOAD_OP_LOAD
+    ui_renderpass_info.clearValueCount =
+        2; // Must provide values even with LOAD_OP_LOAD
     ui_renderpass_info.pClearValues = ui_clear_val.data();
 
     vkCmdBeginRenderPass(command_buffer, &ui_renderpass_info,
@@ -867,9 +860,11 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
 
     static bool ui_pass_logged = false;
     if (!ui_pass_logged) {
-      spdlog::info("[RendererVk] UI render pass begun: rp={:#x} fb={:#x} extent={}x{}",
-                   (uint64_t)m_ui_render_pass, (uint64_t)m_ui_swapchain_framebuffers[image_index],
-                   m_extent.width, m_extent.height);
+      spdlog::info(
+          "[RendererVk] UI render pass begun: rp={:#x} fb={:#x} extent={}x{}",
+          (uint64_t)m_ui_render_pass,
+          (uint64_t)m_ui_swapchain_framebuffers[image_index], m_extent.width,
+          m_extent.height);
       ui_pass_logged = true;
     }
 
@@ -898,7 +893,8 @@ void RendererVk::record_draw_commands(VkCommandBuffer command_buffer,
   VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 }
 
-void RendererVk::draw_frame(const Camera &camera) {
+void RendererVk::draw_frame(const Camera &camera,
+                            const std::vector<RenderableInfo> &renderables) {
 
   /**
    * The semaphore lifecycle for each image goes like this:
@@ -937,6 +933,11 @@ void RendererVk::draw_frame(const Camera &camera) {
     VK_CHECK_RESULT(result);
   }
 
+  // CHANGED: Defensive bounds check — catch swapchain recreation timing issues
+  assert(image_index < m_finished_render_semaphores.size() &&
+         "image_index exceeds m_finished_render_semaphores — "
+         "swapchain image count mismatch");
+
   // UPDATE RESOURCES (now safe because we waited on fence)
   update_uniform_buffer(camera);
 
@@ -946,7 +947,8 @@ void RendererVk::draw_frame(const Camera &camera) {
 
   // Prepare command buffer for recording
   vkResetCommandBuffer(m_cmd_buffers[m_current_frame], 0);
-  record_draw_commands(m_cmd_buffers[m_current_frame], image_index);
+  record_draw_commands(m_cmd_buffers[m_current_frame], image_index,
+                       renderables);
 
   // Prepare rendering work to submit gpu
   VkSubmitInfo submit_info{};
@@ -1007,11 +1009,14 @@ void RendererVk::draw_frame(const Camera &camera) {
 }
 
 VkDescriptorSetLayout RendererVk::create_descriptor_set_layout(
-    const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings) {
+    const std::vector<VkDescriptorSetLayoutBinding> &layout_bindings,
+    VkDescriptorSetLayoutBindingFlagsCreateInfo &set_layout_bindings_flags_CI) {
   VkDescriptorSetLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout_info.bindingCount = static_cast<uint32_t>(layout_bindings.size());
   layout_info.pBindings = layout_bindings.data();
+  layout_info.pNext = &set_layout_bindings_flags_CI;
+
   VkDescriptorSetLayout layout;
   VK_CHECK_RESULT(
       vkCreateDescriptorSetLayout(m_device, &layout_info, nullptr, &layout));
@@ -1100,67 +1105,71 @@ void RendererVk::update(uint64_t delta_t) {
   const bool frag_shader_changed = m_frag_shader_watcher->check_for_changes();
   const bool vert_shader_changed = m_vert_shader_watcher->check_for_changes();
   if (frag_shader_changed || vert_shader_changed) {
+    vkDeviceWaitIdle(m_device);
+    vkDestroyPipeline(m_device, m_pipeline, nullptr);
+
     m_pipeline = create_pipeline(m_device, m_render_pass, m_pipeline_layout);
-  }
-  // upload pending assets to GPU
-  for (const auto &mesh_handle :
-       MeshManager::Instance().consume_meshes_to_upload_to_gpu()) {
-    const auto &mesh_opt = MeshManager::Instance().get_mesh(mesh_handle);
-    if (mesh_opt.has_value()) {
-      const auto &m = mesh_opt.value().get();
-      spdlog::info("[UPLOAD] mesh='{}' material_id={} valid={}", m.name,
-                   m.material.material_id, (bool)m.material);
-      m_resource_manager.upload_mesh_to_gpu(m, m_cmd_pool);
-    } else {
-      spdlog::error("Mesh with handle {} not found for GPU upload",
-                    mesh_handle.mesh_id);
-    }
   }
 }
 
-void RendererVk::upload_texture_to_gpu(const Texture &texture) {
-  // Early return if texture is empty
-  if (texture.width == 0 || texture.height == 0 || texture.data == nullptr) {
-    spdlog::warn("Attempted to upload empty texture to GPU");
+void RendererVk::upload_pending_assets(
+    const std::vector<RenderableInfo> &pending_renderables) {
+  std::vector<TextureAllocation> uploaded_textures_that_need_descriptor;
+
+  for (const auto &info : pending_renderables) {
+    auto mesh_alloc = m_resource_manager->upload_mesh_to_gpu(info.mesh);
+
+    if (info.material.albedo) {
+      auto texture_alloc = m_resource_manager->upload_texture_to_gpu(info.material.albedo);
+      m_draw_calls.emplace_back(mesh_alloc, static_cast<int32_t>(texture_alloc.texture_map_idx));
+      uploaded_textures_that_need_descriptor.push_back(texture_alloc);
+    } else {
+      m_draw_calls.emplace_back(mesh_alloc, -1); // no texture — shader falls back to vertex color
+    }
+  }
+
+  update_bindless_descriptors(uploaded_textures_that_need_descriptor);
+}
+
+void RendererVk::update_bindless_descriptors(
+    std::vector<TextureAllocation> allocs) {
+
+  if (allocs.empty()) {
     return;
   }
 
-  // Calculate image size (assuming RGBA format for GPU upload)
-  size_t imageSize = texture.width * texture.height * 4;
+  std::vector<VkDescriptorImageInfo> image_infos(allocs.size());
 
-  // Create staging buffer
-  AllocatedBuffer staging = ToolsVk::create_buffer(
-      m_allocator, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      VMA_MEMORY_USAGE_CPU_ONLY, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+  for (auto i = 0; i < allocs.size(); i++) {
+    image_infos[i].sampler = m_texture_sampler;
+    image_infos[i].imageView = allocs[i].view;
+    image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
 
-  // Upload image data to the staging buffer
-  void *data;
-  VK_CHECK_RESULT(vmaMapMemory(m_allocator, staging.allocation, &data));
-  memcpy(data, texture.data, imageSize);
-  vmaUnmapMemory(m_allocator, staging.allocation);
+  for (auto i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
 
-  // Transfer layout and copy data
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = m_uniform_buffers[i].descriptorSet;
+    write.dstBinding = kTextureArrayBindingIndex;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = allocs.size();
+    write.dstArrayElement = allocs[0].texture_map_idx;
+    write.pImageInfo = image_infos.data();
 
-  ToolsVk::copy_buffer_to_image(m_device, m_cmd_pool, m_graphics_queue,
-                                staging.buffer, m_texture.image, texture.width,
-                                texture.height);
-
-  // Final layout transition
-  TextureVk::transition_image_layout(m_device, m_cmd_pool, m_graphics_queue,
-                                     m_texture.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-  // Cleanup staging buffer
-  vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+    vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+  }
 }
 
 void RendererVk::recreate_swapchain_and_depth_stencil() {
   vkDeviceWaitIdle(m_device);
+
+  // CHANGED: Destroy old per-image semaphores — count may change with new
+  // swapchain
+  for (auto &sem : m_finished_render_semaphores) {
+    vkDestroySemaphore(m_device, sem, nullptr);
+  }
+  m_finished_render_semaphores.clear();
 
   cleanup_swapchain_and_depth_stencil();
 
@@ -1187,21 +1196,32 @@ void RendererVk::recreate_swapchain_and_depth_stencil() {
   }
 
   // Recreate depth stencil (destroyed in cleanup_swapchain)
-  m_depth_stencil =
-      TextureVk::create_depth_stencil(m_physical_device, m_device, m_cmd_pool,
-                                      m_graphics_queue, m_allocator, m_extent);
+  m_resource_manager->create_depth_stencil_texture(m_extent.width,
+                                                   m_extent.height);
+  const auto &depth_stencil = m_resource_manager->get_depth_stencil_texture();
 
   m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
-    m_swapchain_framebuffers[i] = create_framebuffer(
-        m_device, m_render_pass, m_swapchain_image_views[i], m_depth_stencil.view);
+    m_swapchain_framebuffers[i] =
+        create_framebuffer(m_device, m_render_pass, m_swapchain_image_views[i],
+                           depth_stencil.view);
   }
-  
+
   // Recreate UI framebuffers
   m_ui_swapchain_framebuffers.resize(m_swapchain_image_views.size());
   for (auto i = 0; i < m_swapchain_image_views.size(); i++) {
-    m_ui_swapchain_framebuffers[i] = create_framebuffer(
-        m_device, m_ui_render_pass, m_swapchain_image_views[i], m_depth_stencil.view);
+    m_ui_swapchain_framebuffers[i] =
+        create_framebuffer(m_device, m_ui_render_pass,
+                           m_swapchain_image_views[i], depth_stencil.view);
+  }
+
+  // CHANGED: Recreate per-image semaphores to match new swapchain image count
+  m_finished_render_semaphores.resize(m_swapchain_images.size());
+  VkSemaphoreCreateInfo semaphore_info{};
+  semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  for (size_t i = 0; i < m_swapchain_images.size(); i++) {
+    VK_CHECK_RESULT(vkCreateSemaphore(m_device, &semaphore_info, nullptr,
+                                      &m_finished_render_semaphores[i]));
   }
 
   if (m_noesisUI) {

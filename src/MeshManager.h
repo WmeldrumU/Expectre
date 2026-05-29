@@ -5,18 +5,20 @@
 
 #include <assimp/Importer.hpp>
 #include <assimp/mesh.h>
-
+#include <fastgltf/tools.hpp>
+#include <fastgltf/types.hpp>
 #include <optional>
+#include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
 
 namespace Expectre {
 
-
 class MeshManager {
 public:
   static MeshManager &Instance();
   MeshHandle import_mesh(aiMesh *ai_mesh);
+  MeshHandle import_mesh(const fastgltf::Asset &asset, const fastgltf::Mesh &mesh);
 
   std::vector<MeshHandle> consume_meshes_to_upload_to_gpu() {
     return std::move(m_meshes_to_upload_to_gpu);
@@ -29,32 +31,29 @@ public:
   MeshManager(MeshManager &&) = delete;
   MeshManager &operator=(MeshManager &&) = delete;
 
-  std::optional<std::reference_wrapper<const Mesh>> get_mesh(MeshHandle mesh) {
+  const Mesh &get_mesh(MeshHandle mesh) {
     auto it = m_mesh_map.find(mesh);
     if (it != m_mesh_map.end()) {
       return std::ref(it->second);
     }
-    return std::nullopt;
+    spdlog::warn("get_mesh(): Mesh {} not found, returning default mesh.",
+                 mesh.mesh_id);
+    return m_mesh_map[get_default_mesh()];
   }
 
-  /// Associate a material with an already-imported mesh.
-  void set_mesh_material(MeshHandle mesh, MaterialHandle material) {
-    auto it = m_mesh_map.find(mesh);
-    if (it != m_mesh_map.end()) {
-      it->second.material = material;
-    }
-  }
+  MeshHandle get_default_mesh();
 
 private:
   MeshManager() = default;
   ~MeshManager() = default;
 
   void compute_mesh_normals(Mesh &mesh);
+  void create_default_mesh();
 
   uint32_t m_next_mesh_id{0};
   std::vector<MeshHandle> m_meshes_to_upload_to_gpu{};
   std::unordered_map<MeshHandle, Mesh> m_mesh_map{};
-
+  MeshHandle m_default_mesh_handle{};
 };
 } // namespace Expectre
 #endif // MESHMANAGER_H

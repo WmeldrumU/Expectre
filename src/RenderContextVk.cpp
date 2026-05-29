@@ -5,11 +5,9 @@
 #define VMA_STATS_STRING_ENABLED 1
 
 #include "Engine.h"
-#include "MaterialManager.h"
 #include "MeshManager.h"
 #include "TextureManager.h"
 #include "ToolsVk.h"
-#include "scene/SceneObject.h"
 
 #include <SDL3/SDL_vulkan.h> // <-- for SDL_Vulkan_CreateSurface
 #include <bitset>
@@ -21,17 +19,24 @@
 
 namespace Expectre {
 
-RenderContextVk::RenderContextVk(SDL_Window *window, InputManager &input_manager) : m_window{window} {
+RenderContextVk::RenderContextVk(SDL_Window *window,
+                                 InputManager &input_manager)
+    : m_window{window} {
   // SDL_Vulkan_LoadLibrary();
   create_instance();
   create_surface();
   create_device();
   create_memory_allocator();
+  int width;
+  int height;
+  SDL_GetWindowSize(m_window, &width, &height);
+  uint32_t uint_width = static_cast<uint32_t>(width);
+  uint32_t uint_height = static_cast<uint32_t>(height);
 
   m_renderer = std::make_shared<RendererVk>(
       m_instance, m_physical_device, m_device, m_allocator, m_surface,
       m_graphics_queue, m_graphics_queue_index, m_present_queue,
-      m_present_queue_index, input_manager);
+      m_present_queue_index, uint_width, uint_height, input_manager);
   m_ready = true;
 }
 
@@ -40,7 +45,19 @@ RenderContextVk::~RenderContextVk() {
   // Destroy renderer first to free all its VMA allocations
   m_renderer.reset();
 
+  VmaTotalStatistics stats{};
+  vmaCalculateStatistics(m_allocator, &stats);
   vmaDestroyAllocator(m_allocator);
+
+  if (stats.total.statistics.allocationCount > 0) {
+    // Or a human-readable string:
+    char *statsStr = nullptr;
+    vmaBuildStatsString(m_allocator, &statsStr, VK_TRUE);
+
+    // log statsStr somewhere:
+    printf("%s\n", statsStr);
+    vmaFreeStatsString(m_allocator, statsStr);
+  }
 
   // Destroy device, surface, instance
   vkDestroyDevice(m_device, nullptr);
@@ -134,22 +151,34 @@ void RenderContextVk::create_device() {
 
   VkPhysicalDeviceFeatures supportedFeatures{};
   vkGetPhysicalDeviceFeatures(m_physical_device, &supportedFeatures);
-  VkPhysicalDeviceFeatures requiredFeatures{};
-  requiredFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
-  requiredFeatures.tessellationShader = VK_TRUE;
-  requiredFeatures.geometryShader = VK_TRUE;
-  requiredFeatures.samplerAnisotropy = VK_TRUE;
-  requiredFeatures.fillModeNonSolid = VK_TRUE;
+  VkPhysicalDeviceVulkan12Features features_1_2 = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+  features_1_2.descriptorIndexing = VK_TRUE;
+  features_1_2.descriptorBindingPartiallyBound = VK_TRUE;
+  features_1_2.runtimeDescriptorArray = VK_TRUE;
+  features_1_2.descriptorBindingVariableDescriptorCount = VK_TRUE;
+  features_1_2.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+
+  VkPhysicalDeviceFeatures2 required_features{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  required_features.features.multiDrawIndirect =
+      supportedFeatures.multiDrawIndirect;
+  required_features.features.tessellationShader = VK_TRUE;
+  required_features.features.geometryShader = VK_TRUE;
+  required_features.features.samplerAnisotropy = VK_TRUE;
+  required_features.features.fillModeNonSolid = VK_TRUE;
+  required_features.pNext = &features_1_2;
 
   std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   VkDeviceCreateInfo device_create_info{};
   device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.pEnabledFeatures = &requiredFeatures;
+  // device_create_info.pEnabledFeatures = &required_features;
   device_create_info.queueCreateInfoCount = 1;
   device_create_info.pQueueCreateInfos = &queue_create_info;
   device_create_info.enabledExtensionCount = extensions.size();
   device_create_info.ppEnabledExtensionNames = extensions.data();
+  device_create_info.pNext = &required_features;
   // Start creating logical device
   m_device = VK_NULL_HANDLE;
   VK_CHECK_RESULT(vkCreateDevice(m_physical_device, &device_create_info,
@@ -183,13 +212,18 @@ void RenderContextVk::create_memory_allocator() {
   vmaCreateAllocator(&allocatorCreateInfo, &m_allocator);
 }
 
-void RenderContextVk::UpdateAndRender(uint64_t delta_time, Scene &scene) {
+void RenderContextVk::update_and_render(uint64_t delta_time, Scene &scene) {
+
+  const auto &pending = scene.consume_pending_renderables();
+  m_renderer->upload_pending_assets(pending);
+
   m_renderer->update(delta_time);
-  m_renderer->draw_frame(scene.get_camera());
+
+  const auto &renderables = scene.gather_renderables();
+  m_renderer->draw_frame(scene.get_camera(), renderables);
 }
 
 void RenderContextVk::OnWindowResize(glm::uvec2 new_dims) {
   m_renderer->OnWindowResize(new_dims);
-  
 }
 } // namespace Expectre

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cmake_policy(SET CMP0091 NEW)
 
 # Load Conan's settings FIRST
@@ -11,8 +12,8 @@ cmake_policy(SET CMP0091 NEW)
 project(ExpectreProject CXX)
 option(USE_WEBGPU "Build with WebGPU support" OFF)
 
-# use c++ 20, this version is required
-set(CMAKE_CXX_STANDARD 20)
+# use c++ 17, this version is required
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 find_package(SDL3 REQUIRED)
@@ -23,6 +24,8 @@ find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 find_package(xxHash REQUIRED)
+find_package(flecs REQUIRED)
+find_package(fastgltf REQUIRED)
 
 # Noesis SDK root (must be set before SOURCES which references SDK paths)
 if(WIN32)
@@ -46,18 +49,14 @@ endif()
     src/Engine.cpp
     src/Engine.h
     src/IRenderer.h
-    src/IRendererInfo.h
-    # src/IUIRenderer.h
+    src/LimitsVk.h
     src/main.cpp
     src/MathUtils.h
     src/Mesh.h
     src/MeshManager.h
     src/MeshManager.cpp
-    # src/NoesisShaders.h
     src/observer.h
     src/Material.h
-    src/MaterialManager.h
-    src/MaterialManager.cpp
     src/RenderContextVk.cpp
     src/RenderContextVk.h
     src/RenderDeviceVk.cpp
@@ -81,15 +80,18 @@ endif()
     src/noesis/NoesisUI.h
     src/noesis/NoesisUI.cpp
     src/AppTime.h
+    src/RenderableInfo.h
     src/TextureVk.h
     # src/UtilsNs.h
+    src/scene/AssetImporter.h
+    src/scene/Camera.h
+    src/scene/Camera.cpp    
+    src/scene/Component.h
+    src/scene/Entity.h
     src/scene/Scene.h
     src/scene/Scene.cpp
-    src/scene/SceneObject.cpp
-    src/scene/SceneObject.h
-    src/scene/SceneRoot.h
-    src/scene/Camera.h
-    src/scene/Camera.cpp
+    src/scene/MeshComponent.h
+    src/scene/TransformComponent.h
     src/noesis/TextureVkNs.h
     src/noesis/RenderTargetVkNs.h
 )
@@ -113,6 +115,8 @@ set(COMMON_LIBRARIES
     Vulkan::shaderc_combined
     xxHash::xxhash
     Noesis
+    flecs::flecs_static
+    fastgltf::fastgltf
 )
 message(STATUS "LIBRARIES: ${COMMON_LIBRARIES}")
 target_link_libraries(ExpectreApp PUBLIC
@@ -147,4 +151,7 @@ if(WIN32)
 endif()
 
 # Define it as a macro so it can be used in C++
-add_compile_definitions(WORKSPACE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(ExpectreApp PRIVATE
+WORKSPACE_DIR="${CMAKE_SOURCE_DIR}"
+ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+FLECS_CPP_NO_AUTO_REGISTRATION)

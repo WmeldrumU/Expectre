@@ -8,5 +8,5 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 2
-map_Kd C:/Users/wmeldru/Downloads/teapot/brick.png
-map_Ks C:/Users/wmeldru/Downloads/teapot/brick-specular.png
+map_Kd C:/src/Expectre/assets/teapot/brick.png
+map_Ks C:/src/Expectre/assets/teapot/brick-specular.png

@@ -1,11 +1,46 @@
 #include "TextureManager.h"
 #include <spdlog/spdlog.h>
-#include <stb.h>
 #define STB_IMAGE_IMPLEMENTATION // includes stb function bodies
 #include <stb_image.h>
 #include <xxhash.h>
 
 namespace Expectre {
+
+TextureManager::TextureManager() {}
+
+void TextureManager::create_default_texture() {
+  // Create 8x8 white/black checkerboard pattern
+  constexpr uint32_t size = 8;
+  constexpr uint32_t channels = 4; // RGBA
+
+  // Use malloc so Texture::~Texture can safely call stbi_image_free (which
+  // calls free())
+  uint8_t *data = static_cast<uint8_t *>(malloc(size * size * channels));
+
+  const uint8_t white[] = {255, 255, 255, 255};
+  const uint8_t black[] = {0, 0, 0, 255};
+
+  for (uint32_t y = 0; y < size; ++y) {
+    for (uint32_t x = 0; x < size; ++x) {
+      uint32_t pixel_idx = (y * size + x) * channels;
+      const uint8_t *color = ((x + y) % 2 == 0) ? white : black;
+      data[pixel_idx + 0] = color[0]; // R
+      data[pixel_idx + 1] = color[1]; // G
+      data[pixel_idx + 2] = color[2]; // B
+      data[pixel_idx + 3] = color[3]; // A
+    }
+  }
+
+  m_default_texture_handle = import_texture("__default_checkerboard__",
+                                            data, size, size, channels);
+}
+
+TextureHandle TextureManager::get_default_texture() {
+  if (!m_default_texture_handle) {
+    create_default_texture();
+  }
+  return m_default_texture_handle;
+}
 
 uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
   XXH64_state_t *state = XXH64_createState();
@@ -13,7 +48,8 @@ uint64_t TextureManager::compute_texture_hash(const Texture &texture) const {
 
   // Hash pixel data (width * height * channels bytes)
   XXH64_update(state, texture.data,
-               static_cast<size_t>(texture.width) * texture.height * texture.channels);
+               static_cast<size_t>(texture.width) * texture.height *
+                   texture.channels);
 
   uint64_t hash = XXH64_digest(state);
   XXH64_freeState(state);
@@ -31,7 +67,8 @@ TextureHandle TextureManager::import_texture(std::string image_dir) {
     spdlog::error("Failed to load texture from '{}'", image_dir);
     std::terminate();
   }
-  return import_texture(image_dir, data, tex_width, tex_height, desired_channels);
+  return import_texture(image_dir, data, tex_width, tex_height,
+                        desired_channels);
 }
 
 TextureHandle TextureManager::import_texture(std::string name, void *data,
@@ -46,7 +83,7 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   tex.channels = channels;
   tex.width = width;
   tex.height = height;
-  tex.name = name;
+  tex.m_name = name;
   tex.data = static_cast<uint8_t *>(data);
 
   // Compute hash and check for duplicates
@@ -55,8 +92,8 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   handle.texture_id = hash;
   if (m_texture_map.find(handle) != m_texture_map.end()) {
     // Texture already exists, return existing ID
-    spdlog::error("Texture '{}' (hash - {}) already cached, reusing", tex.name,
-                  hash);
+    spdlog::warn("Texture '{}' (hash - {}) already cached, reusing",
+                  tex.m_name, hash);
     return handle;
   }
 
@@ -64,6 +101,26 @@ TextureHandle TextureManager::import_texture(std::string name, void *data,
   m_textures_to_upload_to_gpu.push_back(handle);
 
   return handle;
+}
+
+void TextureManager::load_texture_from_file(Texture &texture,
+                                            const std::string &filepath) {
+  // Load image file using stbi
+  int tex_width, tex_height, tex_channels;
+  stbi_uc *pixels =
+      stbi_load(filepath.c_str(), &tex_width, &tex_height, &tex_channels, 4);
+
+  if (!pixels) {
+    spdlog::error("Failed to load texture from '{}'", filepath);
+    return;
+  }
+
+  // Populate CPU data in texture object
+  texture.data = pixels;
+  texture.width = static_cast<uint32_t>(tex_width);
+  texture.height = static_cast<uint32_t>(tex_height);
+  texture.channels = 4; // Forced RGBA by stbi_load
+  texture.m_name = filepath;
 }
 
 } // namespace Expectre

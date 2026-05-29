@@ -2,15 +2,11 @@
 #define SCENE_CAMERA
 
 #include "input/InputManager.h"
-#include "scene/SceneObject.h"
-
+#include <glm/vec3.hpp>
 namespace Expectre {
-class Camera : SceneObject {
+class Camera {
 public:
-  Camera() = delete;
-
-  Camera(SceneObject *parent, std::string name);
-
+  Camera() = default;
   // Delete the copy constructor
   Camera(const Camera &other) = delete;
   // Delete the copy assignment operator as well for consistency

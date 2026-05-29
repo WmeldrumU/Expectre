@@ -1,8 +1,6 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "Material.h"
-
 #include <assimp/Importer.hpp>
 #include <assimp/defs.h>
 #include <assimp/mesh.h>
@@ -20,7 +18,7 @@ struct Vertex {
 };
 
 struct MeshHandle {
-  uint64_t mesh_id = -1;
+  int64_t mesh_id = -1;
   explicit operator bool() const { return mesh_id != -1; }
 
   // Equality operator for use in unordered_map
@@ -29,11 +27,14 @@ struct MeshHandle {
   }
 };
 
+// ECS
+struct UsesMesh {};
+
 struct Mesh {
+public:
+  std::string name; // Name of the mesh
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  std::string name;              // Name of the mesh
-  MaterialHandle material;       // Material associated with this mesh
 };
 
 } // namespace Expectre

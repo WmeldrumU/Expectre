@@ -1,6 +1,6 @@
 # Expectre
 
-A real-time 3D engine built from scratch in C++20 and Vulkan 1.4. **Work in progress.**
+A real-time 3D engine built from scratch in C++17 and Vulkan 1.4. **Work in progress.**
 
 <img src="demo.gif" width="600">
 
@@ -15,9 +15,11 @@ Expectre is a personal project to build a Vulkan renderer and engine framework. 
 ```
 Engine                     – Main loop, SDL3 window, frame timing
 ├── InputManager           – SDL event polling, key/mouse state, observer broadcasting
-├── Scene                  – Assimp model import, scene graph, camera
-│   ├── SceneObject        – Transform hierarchy (world/relative), mesh + material handles
-│   ├── SceneRoot          – Root node
+├── Scene                  – ECS scene, camera, pending-renderable queue
+│   ├── AssetImporter      – Assimp model → Entity/Component tree + RenderableInfo list
+│   ├── Entity             – ECS node (name, parent id, component storage)
+│   ├── TransformComponent – Per-entity TRS transform
+│   ├── MeshComponent      – Mesh + material handle pair
 │   └── Camera             – FPS-style camera with keyboard/mouse input
 ├── RenderContextVk        – Vulkan instance, device, surface, VMA allocator setup
 │   └── RendererVk         – Swapchain, render passes, pipelines, command recording, draw loop
@@ -46,11 +48,11 @@ Engine                     – Main loop, SDL3 window, frame timing
 - Singleton managers for meshes, materials, and textures with handle-based lookups and deferred GPU upload queues
 - Staging buffer uploads with single-time command buffers
 
-### Scene Graph
-- Tree of `SceneObject` nodes with parent–child relationships
-- Per-node world and relative transforms (glm `mat4x3`)
-- Separate `SceneRoot` as the transform origin
-- Camera as a scene object with keyboard/mouse-driven movement
+### Scene / ECS
+- Entity–Component System: flat `Entity` vector with typed component storage
+- `AssetImporter` converts Assimp scene trees into `Entity` + `TransformComponent` + `MeshComponent` hierarchies; Scene has no direct Assimp dependency
+- `MeshComponent` carries `MeshHandle` + `MaterialHandle`; renderer consumes a `RenderableInfo` list each frame
+- Camera is a standalone class (not an ECS node) with keyboard/mouse-driven FPS movement
 
 ### Noesis GUI Integration
 - [Noesis GUI](https://www.noesisengine.com/) (WPF-style XAML UI) rendered as a Vulkan overlay
@@ -95,7 +97,7 @@ arch=x86_64
 build_type=Debug
 compiler=clang
 compiler.version=19
-compiler.cppstd=20
+compiler.cppstd=17
 compiler.runtime=dynamic
 compiler.runtime_type=Debug
 compiler.runtime_version=v144
