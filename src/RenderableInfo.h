@@ -1,21 +1,21 @@
-#ifndef RENDERABLE_INFO_H
-#define RENDERABLE_INFO_H
+// #ifndef RENDERABLE_INFO_H
+// #define RENDERABLE_INFO_H
 
-#include "Material.h"
-#include "Mesh.h"
+// #include "Material.h"
+// #include "Mesh.h"
 
-#include <glm/glm.hpp>
+// #include <glm/glm.hpp>
 
-namespace Expectre {
+// namespace Expectre {
 
-/// Description of a single draw call
-/// Bridges Scene (ECS) → Renderer (GPU) without either side
-/// knowing about the other's internals.
-struct RenderableInfo {
-  MeshHandle mesh{};
-  Material material{};
-  glm::mat4 transform{1.0f};
-};
+// /// Description of a single draw call
+// /// Bridges Scene (ECS) → Renderer (GPU) without either side
+// /// knowing about the other's internals.
+// struct RenderableInfo {
+//   MeshHandle mesh{};
+//   Material material{};
+//   glm::mat4 transform{1.0f};
+// };
 
-} // namespace Expectre
-#endif // RENDERABLE_INFO_H
+// } // namespace Expectre
+// #endif // RENDERABLE_INFO_H

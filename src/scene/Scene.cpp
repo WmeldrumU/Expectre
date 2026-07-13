@@ -1,5 +1,6 @@
 
 #include "scene/Scene.h"
+#include "Material.h"
 #include "Mesh.h"
 #include "scene/Component.h"
 #include "scene/TransformComponent.h"
@@ -9,15 +10,15 @@ namespace Expectre {
 Scene::Scene(std::string scene_name) {
 
   m_world.set<flecs::Rest>({});
-  m_world.import<flecs::stats>();
+  m_world.import <flecs::stats>();
   // REGISTER COMPONENTS HERE
+  m_world.component<Node>();
   m_world.component<Transform>();
-  m_world.component<PendingUpload>();
-  // m_world.component(flecs::ChildOf);
+  m_world.component<PendingPrimitiveUpload>();
   m_world.component<Material>();
-  m_world.component<UsesMaterial>().add(flecs::Traversable);
-
-  m_world.component<MeshHandle>();
+  m_world.component<UsesMaterial>()
+      .add(flecs::Traversable)
+      .add(flecs::Exclusive);
   m_world.component<UsesMesh>().add(flecs::Traversable).add(flecs::Exclusive);
 
   /*
@@ -35,13 +36,14 @@ Scene::Scene(std::string scene_name) {
 
     */
 
-  m_renderables = m_world.query_builder<Transform, MeshHandle, Material>()
-                      .without<PendingUpload>()
-                      .term_at(1)
-                      .up<UsesMesh>()
-                      .term_at(2)
-                      .up<UsesMaterial>()
-                      .build();
+  m_meshes = m_world.query_builder<Transform, Mesh>() m_renderables =
+      m_world.query_builder<Transform, MeshHandle, Material>()
+          .without<PendingUpload>()
+          .term_at(1)
+          .up<UsesMesh>()
+          .term_at(2)
+          .up<UsesMaterial>()
+          .build();
   m_pending_renderables =
       m_world.query_builder<Transform, MeshHandle, Material>()
           .with<PendingUpload>()

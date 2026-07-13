@@ -21,7 +21,6 @@
 #include "ShaderFileWatcher.h"
 #include "TextureManager.h"
 #include "ToolsVk.h"
-#include "scene/MeshComponent.h"
 #include "scene/TransformComponent.h"
 
 #include "scene/Camera.h"
@@ -1120,11 +1119,14 @@ void RendererVk::upload_pending_assets(
     auto mesh_alloc = m_resource_manager->upload_mesh_to_gpu(info.mesh);
 
     if (info.material.albedo) {
-      auto texture_alloc = m_resource_manager->upload_texture_to_gpu(info.material.albedo);
-      m_draw_calls.emplace_back(mesh_alloc, static_cast<int32_t>(texture_alloc.texture_map_idx));
+      auto texture_alloc =
+          m_resource_manager->upload_texture_to_gpu(info.material.albedo);
+      m_draw_calls.emplace_back(
+          mesh_alloc, static_cast<int32_t>(texture_alloc.texture_map_idx));
       uploaded_textures_that_need_descriptor.push_back(texture_alloc);
     } else {
-      m_draw_calls.emplace_back(mesh_alloc, -1); // no texture — shader falls back to vertex color
+      m_draw_calls.emplace_back(
+          mesh_alloc, -1); // no texture — shader falls back to vertex color
     }
   }
 

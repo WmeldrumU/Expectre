@@ -53,8 +53,8 @@ endif()
     src/main.cpp
     src/MathUtils.h
     src/Mesh.h
-    src/MeshManager.h
-    src/MeshManager.cpp
+    # src/MeshManager.h
+    # src/MeshManager.cpp
     src/observer.h
     src/Material.h
     src/RenderContextVk.cpp
@@ -71,8 +71,8 @@ endif()
     # src/RendererWgpu.h
     # src/ShaderFileWatcher.h
     src/Texture.h
-    src/TextureManager.h
-    src/TextureManager.cpp
+    # src/TextureManager.h
+    # src/TextureManager.cpp
     src/ToolsVk.h
     ${NOESIS_ROOT}/Src/Packages/Render/VKRenderDevice/Src/VKRenderDevice.cpp
     ${NOESIS_ROOT}/Src/Packages/App/Providers/Src/FastLZ.cpp
@@ -84,20 +84,24 @@ endif()
     src/TextureVk.h
     # src/UtilsNs.h
     src/scene/AssetImporter.h
+    src/scene/AssetImporter.cpp
     src/scene/Camera.h
     src/scene/Camera.cpp    
     src/scene/Component.h
     src/scene/Entity.h
     src/scene/Scene.h
     src/scene/Scene.cpp
-    src/scene/MeshComponent.h
+    # src/scene/MeshComponent.h
     src/scene/TransformComponent.h
     src/noesis/TextureVkNs.h
     src/noesis/RenderTargetVkNs.h
 )
 message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
-add_executable(ExpectreApp ${SOURCES})
+add_executable(ExpectreApp ${SOURCES}
+    src/Image.h
+    src/flecs/TransformModule.h
+    src/flecs/TransformModule.cpp)
 
 
 # Create a clean Noesis target

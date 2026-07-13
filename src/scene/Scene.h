@@ -8,7 +8,6 @@
 #include "input/InputManager.h"
 #include "scene/Camera.h"
 #include "scene/Entity.h"
-#include "scene/MeshComponent.h"
 #include "scene/TransformComponent.h"
 #include <flecs.h>
 #include <spdlog/spdlog.h>
@@ -68,8 +67,6 @@ private:
   flecs::world m_world;
   flecs::query<Transform, MeshHandle, Material> m_renderables;
   flecs::query<Transform, MeshHandle, Material> m_pending_renderables;
-
-  void foo() {}
 };
 } // namespace Expectre
 #endif // SCENE

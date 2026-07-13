@@ -7,24 +7,15 @@
 // #include "Resource.h"
 
 namespace Expectre {
-struct TextureHandle {
-  int64_t texture_id = -1;
-  explicit operator bool() const { return texture_id != -1; }
 
-  // Equality operator for use in unordered_map
-  bool operator==(const TextureHandle &other) const {
-    return texture_id == other.texture_id;
-  }
-};
+struct Texture /*: public Resource*/ {
+  // CPU data
+  uint8_t *data = nullptr;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint8_t channels = 0;
+  std::string name;
 
-class Texture /*: public Resource*/ {
-public:
-  enum class Source { File, Internal };
-
-  Texture()
-      : /*Resource("__internal_textuire__"), */ m_source(Source::Internal) {}
-  Texture(const std::string &path)
-      : /*Resource(path), */ m_source(Source::File) {}
   ~Texture() {
     if (data != nullptr)
       stbi_image_free(data);
@@ -35,7 +26,7 @@ public:
       : /* Resource(std::move(other)),*/
         data(std::exchange(other.data, nullptr)), width(other.width),
         height(other.height), channels(other.channels),
-        m_name(std::move(other.m_name)) {}
+        name(std::move(other.name)) {}
 
   // Move Assignment Operator (i.e. t2 = std::move(t1); )
   Texture &operator=(Texture &&other) noexcept {
@@ -47,8 +38,7 @@ public:
       width = other.width;
       height = other.height;
       channels = other.channels;
-      m_name = std::move(other.m_name);
-      m_source = other.m_source;
+      name = std::move(other.name);
     }
     return *this;
   }
@@ -56,61 +46,8 @@ public:
   // Disable Copying (Rule of Five) to prevent double-frees
   Texture(const Texture &) = delete;
   Texture &operator=(const Texture &) = delete;
-
-  bool is_internal() const { return m_source == Source::Internal; }
-
-  // Resource interface
-  // bool load() override {
-
-  //   if (!is_internal()) {
-  //     // No CPU image to load for internal textures
-  //     return false;
-
-  //     int w, h, ch;
-  //     data = stbi_load(m_name.c_str(), &w, &h, &ch, STBI_rgb_alpha);
-  //     if (!data)
-  //       return false;
-
-  //     width = static_cast<uint32_t>(w);
-  //     height = static_cast<uint32_t>(h);
-  //     channels = 4; // forced RGBA
-  //   }
-
-  //   // TODO: create VkImage, VkImageView, VkSampler
-  //   // Use ResourceManager::gpu() context for Vulkan objects
-  //   m_loaded = true;
-  //   return true;
-  // }
-
-  // bool unload() override {
-  //   // TODO: destroy VkImage, VkImageView, VkSampler
-  //   m_loaded = false;
-
-  //   return true;
-  // }
-
-  // CPU data
-  uint8_t *data = nullptr;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  uint8_t channels = 0;
-  std::string m_name;
-
-private:
-  // Indicates whether the texture data is loaded from a file or
-  // if it is used for internal purposes (i.e. depth stencil)
-  Source m_source = Source::File;
 };
 
 } // namespace Expectre
 
-// Hashing function for Texture for use as a key in unordered_map
-
-namespace std {
-template <> struct hash<Expectre::TextureHandle> {
-  std::size_t operator()(const Expectre::TextureHandle &handle) const {
-    return std::hash<uint64_t>{}(handle.texture_id);
-  }
-};
-} // namespace std
 #endif // TEXTURE_H
