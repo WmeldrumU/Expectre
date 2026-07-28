@@ -106,9 +106,12 @@ compiler.runtime_version=v144
 tools.cmake.cmaketoolchain:generator=Ninja
 tools.build:compiler_executables = {"c": "clang", "cpp": "clang++"}
 tools.compilation:verbosity=verbose
+draco/*:tools.build:cxxflags+=["-Dftello=_ftelli64", "-Dfseeko=_fseeki64"]
+# ninja/*:tools.build:exes={"ninja": "ninja"}
 
-[tool_requires]
-ninja/[*]
+# [tool_requires]
+# ninja/1.12.1
+
 ```
 
 #### Build commands

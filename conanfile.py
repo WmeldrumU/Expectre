@@ -11,12 +11,10 @@ class ExpectreConan(ConanFile):
         self.requires("spdlog/1.16.0")
         self.requires("glm/0.9.5.4")
         self.requires("stb/cci.20230920")
-        self.requires("assimp/6.0.2")
         self.requires("xxhash/0.8.3")
         self.requires("flecs/4.1.1")
-        # self.requires("tinyusdz/v0.9.1")
         self.requires("fastgltf/0.9.0")
-
+        
     def configure(self):
         self.options["sdl/*"].opengl = False
         self.options["sdl/*"].libusb = False

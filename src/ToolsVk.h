@@ -7,6 +7,7 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <algorithm>
 #include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp> // Include this header for glm::pi<float>()
@@ -17,9 +18,6 @@
 #include <string>
 #include <vector>
 
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
 // #define VK_NO_PROTOTYPES
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
