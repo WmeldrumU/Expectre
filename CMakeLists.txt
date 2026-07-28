@@ -20,7 +20,6 @@ find_package(SDL3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
-find_package(assimp REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined )
 find_package(xxHash REQUIRED)
@@ -51,7 +50,6 @@ endif()
     src/IRenderer.h
     src/LimitsVk.h
     src/main.cpp
-    src/MathUtils.h
     src/Mesh.h
     # src/MeshManager.h
     # src/MeshManager.cpp
@@ -95,13 +93,16 @@ endif()
     src/scene/TransformComponent.h
     src/noesis/TextureVkNs.h
     src/noesis/RenderTargetVkNs.h
+    src/Image.h
+    src/flecs/TransformModule.h
+    src/flecs/TransformModule.cpp
+    src/RingBuffer.h
+    src/RenderCommand.h
 )
 message(STATUS "SOURCES: ${SOURCES}")
 # add the executable
 add_executable(ExpectreApp ${SOURCES}
-    src/Image.h
-    src/flecs/TransformModule.h
-    src/flecs/TransformModule.cpp)
+    src/Handle.h)
 
 
 # Create a clean Noesis target
@@ -113,7 +114,6 @@ set(COMMON_LIBRARIES
     glm::glm
     spdlog::spdlog
     stb::stb
-    assimp::assimp
     fmt::fmt
     Vulkan::Vulkan
     Vulkan::shaderc_combined
