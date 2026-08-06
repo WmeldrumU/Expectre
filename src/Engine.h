@@ -47,6 +47,7 @@ private:
   // static int SDLCALL scene_thread_func(void *ptr);
   static int SDLCALL static_render_thread_entry(void *ptr);
   void run_render_thread();
+  void process_platform_event(const SDL_Event &event);
 
   bool m_isIntialized{false};
   uint32_t m_frameNumber{0};
@@ -54,7 +55,6 @@ private:
   std::unique_ptr<RenderContextVk> m_render_context = nullptr;
   InputManager m_input_manager;
   Scene m_scene;
-  RingBuffer<RenderCommand, 4096> render_commands;
 
   // double buffered render commands, allows for scene thread to write
   // commands to one buffer while the render thread reads from another
@@ -65,6 +65,18 @@ private:
   // SDL_Thread *m_scene_thread;
   SDL_Semaphore *m_render_commands_ready;
   SDL_Semaphore *m_render_command_buffer_available;
+
+  struct WindowState {
+    glm::uvec2 dims{1280, 720};
+    bool should_resize() { return SDL_GetAtomicInt(&m_resize_pending) != 0; }
+    void trigger_resize_pending() { SDL_SetAtomicInt(&m_resize_pending, 1); }
+    void clear_resize_pending() { SDL_SetAtomicInt(&m_resize_pending, 0); }
+
+  private:
+    // Render thread checks this to see if main thread
+    // has updated the window size
+    SDL_AtomicInt m_resize_pending{0};
+  } m_window_state;
 };
 
 } // namespace Expectre

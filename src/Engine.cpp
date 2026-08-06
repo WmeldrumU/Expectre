@@ -33,11 +33,6 @@ Engine::Engine() : m_scene("Main Scene") {
       std::make_unique<RenderContextVk>(m_window, m_input_manager);
 #endif
 
-  m_input_manager.Subscribe(SDL_EVENT_WINDOW_RESIZED, [&](const SDL_Event e) {
-    m_render_context->OnWindowResize(
-        glm::uvec2{e.window.data1, e.window.data2});
-  });
-
   m_render_commands_ready = SDL_CreateSemaphore(0);
   // Initialize to 2 since both commands buffers are available to the scene
   // thread at start
@@ -63,16 +58,17 @@ void Engine::run() {
 
   // Render commands buffer write index
   size_t write_index = 0;
-  bool quit = false;
   uint64_t last_time = SDL_GetTicks();
 
-  while (!quit) {
+  while (is_running()) {
 
-    // Update input manager, find which keys are pressed/released this frame
-    quit = m_input_manager.Update();
+    // Shifts "current" key state to "previous" key state, get mouse state
+    m_input_manager.update();
 
-    if (quit) {
-      break;
+    // Drain event queue
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      process_platform_event(event);
     }
 
     // Wait until a command buffer is avaible to write
@@ -120,6 +116,31 @@ void Engine::run() {
   return;
 }
 
+void Engine::process_platform_event(const SDL_Event &event) {
+  switch (event.type) {
+  case SDL_EVENT_QUIT: {
+    SDL_SetAtomicInt(&m_engine_running, 0);
+    break;
+  }
+  // handled by inputmanager
+  case SDL_EVENT_KEY_DOWN:
+  case SDL_EVENT_KEY_UP: {
+    m_input_manager.process_key_event(event);
+    break;
+  }
+  // handled render context
+  case SDL_EVENT_WINDOW_RESIZED: {
+    m_window_state.dims = glm::uvec2{event.window.data1, event.window.data2};
+    m_window_state.trigger_resize_pending();
+    break;
+  }
+  case SDL_EVENT_WINDOW_FOCUS_LOST: {
+    // m_input_manager.ResetAllStates(); // Avoids the sticky-key bug on Alt-Tab
+    break;
+  }
+  }
+}
+
 // void Engine::limit_frame_rate(uint32_t desired_fps, uint64_t delta_time) {
 //   auto desired_frame_time =
 //       1000 / desired_fps; // Milliseconds per frame for desired FPS
@@ -138,9 +159,15 @@ void Engine::run_render_thread() {
   size_t read_index = 0;
   uint64_t last_time = SDL_GetTicks();
 
+  bool window_resize_pending = true;
+
   while (is_running()) {
     // wait until we have render commands to injest
     SDL_WaitSemaphore(m_render_commands_ready);
+
+    const uint64_t current_time = SDL_GetTicks();
+    const uint64_t delta_time = current_time - last_time;
+    last_time = current_time;
 
     // This check prevents deadlock where engine is shut down
     // while render thread is waiting.
@@ -148,9 +175,12 @@ void Engine::run_render_thread() {
     if (!is_running()) {
       break;
     }
-    const uint64_t current_time = SDL_GetTicks();
-    const uint64_t delta_time = current_time - last_time;
-    last_time = current_time;
+
+    // check if main thread triggered a window resize
+    if (m_window_state.should_resize()) {
+      m_render_context->OnWindowResize(m_window_state.dims);
+      m_window_state.clear_resize_pending();
+    }
 
     RenderCommands &commands = m_render_command_buffers[read_index];
     // Render frame
