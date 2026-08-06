@@ -15,7 +15,13 @@ struct Transform {
 
 struct TransformModule {
   TransformModule(flecs::world &world);
+
+private:
+  void RegisterTransformDirtyObserver(flecs::world &world);
+  void RegisterDirtyTransformResolveSystem(flecs::world &world);
 };
+
+struct TransformDirty {};
 
 struct WorldMatrix {
   glm::mat4 mat = glm::mat4(1.0f);
